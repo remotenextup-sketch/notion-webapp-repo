@@ -4,7 +4,7 @@
 
 // ★★★ Vercel FunctionsでデプロイしたプロキシのURLを設定してください！ ★★★
 // 例: https://[あなたのドメイン].vercel.app/api/proxy
-const PROXY_URL = 'https://[Vercelで発行されたドメイン].vercel.app/api/proxy'; 
+const PROXY_URL = 'https://notion-proxy-repo.vercel.app/api/proxy'; 
 // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
 // グローバル状態
