@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Notion Timer</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f4f4; color: #333; }
+        h2 { text-align: center; margin-top: 0; font-size: 1.2rem; }
+        
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 10px; touch-action: manipulation; }
+        .btn-green { background-color: #27ae60; color: white; }
+        .btn-orange { background-color: #f39c12; color: white; }
+        .btn-gray { background-color: #95a5a6; color: white; }
+        .btn-blue { background-color: #3498db; color: white; }
+        
+        .hidden { display: none !important; }
+        .panel { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        
+        #runningTaskContainer { background-color: #e8f6ff; border: 2px solid #3498db; }
+        .status-line { margin-bottom: 8px; font-size: 14px; }
+        #runningTimer { font-size: 24px; font-weight: bold; color: #3498db; text-align: center; margin: 10px 0; }
+        
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        li:last-child { border-bottom: none; }
+        
+        input[type="text"], input[type="password"], textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
+        .dept-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .dept-grid label { font-size: 12px; display: block; background: #eee; padding: 8px; text-align: center; border-radius: 4px; }
+        
+        #toggleSettings { position: fixed; top: 10px; right: 10px; background: none; border: none; color: #666; font-size: 24px; width: auto; padding: 0; }
+    </style>
+</head>
+<body>
+
+    <h2>Notion Timer</h2>
+    <button id="toggleSettings">⚙️</button>
+
+    <div id="mainView">
+        
+        <div id="runningTaskContainer" class="panel hidden">
+            <div class="status-line">計測中: <strong id="runningTaskTitle"></strong></div>
+            <div class="status-line">開始: <span id="runningStartTime"></span></div>
+            <div id="runningTimer">00:00:00</div>
+            
+            <button id="completeButton" class="btn-green">✅ タスク完了＆記録</button>
+            <button id="forceStopButton" class="btn-gray">強制停止 (記録なし)</button>
+        </div>
+
+        <div id="taskSelectionSection" class="panel">
+            <div style="text-align: center; margin-bottom: 15px;">
+                <label style="margin-right: 15px;"><input type="radio" name="taskMode" value="existing" checked> 既存タスク</label>
+                <label><input type="radio" name="taskMode" value="new"> 新規タスク</label>
+            </div>
+
+            <div id="existingTaskContainer">
+                <button id="reloadTasks" class="btn-blue" style="font-size: 14px; padding: 8px;">🔄 タスク更新</button>
+                <ul id="taskList"><li>設定を確認してください</li></ul>
+            </div>
+
+            <div id="newTaskContainer" class="hidden">
+                <input type="text" id="newTaskTitle" placeholder="タスク名 *必須">
+                
+                <h4>部門</h4>
+                <div class="dept-grid">
+                    <label><input type="checkbox" name="newDept" value="CS"> CS</label>
+                    <label><input type="checkbox" name="newDept" value="デザイン"> デザイン</label>
+                    <label><input type="checkbox" name="newDept" value="人事"> 人事</label>
+                    <label><input type="checkbox" name="newDept" value="広告"> 広告</label>
+                    <label><input type="checkbox" name="newDept" value="採用"> 採用</label>
+                    <label><input type="checkbox" name="newDept" value="改善"> 改善</label>
+                    <label><input type="checkbox" name="newDept" value="開発"> 開発</label>
+                    <label><input type="checkbox" name="newDept" value="AFK (離席)"> AFK</label>
+                </div>
+
+                <h4>カテゴリ</h4>
+                <div style="margin: 10px 0;">
+                    <label style="margin-right:10px;"><input type="radio" name="newCat" value="作業" checked> 作業</label>
+                    <label style="margin-right:10px;"><input type="radio" name="newCat" value="思考"> 思考</label>
+                    <label><input type="radio" name="newCat" value="教育"> 教育</label>
+                </div>
+
+                <button id="startNewTaskButton" class="btn-green">▶ 作成＆開始</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settingsView" class="hidden">
+        <div class="panel">
+            <h3>⚙️ 設定</h3>
+            <label>Notion Token</label>
+            <input type="password" id="confNotionToken">
+            
+            <label>Notion Database ID</label>
+            <input type="text" id="confNotionDbId">
+            
+            <label>Notion User ID</label>
+            <input type="text" id="confNotionUserId">
+            
+            <button id="saveConfig" class="btn-green">保存して戻る</button>
+            <button id="cancelConfig" class="btn-gray">キャンセル</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
