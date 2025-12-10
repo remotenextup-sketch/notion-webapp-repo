@@ -26,6 +26,10 @@ let DEPARTMENTS = [];
 let DATA_SOURCE_ID = ''; 
 let TOGGL_WID = ''; 
 
+// ★★★ プロジェクトフィルタのために追加した変数 ★★★
+let ALL_PROJECTS = []; 
+// ★★★ ここまで追加 ★★★
+
 // ★ 複数DB対応のための変数
 let ALL_DB_CONFIGS = []; 
 let CURRENT_DB_CONFIG = null; // {name: '...', id: '...'}
@@ -102,6 +106,7 @@ async function initializeApp() {
             displayCurrentDbTitle(CURRENT_DB_CONFIG.name);
 
             await checkRunningState(); 
+            // ★ 初期ロード時にフィルタなしでタスクとKPIをロード
             await loadTasksAndKpi(); 
 
         } catch (error) {
@@ -179,7 +184,6 @@ function renderFormOptions() {
     const departmentDiv = document.getElementById('newDeptContainer');
 
     // カテゴリ (Select)
-    // ★★★ 修正箇所: H4タグを削除し、SELECT要素のみを生成する ★★★
     categoryContainer.innerHTML = '<select id="taskCategory"></select>';
     
     const taskCategorySelect = document.getElementById('taskCategory');
@@ -204,13 +208,15 @@ function renderFormOptions() {
     });
 }
 
-async function loadTasksAndKpi() {
-    await loadTaskList();
+// ★★★ 修正: loadTasksAndKpi がフィルタパラメータを受け取るように変更 ★★★
+async function loadTasksAndKpi(filterProjectName = '') {
+    await loadTaskList(filterProjectName);
     await loadKpi();
 }
 
-async function loadTaskList() {
-    console.log('タスク一覧をロード中...');
+// ★★★ 修正: loadTaskList にフィルタリングロジックとプロジェクト収集を追加 ★★★
+async function loadTaskList(filterProjectName = '') { 
+    console.log(`タスク一覧をロード中 (フィルタ: ${filterProjectName || 'なし'})...`);
     
     if (!DATA_SOURCE_ID) {
         $taskList.innerHTML = '<li><p>設定が必要です。設定画面からNotionトークンとDB IDを入力してください。</p></li>';
@@ -219,23 +225,57 @@ async function loadTaskList() {
 
     const targetUrl = `https://api.notion.com/v1/data_sources/${DATA_SOURCE_ID}/query`; 
 
-    const filter = {
+    // ステータスフィルター（「完了」を除く）
+    const statusFilter = {
         property: 'ステータス',
         status: {
             does_not_equal: '完了'
         }
     };
     
+    // プロジェクトフィルター（引数で渡された場合のみ追加）
+    const projectFilter = filterProjectName ? {
+        property: 'プロジェクト', // NotionDBのプロパティ名に合わせてください
+        relation: {
+            contains: filterProjectName 
+        }
+    } : null;
+
+    // 複数のフィルターをAND条件で結合
+    const combinedFilter = {
+        and: [statusFilter]
+    };
+    if (projectFilter) {
+        combinedFilter.and.push(projectFilter);
+    }
+    
     try {
-        const response = await apiFetch(targetUrl, 'POST', { filter: filter }, 'notionToken', NOTION_TOKEN);
+        // Notion APIへのクエリ
+        const response = await apiFetch(targetUrl, 'POST', { filter: combinedFilter }, 'notionToken', NOTION_TOKEN);
         const tasks = response.results;
         
+        // ★★★ プロジェクト一覧の収集 ★★★
+        const uniqueProjects = new Set();
+        tasks.forEach(task => {
+            // プロジェクトプロパティ（リレーション）の取得
+            const projectRelations = task.properties['プロジェクト']?.relation || []; // NotionDBのプロパティ名に合わせてください
+            projectRelations.forEach(rel => {
+                uniqueProjects.add(rel.id); 
+            });
+        });
+        
+        ALL_PROJECTS = Array.from(uniqueProjects);
+        renderProjectFilterOptions(ALL_PROJECTS, filterProjectName); // ★ フィルタUIを更新
+
         $taskList.innerHTML = '';
         if (tasks.length === 0) {
-            $taskList.innerHTML = '<li>現在のタスクはありません。</li>';
+             $taskList.innerHTML = filterProjectName 
+                ? `<li>プロジェクトID: ${filterProjectName.substring(0, 8)}... に該当するタスクはありません。</li>`
+                : '<li>現在のタスクはありません。</li>';
             return;
         }
 
+        // タスク一覧のレンダリング
         tasks.forEach(task => {
             const title = task.properties['タスク名']?.title?.[0]?.plain_text || '名前なしタスク';
             const category = task.properties['カテゴリ']?.select?.name || '未設定';
@@ -269,6 +309,35 @@ async function loadTaskList() {
         console.error('タスク一覧ロードエラー:', e);
     }
 }
+
+// ★★★ 新規追加関数: プロジェクトフィルタドロップダウンのレンダリング ★★★
+function renderProjectFilterOptions(projects, currentFilterId) {
+    const $filterSelect = document.getElementById('projectFilter');
+    if (!$filterSelect) return;
+
+    // 現在の選択状態を保持
+    const selectedValue = currentFilterId || '';
+
+    $filterSelect.innerHTML = '';
+    
+    // 1. 「全てのタスク」オプションを追加
+    let optionAll = document.createElement('option');
+    optionAll.value = '';
+    optionAll.textContent = '全てのタスク';
+    $filterSelect.appendChild(optionAll);
+
+    // 2. 収集したプロジェクトオプションを追加 (ID表示)
+    projects.forEach(projectId => {
+        const option = document.createElement('option');
+        option.value = projectId;
+        option.textContent = `プロジェクトID: ${projectId.substring(0, 8)}...`;
+        $filterSelect.appendChild(option);
+    });
+
+    // 3. 選択状態を復元
+    $filterSelect.value = selectedValue;
+}
+// ★★★ ここまで新規追加 ★★★
 
 async function loadKpi() {
     console.log('KPIをロード中...');
@@ -316,7 +385,6 @@ async function loadKpi() {
 // 複数DB管理と選択UIの関数
 // =========================================================================
 
-// 設定画面のDB入力UIの生成
 function renderDbInputs() {
     const $container = document.getElementById('dbListContainer');
     if (!$container) return;
@@ -345,20 +413,17 @@ function renderDbInputs() {
     });
 }
 
-// DBエントリーの削除
 function removeDbEntry(index) {
     ALL_DB_CONFIGS.splice(index, 1);
     renderDbInputs(); // UIを再描画
 }
 
-// DBエントリーの追加
 function addDbEntry() {
     // プレースホルダーとして空のエントリを追加
     ALL_DB_CONFIGS.push({ name: '', id: '' }); 
     renderDbInputs();
 }
 
-// DB切り替えドロップダウンのレンダリング
 function renderDbSelectOptions() {
     const $dbSelect = document.getElementById('new-db-select');
     if (!$dbSelect) return;
@@ -428,6 +493,7 @@ async function createNotionTask(e) {
         document.getElementById('newTaskTitle').value = ''; 
         if (document.getElementById('taskCategory')) document.getElementById('taskCategory').value = ''; 
         document.querySelectorAll('#newDeptContainer input[name="taskDepartment"]:checked').forEach(cb => cb.checked = false);
+        // タスク作成後はフィルタなしで一覧を再ロード
         await loadTasksAndKpi();
     } catch (e) {
         alert(`タスク作成に失敗しました。\nエラー: ${e.message}`);
@@ -449,6 +515,7 @@ async function markTaskCompleted(pageId) {
             showLoading();
             await apiFetch(targetUrl, 'PATCH', { properties: updateProperties }, 'notionToken', NOTION_TOKEN);
             alert('タスクを完了にしました。');
+            // 完了後はフィルタなしで一覧を再ロード
             await loadTasksAndKpi();
         } catch (e) {
             alert(`タスク完了処理に失敗しました。\nエラー: ${e.message}`);
@@ -520,8 +587,23 @@ if ($cancelConfigBtn) {
 } 
 
 if ($reloadTasksBtn) {
-    $reloadTasksBtn.addEventListener('click', loadTasksAndKpi);
+    // リロードボタンが押されたら、現在のフィルタ状態で再ロード
+    $reloadTasksBtn.addEventListener('click', () => {
+        const currentFilterId = document.getElementById('projectFilter')?.value || '';
+        loadTasksAndKpi(currentFilterId);
+    });
 } 
+
+// ★★★ 新規追加: プロジェクトフィルタ変更リスナー ★★★
+const $projectFilterSelect = document.getElementById('projectFilter');
+if ($projectFilterSelect) {
+    $projectFilterSelect.addEventListener('change', function() {
+        const selectedId = this.value;
+        // 選択されたIDでタスク一覧を再ロード
+        loadTasksAndKpi(selectedId);
+    });
+}
+// ★★★ ここまで新規追加 ★★★
 
 // タスクモード切り替えリスナー (既存タスク / 新規タスク)
 const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
