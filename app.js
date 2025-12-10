@@ -41,35 +41,14 @@ let CURRENT_DB_CONFIG = null;
 // API通信ヘルパー（変更なし）
 // =========================================================================
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
-    // Notion直リンク（CORS回避）
-    if (tokenKey === 'notionToken') {
-        const headers = {
-            'Authorization': `Bearer ${tokenValue}`,
-            'Content-Type': 'application/json',
-            'Notion-Version': '2022-06-28'
-        };
-        const res = await fetch(targetUrl, { 
-            method: method || 'GET',
-            headers, 
-            body: body ? JSON.stringify(body) : undefined 
-        });
-        if (!res.ok) {
-            const err = await res.text();
-            throw new Error(`Notion Error ${res.status}: ${err}`);
-        }
-        const text = await res.text();
-        return text ? JSON.parse(text) : null;
-    }
-    
-    // Togglはproxy使用
-    const response = await fetch(PROXY_URL, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
-    });
-    if (!response.ok) throw new Error(`Proxy Error: ${response.status}`);
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue }),
+  });
+
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 async function apiCustomFetch(customEndpoint, params) {
