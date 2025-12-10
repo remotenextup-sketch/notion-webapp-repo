@@ -10,6 +10,8 @@ const PROXY_URL = 'https://notion-webapp-repo.vercel.app/api/proxy';
 const STORAGE_KEY = 'taskTrackerSettings';
 
 // カテゴリと部門（手動設定）
+let localRunningTask = null;
+let timerInterval = null;
 let CATEGORIES = ['思考', '作業', '教育'];
 let DEPARTMENTS = ['CS', 'デザイン', '人事', '広告', '採用', '改善', '物流', '秘書', '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo'];
 
@@ -217,6 +219,21 @@ function renderDbFilterOptions() {
 async function loadTasksAndKpi() {
     await loadTaskList();
     await loadKpi();
+}
+
+// 3. タイマー表示更新
+function updateTimerDisplay() {
+  if (!localRunningTask) return;
+  
+  const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 6000);
+  const s = elapsed % 60;
+  
+  document.getElementById('runningStartTime').textContent = 
+    new Date(localRunningTask.startTime).toLocaleTimeString();
+  document.getElementById('runningTimer').textContent = 
+    `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
 }
 
 // =========================================================================
@@ -428,48 +445,26 @@ function addDbEntry() {
 // =========================================================================
 
 async function startTogglTracking(taskTitle, pageId) {
-  if (!TOGGL_API_TOKEN || !TOGGL_WID) {
-    alert('⚙️ Toggl設定確認');
+  if (localRunningTask) {
+    alert('⏹️ 既に計測中');
     return;
   }
 
-  try {
-    showLoading();
-    
-    // 既存計測チェック
-    const running = await apiFetch(
-      'https://api.track.toggl.com/api/v9/me/time_entries/current',
-      'GET', null, 'togglApiToken', TOGGL_API_TOKEN
-    );
-    
-    if (running?.data) {
-      alert('⏹️ 既に計測中');
-      return;
-    }
-    
-    // ★フラット構造（このproxy用）★
-    const now = new Date().toISOString();
-    await apiFetch(
-      'https://api.track.toggl.com/api/v9/time_entries',
-      'POST',
-      {
-        description: `${taskTitle} (Notion: ${pageId})`,
-        wid: parseInt(TOGGL_WID),
-        start: now,
-        duration: -1,
-        created_with: 'Notion Toggl Timer'
-      },
-      'togglApiToken', TOGGL_API_TOKEN
-    );
-    
-    alert(`✅ 計測開始: ${taskTitle}`);
-    await checkRunningState();
-    
-  } catch (e) {
-    alert(`❌ ${e.message}`);
-  } finally {
-    hideLoading();
-  }
+  localRunningTask = {
+    title: taskTitle,
+    pageId: pageId,
+    startTime: Date.now()
+  };
+  localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
+  
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(updateTimerDisplay, 1000);
+  updateTimerDisplay();
+  
+  document.getElementById('runningTaskTitle').textContent = taskTitle;
+  document.getElementById('runningTaskContainer').classList.remove('hidden');
+  
+  alert(`✅ 計測開始: ${taskTitle}`);
 }
 
 async function createNotionTask(e) {
@@ -561,40 +556,36 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 
 async function checkRunningState() {
-  if (!TOGGL_API_TOKEN) {
-    document.getElementById('runningTaskTitle').textContent = 'Toggl未設定';
+  // ★ローカルストレージから復元★
+  const storedTask = localStorage.getItem('runningTask');
+  if (storedTask) {
+    localRunningTask = JSON.parse(storedTask);
+    document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
+    document.getElementById('runningStartTime').textContent = 
+      new Date(localRunningTask.startTime).toLocaleTimeString();
+    
+    // タイマー再開
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimerDisplay, 1000);
+    updateTimerDisplay();
+    
+    document.getElementById('completeRunningTask').textContent = '✅ 完了';
+    document.getElementById('completeRunningTask').onclick = async () => {
+      await markTaskCompleted(localRunningTask.pageId);
+      localRunningTask = null;
+      localStorage.removeItem('runningTask');
+      clearInterval(timerInterval);
+      document.getElementById('runningTaskContainer').classList.add('hidden');
+      loadTasksAndKpi();
+    };
+    
     $runningTaskContainer.classList.remove('hidden');
     return;
   }
   
-  try {
-    const runningEntry = await getTogglRunningEntry();
-    
-    if (runningEntry?.data) {
-      const description = runningEntry.data.description || '不明';
-      document.getElementById('runningTaskTitle').textContent = description;
-      document.getElementById('runningStartTime').textContent = 
-        new Date(runningEntry.data.start).toLocaleTimeString();
-      
-      const completeBtn = document.getElementById('completeRunningTask');
-      completeBtn.textContent = '✅ 完了にして停止';
-      
-      // Notion ID抽出
-      const match = description.match(/\(Notion: ([a-z0-9-]+)\)/i);
-      if (match) {
-        completeBtn.onclick = async () => {
-          await stopTogglTracking(runningEntry.data.id);
-          await markTaskCompleted(match[1]);
-        };
-      }
-      
-      $runningTaskContainer.classList.remove('hidden');
-    } else {
-      $runningTaskContainer.classList.add('hidden');
-    }
-  } catch (e) {
-    console.error('Toggl状態確認エラー:', e);
-  }
+  // 計測なし
+  localRunningTask = null;
+  $runningTaskContainer.classList.add('hidden');
 }
 
 async function getTogglRunningEntry() {
