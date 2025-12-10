@@ -4,8 +4,6 @@ console.log('*** APP.JS EXECUTION START ***');
 // 設定とグローバル変数
 // =========================================================================
 
-// ✅ プロキシURL（正常動作確認済み）
-const PROXY_URL = 'https://notion-webapp-repo.vercel.app/api/proxy'; 
 // ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
 
@@ -227,13 +225,13 @@ function updateTimerDisplay() {
   
   const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
   const h = Math.floor(elapsed / 3600);
-  const m = Math.floor((elapsed % 3600) / 6000);
+  const m = Math.floor((elapsed % 3600) / 60000);
   const s = elapsed % 60;
   
-  document.getElementById('runningStartTime').textContent = 
-    new Date(localRunningTask.startTime).toLocaleTimeString();
-  document.getElementById('runningTimer').textContent = 
-    `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  const timerEl = document.getElementById('runningTimer');
+  if (timerEl) {
+    timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  }
 }
 
 // =========================================================================
@@ -444,17 +442,20 @@ function addDbEntry() {
 // アクション処理
 // =========================================================================
 
+// ✅ 修正版（行850付近）
 async function startTogglTracking(taskTitle, pageId) {
-  localRunningTask = {
-    title: taskTitle,
-    pageId: pageId,
-    startTime: Date.now()
-  };
+  localRunningTask = { title: taskTitle, pageId, startTime: Date.now() };
   localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
   
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(updateTimerDisplay, 1000);
   updateTimerDisplay();
+  
+  // ★追加★ UI即時更新
+  document.getElementById('runningTaskTitle').textContent = taskTitle;
+  document.getElementById('runningStartTime').textContent = 
+    new Date(localRunningTask.startTime).toLocaleTimeString();
+  $runningTaskContainer.classList.remove('hidden');
   
   alert(`✅ 計測開始: ${taskTitle}`);
   checkRunningState();
@@ -588,17 +589,13 @@ async function checkRunningState() {
 // ★3. updateTimerDisplay() 新規追加（checkRunningState直下）★
 function updateTimerDisplay() {
   if (!localRunningTask) return;
-  
   const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
   const h = Math.floor(elapsed / 3600);
-  const m = Math.floor((elapsed % 3600) / 60000);
-  const s = Math.floor((elapsed % 60));
+  const m = Math.floor((elapsed % 3600) / 60000);  // ✅ 60000
+  const s = elapsed % 60;                          // ✅ %60のみ
   
-  // タイマー表示（runningTimer要素がある場合）
-  const timerEl = document.getElementById('runningTimer') || document.getElementById('runningStartTime');
-  if (timerEl) {
-    timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-  }
+  const timerEl = document.getElementById('runningTimer');
+  if (timerEl) timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
 }
 
 async function getTogglRunningEntry() {
@@ -606,14 +603,6 @@ async function getTogglRunningEntry() {
     'https://api.track.toggl.com/api/v9/me/time_entries/current',
     'GET', null, 'togglApiToken', TOGGL_API_TOKEN
   );
-}
-
-async function getTogglRunningEntry() {
-    const targetUrl = 'https://api.track.toggl.com/api/v9/me/time_entries/current';
-    // 標準のapiFetchではなく、トークンを直接渡してGETリクエストを行う特殊処理が必要になるため、
-    // Togglのトークンチェックとリクエストをプロキシ経由で行う
-    const response = await apiFetch(targetUrl, 'GET', null, 'togglApiToken', TOGGL_API_TOKEN);
-    return response;
 }
 
 async function stopTogglTracking(entryId) {
@@ -714,24 +703,17 @@ if ($addDbEntryBtn) {
 }
 
 // 実行中タスク停止ボタン
-const $stopRunningTaskBtn = document.getElementById('stopRunningTask');
 if ($stopRunningTaskBtn) {
-    $stopRunningTaskBtn.addEventListener('click', async () => {
-        try {
-            const runningEntry = await getTogglRunningEntry();
-            if (runningEntry) {
-                await stopTogglTracking(runningEntry.id);
-                await checkRunningState();
-            } else {
-                alert('実行中のタスクはありません。');
-            }
-        } catch (e) {
-            console.error('停止処理失敗:', e);
-            alert(`停止処理に失敗しました: ${e.message}`);
+    $stopRunningTaskBtn.addEventListener('click', () => {
+        if (localRunningTask) {
+            localRunningTask = null;
+            localStorage.removeItem('runningTask');
+            if (timerInterval) clearInterval(timerInterval);
+            $runningTaskContainer.classList.add('hidden');
+            alert('計測を停止しました');
         }
     });
 }
-
 
 // =========================================================================
 // 設定モーダル関数
