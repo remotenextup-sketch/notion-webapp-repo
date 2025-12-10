@@ -5,8 +5,7 @@ console.log('*** APP.JS EXECUTION START ***');
 // =========================================================================
 
 // ✅ プロキシURL（正常動作確認済み）
-const PROXY_URL = 'https://notion-toggl-proxy-n78escgyz-akikos-projects-ddc20794.vercel.app/api/proxy'; 
-
+const PROXY_URL = 'https://notion-webapp-repo.vercel.app/api/proxy'; 
 // ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
 
