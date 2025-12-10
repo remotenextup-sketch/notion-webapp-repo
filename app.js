@@ -42,15 +42,23 @@ let CURRENT_DB_CONFIG = null;
 // API通信ヘルパー（変更なし）
 // =========================================================================
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
-  const response = await fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
-  });
-  
-  if (!response.ok) throw new Error(`Proxy ${response.status}`);
-  return await response.json();
+    const proxyBody = { targetUrl, method, body, tokenKey, tokenValue };
+    
+    const response = await fetch('/api/proxy', {  // 同じドメインproxy
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proxyBody)
+    });
+    
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Proxy ${response.status}: ${errText}`);
+    }
+    
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
 }
+
 
 async function apiCustomFetch(customEndpoint, params) {
     const response = await fetch(PROXY_URL, {
