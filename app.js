@@ -1,10 +1,11 @@
 // ============================================================
-// Notion Timer Web App (app.js) - Notion専用版
+// Notion Toggl Timer - Web App (app.js)
 // ============================================================
 
-// ★★★ Vercel FunctionsでデプロイしたプロキシのURLを設定してください！ ★★★
-// 例: https://[あなたのドメイン].vercel.app/api/proxy
-const PROXY_URL = 'https://notion-proxy-repo.vercel.app/api/proxy'; 
+// ★★★ ここにVercelで取得したURLを設定します！ ★★★
+// Vercelで発行されたURLの末尾に「/api/proxy」を付け加えます。
+const PROXY_URL = 'https://reimagined-broccoli-8ammmetuy-aaaks-projects.vercel.app/'; 
+// 例: https://notion-toggl-proxy.vercel.app/api/proxy
 // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
 // グローバル状態
@@ -24,7 +25,8 @@ const els = {
     c_nToken: document.getElementById('confNotionToken'),
     c_nDbId: document.getElementById('confNotionDbId'),
     c_nUserId: document.getElementById('confNotionUserId'),
-    // Toggl設定要素は削除
+    c_tToken: document.getElementById('confTogglToken'),
+    c_tWid: document.getElementById('confTogglWid')
 };
 
 // ==========================================
@@ -37,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('cancelConfig').addEventListener('click', hideSettings);
     
     document.getElementById('reloadTasks').addEventListener('click', loadNotionTasks);
+    document.getElementById('pauseButton').addEventListener('click', handlePause);
     document.getElementById('completeButton').addEventListener('click', handleComplete);
     document.getElementById('forceStopButton').addEventListener('click', handleForceStop);
     document.getElementById('startNewTaskButton').addEventListener('click', handleStartNew);
@@ -45,7 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 設定ロード
     const config = loadConfig();
-    if (!config.notionToken) {
+    if (!config.notionToken || !config.togglApiToken) {
         showSettings(); // 設定がない場合は設定画面へ
     } else {
         await checkRunningState(); // 実行状態の確認
@@ -57,7 +60,9 @@ function loadConfig() {
     return {
         notionToken: localStorage.getItem('notionToken') || '',
         notionDatabaseId: localStorage.getItem('notionDatabaseId') || '',
-        notionUserId: localStorage.getItem('notionUserId') || ''
+        notionUserId: localStorage.getItem('notionUserId') || '',
+        togglApiToken: localStorage.getItem('togglApiToken') || '',
+        togglWorkspaceId: localStorage.getItem('togglWorkspaceId') || ''
     };
 }
 
@@ -66,6 +71,8 @@ function showSettings() {
     els.c_nToken.value = c.notionToken;
     els.c_nDbId.value = c.notionDatabaseId;
     els.c_nUserId.value = c.notionUserId;
+    els.c_tToken.value = c.togglApiToken;
+    els.c_tWid.value = c.togglWorkspaceId;
     
     els.mainView.classList.add('hidden');
     els.settingsView.classList.remove('hidden');
@@ -82,6 +89,8 @@ function saveSettings() {
     localStorage.setItem('notionToken', els.c_nToken.value.trim());
     localStorage.setItem('notionDatabaseId', els.c_nDbId.value.trim());
     localStorage.setItem('notionUserId', els.c_nUserId.value.trim());
+    localStorage.setItem('togglApiToken', els.c_tToken.value.trim());
+    localStorage.setItem('togglWorkspaceId', els.c_tWid.value.trim());
     
     alert('設定を保存しました');
     hideSettings();
@@ -99,7 +108,22 @@ async function checkRunningState() {
         localRunningTask = JSON.parse(storedTask);
         updateUI(localRunningTask);
     } else {
-        updateUI(null);
+        // Toggl APIにも念のため確認
+        const togglRunning = await getTogglRunningEntry();
+        if (togglRunning) {
+            // 復元
+            localRunningTask = {
+                togglEntryId: togglRunning.id,
+                title: togglRunning.description,
+                notionPageId: null, // ID不明のためログ記録不可だがタイマーは動かす
+                startTime: new Date(togglRunning.start).getTime(),
+                category: null, departments: []
+            };
+            localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
+            updateUI(localRunningTask);
+        } else {
+            updateUI(null);
+        }
     }
 }
 
@@ -142,8 +166,14 @@ function toggleMode() {
     els.newCont.className = mode === 'new' ? '' : 'hidden';
 }
 
+// app.js の先頭付近に、プロキシサーバーのURLを設定してください
+// 例: Vercel FunctionsやCloudflare Workersで作成したエンドポイント
+const PROXY_URL = 'https://[ここにあなたのプロキシURLを入力].com/api/proxy'; 
+// ↑このURLは、あなたが別途設定する必要があります。
+
 // ==========================================
-// 3. API連携 (プロキシ経由 - Notionのみ)
+// 3. API連携 (Notion & Toggl)
+// apiFetch 関数をプロキシ経由に全面変更
 // ==========================================
 
 async function apiFetch(targetUrl, method, body, tokenKey) {
@@ -152,14 +182,14 @@ async function apiFetch(targetUrl, method, body, tokenKey) {
     
     // プロキシサーバーに送るデータ
     const proxyPayload = {
-        targetUrl: targetUrl, 
-        method: method,       
-        body: body,           
-        tokenKey: tokenKey,   
-        tokenValue: token     
+        targetUrl: targetUrl, // 実際のNotion/TogglのURL
+        method: method,       // 実際のHTTPメソッド (GET/POST/PATCH)
+        body: body,           // 実際のペイロード
+        tokenKey: tokenKey,   // トークンの種類 ('notionToken' or 'togglApiToken')
+        tokenValue: token     // ユーザーが入力したAPIトークン
     };
 
-    // プロキシサーバーへのリクエスト
+    // プロキシサーバーへのリクエストは常にPOST
     const res = await fetch(PROXY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -167,22 +197,17 @@ async function apiFetch(targetUrl, method, body, tokenKey) {
     });
     
     if (!res.ok) {
-        const errorText = await res.text();
-        let errorMsg = `API Error (${res.status}): ${errorText}`;
-        try {
-            const errorJson = JSON.parse(errorText);
-            errorMsg = `API Error (${res.status}): ${errorJson.message || 'サーバー側で問題が発生しました'}`;
-        } catch {}
-        
-        throw new Error(errorMsg);
+        // プロキシ側で発生したエラー（APIトークン間違いなど）を捕捉
+        const errorJson = await res.json().catch(() => ({ message: '不明なプロキシエラー' }));
+        throw new Error(`API Error (${res.status}): ${errorJson.message || 'サーバー側で問題が発生しました'}`);
     }
     
-    return res.status === 204 ? null : res.json().catch(() => null);
+    return res.status === 204 ? null : res.json();
 }
 
 // --- Notion ---
 async function loadNotionTasks() {
-    els.taskList.innerHTML = '<li>タスクを読み込み中...</li>';
+    els.taskList.innerHTML = '<li>読み込み中...</li>';
     try {
         const dbId = localStorage.getItem('notionDatabaseId');
         const res = await apiFetch(`https://api.notion.com/v1/databases/${dbId}/query`, 'POST', {
@@ -190,11 +215,6 @@ async function loadNotionTasks() {
         }, 'notionToken');
         
         els.taskList.innerHTML = '';
-        if (!res.results || res.results.length === 0) {
-            els.taskList.innerHTML = '<li>未完了タスクが見つかりませんでした。</li>';
-            return;
-        }
-
         res.results.forEach(p => {
             const title = p.properties['タスク名']?.title?.[0]?.plain_text || 'No Title';
             const depts = p.properties['部門']?.multi_select?.map(x => x.name) || [];
@@ -212,7 +232,7 @@ async function loadNotionTasks() {
         });
     } catch (e) {
         els.taskList.innerHTML = `<li>エラー: ${e.message}</li>`;
-        alert("タスク取得エラー。設定とプロキシURLを確認してください。");
+        alert("タスク取得エラー。CORS制限の可能性があります。");
     }
 }
 
@@ -223,7 +243,7 @@ async function createNotionTask(title, depts, cat) {
         "タスク名": { title: [{ text: { content: title } }] },
         "部門": { multi_select: depts.map(d => ({ name: d })) },
         "カテゴリ": { select: { name: cat } },
-        "ステータス": { status: { name: "進行中" } } // 作成と同時に「進行中」にする
+        "ステータス": { status: { name: "未着手" } }
     };
     if (uId) props["担当者"] = { people: [{ id: uId }] };
 
@@ -236,7 +256,7 @@ async function createNotionTask(title, depts, cat) {
 async function writeLogToNotion(pageId, seconds, isComplete, memo) {
     if (!pageId) return;
     try {
-        // Notionから現在の計測時間を取得（更新時のデータの競合を防ぐため）
+        // 1. Get current
         const page = await apiFetch(`https://api.notion.com/v1/pages/${pageId}`, 'GET', null, 'notionToken');
         const curMins = page.properties["計測時間(分)"]?.number || 0;
         const totalMins = curMins + Math.round(seconds / 60);
@@ -248,15 +268,13 @@ async function writeLogToNotion(pageId, seconds, isComplete, memo) {
             props["完了日"] = { date: { start: new Date().toISOString().split('T')[0] } };
             
             if (memo) {
-                // 既存のログに追記するロジック（Notion APIの仕様に対応）
                 const curLog = page.properties["思考ログ"]?.rich_text?.[0]?.plain_text || "";
                 const dateStamp = `[${new Date().toLocaleDateString()}]`;
                 const newLog = curLog ? `${curLog}\n\n${dateStamp}\n${memo}` : `${dateStamp}\n${memo}`;
                 props["思考ログ"] = { rich_text: [{ text: { content: newLog } }] };
             }
         } else {
-            // 一時停止や強制停止（記録あり）の場合
-            props["ステータス"] = { status: { name: "未着手" } }; 
+            props["ステータス"] = { status: { name: "進行中" } };
         }
 
         await apiFetch(`https://api.notion.com/v1/pages/${pageId}`, 'PATCH', { properties: props }, 'notionToken');
@@ -266,21 +284,51 @@ async function writeLogToNotion(pageId, seconds, isComplete, memo) {
     }
 }
 
+// --- Toggl ---
+async function getTogglRunningEntry() {
+    try {
+        const data = await apiFetch('https://api.track.toggl.com/api/v9/time_entries/current', 'GET', null, 'togglApiToken');
+        return (data && data.id) ? data : null;
+    } catch (e) { return null; }
+}
+
+async function startToggl(title, tags) {
+    const wid = parseInt(localStorage.getItem('togglWorkspaceId'));
+    const body = {
+        workspace_id: wid,
+        description: title,
+        created_with: 'Notion Toggl WebApp',
+        start: new Date().toISOString(),
+        duration: -1,
+        tags: tags
+    };
+    return await apiFetch('https://api.track.toggl.com/api/v9/time_entries', 'POST', body, 'togglApiToken');
+}
+
+async function stopToggl(entryId) {
+    const wid = localStorage.getItem('togglWorkspaceId');
+    return await apiFetch(`https://api.track.toggl.com/api/v9/workspaces/${wid}/time_entries/${entryId}/stop`, 'PATCH', null, 'togglApiToken');
+}
+
 // ==========================================
 // 4. アクションハンドラ
 // ==========================================
 
 async function handleStart(title, notionId, depts, cat) {
-    if (localRunningTask) await handleStopProcess(false, "", true); // 実行中なら記録せずに一旦停止
+    if (localRunningTask) await handleStopProcess(false, ""); // 実行中なら一旦停止
 
     try {
-        // Notionのステータスを進行中に変更
-        await writeLogToNotion(notionId, 0, false, null); // 進行中に変更
+        const deptStr = Array.isArray(depts) ? depts.map(d => `【${d}】`).join('') : '';
+        const catStr = cat ? `【${cat}】` : '';
+        const togglTitle = `${deptStr}${catStr}${title}`;
+        
+        const entry = await startToggl(togglTitle, cat ? [cat] : []);
         
         localRunningTask = {
             notionPageId: notionId,
             title: title,
-            startTime: Date.now() // ローカル時間で記録開始
+            startTime: new Date(entry.start).getTime(),
+            togglEntryId: entry.id
         };
         localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
         updateUI(localRunningTask);
@@ -294,57 +342,53 @@ async function handleStartNew() {
     const depts = Array.from(document.querySelectorAll('input[name="newDept"]:checked')).map(c => c.value);
     const cat = document.querySelector('input[name="newCat"]:checked')?.value;
 
-    if (!title || !depts.length || !cat) return alert("タスク名、部門、カテゴリは全て選択/入力が必要です。");
+    if (!title || !depts.length || !cat) return alert("全項目必須です");
 
     try {
-        if (localRunningTask) await handleStopProcess(false, "", true); // 実行中なら記録せずに一旦停止
-
         const pid = await createNotionTask(title, depts, cat);
-        
-        localRunningTask = {
-            notionPageId: pid,
-            title: title,
-            startTime: Date.now()
-        };
-        localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
-        updateUI(localRunningTask);
-        
+        await handleStart(title, pid, depts, cat);
         // フォームクリア
         document.getElementById('newTaskTitle').value = '';
         document.querySelectorAll('input[name="newDept"]').forEach(c => c.checked = false);
-        document.querySelector('input[name="newCat"][value="作業"]').checked = true; // デフォルトに戻す
-        
-        // モードを既存に戻す
-        document.querySelector('input[name="taskMode"][value="existing"]').checked = true;
-        toggleMode();
-        loadNotionTasks();
+        document.querySelectorAll('input[name="newCat"]').forEach(c => c.checked = false);
     } catch (e) {
         alert("新規作成エラー: " + e.message);
     }
 }
 
-async function handleComplete() {
-    const memo = prompt("思考ログを入力してください（任意）:", "");
-    if (memo === null) return; // キャンセルされた場合
-    await handleStopProcess(true, memo, false);
+async function handlePause() {
+    await handleStopProcess(false, "");
 }
 
-async function handleStopProcess(isComplete, memo, isPause) {
+async function handleComplete() {
+    const memo = prompt("思考ログを入力:", "");
+    if (memo === null) return;
+    await handleStopProcess(true, memo);
+}
+
+async function handleStopProcess(isComplete, memo) {
     if (!localRunningTask) return;
     
     try {
-        const durationSeconds = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
+        let duration = 0;
+        // Toggl停止
+        try {
+            const res = await stopToggl(localRunningTask.togglEntryId);
+            if (res && res.duration) duration = res.duration;
+        } catch(e) { console.warn(e); }
+
+        if (duration <= 0) {
+            duration = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
+        }
 
         // Notion記録
-        // isPause (一時停止) の場合は、完了フラグを立てずに記録
-        await writeLogToNotion(localRunningTask.notionPageId, durationSeconds, isComplete, memo);
+        await writeLogToNotion(localRunningTask.notionPageId, duration, isComplete, memo);
         
-        if(isComplete) alert("タスクを完了し、ログを記録しました！");
-        else if(isPause) alert("タスクを開始しました！ (以前のタスクは一時停止)");
-        else alert("強制停止しました。Notionへの記録は行っていません。");
+        if(isComplete) alert("完了しました！");
+        else alert("一旦終了しました。");
 
     } catch (e) {
-        alert("停止処理エラー: " + e.message);
+        alert("停止エラー: " + e.message);
     } finally {
         localRunningTask = null;
         localStorage.removeItem('runningTask');
@@ -354,15 +398,7 @@ async function handleStopProcess(isComplete, memo, isPause) {
 }
 
 async function handleForceStop() {
-    if(!confirm("強制停止しますか？(Notionへの時間記録はされません)")) return;
-    
-    // Notionのステータスを「未着手」に戻すのみ
-    if (localRunningTask?.notionPageId) {
-        try {
-            await writeLogToNotion(localRunningTask.notionPageId, 0, false, null); // 記録なしでステータスのみ更新
-        } catch(e) { console.warn("Notion status reset failed:", e); }
-    }
-    
+    if(!confirm("強制停止しますか？(ログは残りません)")) return;
     localRunningTask = null;
     localStorage.removeItem('runningTask');
     updateUI(null);
