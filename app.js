@@ -4,7 +4,7 @@
 
 // ★★★ ここにVercelで取得したURLを設定します！ ★★★
 // 【重要】PROXY_URLが重複して宣言されていないか確認してください。
-const PROXY_URL = 'https://remotenextup-sketch.vercel.app/api/proxy';
+const PROXY_URL = 'https://notion-proxy-repo.vercel.app/api/proxy';
 // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
 // グローバル状態
