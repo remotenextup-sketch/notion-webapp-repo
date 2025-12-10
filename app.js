@@ -454,7 +454,7 @@ async function startTogglTracking(taskTitle, pageId) {
   try {
     showLoading();
     
-    // 既存計測チェック
+    // 1. 既存計測チェック
     const runningEntry = await apiFetch(
       'https://api.track.toggl.com/api/v9/me/time_entries/current',
       'GET', null, 'togglApiToken', TOGGL_API_TOKEN
@@ -466,17 +466,19 @@ async function startTogglTracking(taskTitle, pageId) {
       return;
     }
     
-    // 新規計測開始
-    const newEntry = await apiFetch(
+    // 2. 新規計測開始（start必須）
+    const now = new Date().toISOString();
+    const startResponse = await apiFetch(
       'https://api.track.toggl.com/api/v9/time_entries',
-      'POST', 
-      { 
+      'POST',
+      {
         time_entry: {
           description: `${taskTitle} (Notion: ${pageId})`,
           wid: parseInt(TOGGL_WID),
-          start: new Date().toISOString()
+          start: now,  // ✅ これが必須！
+          duration: -1  // 実行中（負数）
         }
-      }, 
+      },
       'togglApiToken', TOGGL_API_TOKEN
     );
     
