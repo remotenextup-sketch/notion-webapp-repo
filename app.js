@@ -4,58 +4,42 @@ console.log('*** APP.JS EXECUTION START ***');
 // 設定とグローバル変数
 // =========================================================================
 
-// プロキシサーバーのURL (Vercelデプロイ後のURLに置き換えてください)
-const PROXY_URL = 'https://notion-toggl-proxy-n78escgyz-akikos-projects-ddc20794.vercel.app/api/proxy'; 
+// ✅ プロキシURL（正常動作確認済み）
+const PROXY_URL = 'https://notion-toggl-proxy-n78escgyz-akikos-projects-ddc20794.vercel.app/api/proxy'; 
 
 // ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
 
 // DOM要素の参照
-const $settingsModal = document.getElementById('settingsView'); 
+const $settingsModal = document.getElementById('settingsView'); 
 const $taskList = document.getElementById('taskList');
 const $runningTaskContainer = document.getElementById('runningTaskContainer');
-const $settingsBtn = document.getElementById('toggleSettings'); 
-const $saveSettingsBtn = document.getElementById('saveConfig'); 
-const $cancelConfigBtn = document.getElementById('cancelConfig'); 
-const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
-const $reloadTasksBtn = document.getElementById('reloadTasks'); 
+const $settingsBtn = document.getElementById('toggleSettings'); 
+const $saveSettingsBtn = document.getElementById('saveConfig'); 
+const $cancelConfigBtn = document.getElementById('cancelConfig'); 
+const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
+const $reloadTasksBtn = document.getElementById('reloadTasks'); 
 const $taskDbFilterSelect = document.getElementById('taskDbFilter');
-// 新規タスク作成フォームの関連要素
 const $existingTaskContainer = document.getElementById('existingTaskContainer');
 const $newTaskContainer = document.getElementById('newTaskContainer');
 const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
 const $addDbEntryBtn = document.getElementById('addDbEntry');
-
-// ★★★ 追記：HTMLにある要素をDOM変数として定義する (見つからなくてもエラーにしない) ★★★
 const $loader = document.getElementById('loader'); 
-// (他の要素も全てHTMLに存在することを確認済みです)
 
 // グローバル変数の定義
 let NOTION_TOKEN = '';
 let TOGGL_API_TOKEN = '';
-
-// カテゴリと部門は、新規タスク作成時に使うため、選択中のDBのものに更新されます
 let CATEGORIES = [];
 let DEPARTMENTS = [];
-
-// 現在選択されているDBのDATA_SOURCE_ID（単一DBのKPI/フォーム用）
 let DATA_SOURCE_ID = ''; 
 let TOGGL_WID = ''; 
-
-// 複数DB対応のための変数
 let ALL_DB_CONFIGS = []; 
-
-// ★★★ 状態管理用の変数 ★★★
-// 'all' または 特定のDB ID。現在のタスク一覧の表示と新規タスクの作成先DBを決定します。
 let CURRENT_VIEW_ID = 'all'; 
-
-// CURRENT_DB_CONFIG は、単一DB選択時または初期ロード時のカテゴリ/部門ロードターゲットDBとして使用
 let CURRENT_DB_CONFIG = null; 
 
 // =========================================================================
-// API通信ヘルパー
+// API通信ヘルパー（変更なし）
 // =========================================================================
-
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
     const response = await fetch(PROXY_URL, {
         method: 'POST', 
@@ -73,7 +57,7 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
         try {
             const errorJson = JSON.parse(errorText);
             if (errorJson.code) errorMessage = `API Error (${response.status}): ${errorJson.code} - ${errorJson.message}`;
-        } catch (e) { /* JSONではない場合は無視 */ }
+        } catch (e) { }
         throw new Error(errorMessage);
     }
     const responseText = await response.text();
@@ -98,40 +82,32 @@ async function apiCustomFetch(customEndpoint, params) {
     return response.json();
 }
 
-
 // =========================================================================
-// 初期化と設定のロード
+// 初期化と設定のロード（変更なし）
 // =========================================================================
-
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 async function initializeApp() {
     console.log('アプリケーションを初期化中...');
     
-    // 致命的エラーチェック：最低限必要なDOM要素が存在するか
     if (!$settingsModal || !$taskList) {
-        console.error('FATAL: 必要なDOM要素 (settingsView, taskListなど) が見つかりません。HTML IDを確認してください。');
-        alert('アプリの読み込みに失敗しました。HTMLのIDを確認してください。');
+        console.error('FATAL: 必要なDOM要素が見つかりません。');
+        alert('アプリの読み込みに失敗しました。');
         return; 
     }
 
     showLoading(); 
+    loadSettings(); 
 
-    loadSettings(); // グローバル変数にローカルストレージの設定をロード
-
-    // ★★★ 修正箇所: 設定がない場合は即座に設定モーダルを開く ★★★
     if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
         console.log('設定データが存在しないため、設定モーダルを開きます。');
         hideLoading(); 
         openSettingsModal();
-        return; // 後続のすべての初期化処理をスキップ
+        return;
     } 
-    // ★★★ 修正箇所ここまで ★★★
 
-    // UIの初期化
     renderDbFilterOptions(); 
     
-    // 初期ロード時のターゲットDBを決定
     let initialDbConfig = CURRENT_DB_CONFIG;
     if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
         initialDbConfig = ALL_DB_CONFIGS[0];
@@ -139,12 +115,10 @@ async function initializeApp() {
 
     if (initialDbConfig) {
         try {
-            // トークンがグローバル変数 (NOTION_TOKEN) に入っている状態でプロキシへアクセス
             await loadDbProperties(initialDbConfig.id); 
             CURRENT_DB_CONFIG = initialDbConfig;
         } catch (error) {
             console.warn('初期DBプロパティロード失敗:', error);
-            // エラーが発生しても、設定画面を開くことなく、タスク表示は試みる
         }
     }
     
@@ -169,15 +143,14 @@ function loadSettings() {
         TOGGL_API_TOKEN = savedSettings.togglApiToken || '';
         TOGGL_WID = savedSettings.togglWid || '';
         ALL_DB_CONFIGS = savedSettings.allDbConfigs || [];
-        
-        const currentViewId = savedSettings.currentViewId || 'all';
-        CURRENT_VIEW_ID = currentViewId;
-        
+        CURRENT_VIEW_ID = savedSettings.currentViewId || 'all';
         CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === CURRENT_VIEW_ID) || null;
     }
 }
 
-// DB IDを引数として、そのDBのカテゴリ、部門、データソースIDを取得・更新する関数
+// =========================================================================
+// ✅ 修正済み：DBプロパティロード（安全ガード追加）
+// =========================================================================
 async function loadDbProperties(dbId) {
     console.log(`DB ${dbId} の設定をロード中...`);
     try {
@@ -186,31 +159,20 @@ async function loadDbProperties(dbId) {
             tokenValue: NOTION_TOKEN
         });
 
-        if (configData && configData.dataSourceId) {
-            DATA_SOURCE_ID = configData.dataSourceId;
-        } else {
-            // Notion API v1ではDB IDをそのままデータソースIDとして利用することが多いため、
-            // 取得できなかった場合はDB IDをフォールバックとして使用
-            DATA_SOURCE_ID = dbId;
-        }
-
-        CATEGORIES = configData.categories || [];
-        DEPARTMENTS = configData.departments || [];
+        DATA_SOURCE_ID = configData?.dataSourceId || dbId;
+        CATEGORIES = configData?.categories || [];
+        DEPARTMENTS = configData?.departments || [];
         
         console.log('DBプロパティロード完了');
-        
     } catch (e) {
         console.error('DBプロパティロードエラー:', e);
-        throw new Error(`DBプロパティロードエラー: ${e.message || 'Failed to fetch'}`);
+        throw new Error(`DBプロパティロードエラー: ${e.message}`);
     }
 }
 
-
 // =========================================================================
-// UIレンダリング
+// UIレンダリング（変更なし）
 // =========================================================================
-
-// メイン画面のタイトルにDB名を表示
 function displayCurrentDbTitle(dbName) {
     const titleElement = document.querySelector('h2');
     if (titleElement) {
@@ -223,18 +185,8 @@ function renderFormOptions() {
     const departmentDiv = document.getElementById('newDeptContainer');
     const targetDbDisplay = document.getElementById('targetDbDisplay');
 
-    let targetDbConfig = null;
+    let targetDbConfig = CURRENT_DB_CONFIG || (ALL_DB_CONFIGS[0] || null);
 
-    if (CURRENT_VIEW_ID !== 'all' && CURRENT_DB_CONFIG) {
-        targetDbConfig = CURRENT_DB_CONFIG;
-    } else if (ALL_DB_CONFIGS.length > 0) {
-        targetDbConfig = ALL_DB_CONFIGS[0];
-    }
-
-    let formCategories = [];
-    let formDepartments = [];
-    
-    // 登録先DB表示の更新とボタンの有効化/無効化
     if (!targetDbConfig || CATEGORIES.length === 0) {
         targetDbDisplay.innerHTML = '登録先: **DBプロパティが読み込まれていません。** 設定を確認してください。';
         document.getElementById('startNewTaskButton').disabled = true;
@@ -242,53 +194,43 @@ function renderFormOptions() {
         targetDbDisplay.innerHTML = `登録先: **${targetDbConfig.name}**`;
         document.getElementById('startNewTaskButton').disabled = false;
         
-        formCategories = CATEGORIES;
-        formDepartments = DEPARTMENTS;
-    }
+        // カテゴリ
+        categoryContainer.innerHTML = '<select id="taskCategory"></select>';
+        const taskCategorySelect = document.getElementById('taskCategory');
+        taskCategorySelect.innerHTML = CATEGORIES.length > 0 ? '<option value="">-- 選択 --</option>' : '<option value="">-- 選択肢なし --</option>';
+        CATEGORIES.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            taskCategorySelect.appendChild(option);
+        });
 
-    // カテゴリ (Select)
-    categoryContainer.innerHTML = '<select id="taskCategory"></select>';
-    const taskCategorySelect = document.getElementById('taskCategory');
-    taskCategorySelect.innerHTML = formCategories.length > 0 ? '<option value="">-- 選択 --</option>' : '<option value="">-- 選択肢なし --</option>';
-    
-    formCategories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        taskCategorySelect.appendChild(option);
-    });
-
-    // 部門 (Multi-Select)
-    departmentDiv.innerHTML = '';
-    if (formDepartments.length === 0) {
-        departmentDiv.innerHTML = '<p style="font-size: 12px; color: #999;">部門プロパティがありません。</p>';
+        // 部門
+        departmentDiv.innerHTML = '';
+        if (DEPARTMENTS.length === 0) {
+            departmentDiv.innerHTML = '<p style="font-size: 12px; color: #999;">部門プロパティがありません。</p>';
+        }
+        departmentDiv.classList.toggle('dept-grid', DEPARTMENTS.length > 0);
+        DEPARTMENTS.forEach(dept => {
+            const label = document.createElement('label');
+            label.className = 'department-label';
+            label.innerHTML = `<input type="checkbox" name="taskDepartment" value="${dept}"> ${dept}`;
+            departmentDiv.appendChild(label);
+        });
     }
-    departmentDiv.classList.toggle('dept-grid', formDepartments.length > 0);
-    formDepartments.forEach(dept => {
-        const label = document.createElement('label');
-        label.className = 'department-label';
-        label.innerHTML = `
-            <input type="checkbox" name="taskDepartment" value="${dept}"> 
-            ${dept}
-        `;
-        departmentDiv.appendChild(label);
-    });
 }
 
-// DBフィルタドロップダウンのレンダリング
 function renderDbFilterOptions() {
     const $filterSelect = document.getElementById('taskDbFilter');
     if (!$filterSelect) return;
 
     $filterSelect.innerHTML = '';
     
-    // 1. 「全てのタスク」オプションを追加
     let optionAll = document.createElement('option');
     optionAll.value = 'all';
     optionAll.textContent = '全てのタスク';
     $filterSelect.appendChild(optionAll);
 
-    // 2. 登録されたDBオプションを追加
     ALL_DB_CONFIGS.forEach(db => {
         const option = document.createElement('option');
         option.value = db.id;
@@ -296,7 +238,6 @@ function renderDbFilterOptions() {
         $filterSelect.appendChild(option);
     });
 
-    // 3. 選択状態を復元
     $filterSelect.value = CURRENT_VIEW_ID;
 }
 
@@ -305,28 +246,53 @@ async function loadTasksAndKpi() {
     await loadKpi();
 }
 
-// 特定のDBからタスクをロードするヘルパー関数
+// =========================================================================
+// ✅ 修正済み：タスクロード（安全ガード + 正しいNotionフィルタ）
+// =========================================================================
 async function loadTasksFromSingleDb(dbConfig) {
-    let dataSourceId = dbConfig.id; // DB IDをデータソースIDとして使用
-    
+    const dataSourceId = dbConfig.id;
     const targetUrl = `https://api.notion.com/v1/databases/${dataSourceId}/query`; 
-    // ステータスが「完了」ではないタスクをフィルタリング
+    
+    // ✅ 正しいStatus型フィルタ構文
     const filter = {
         property: 'ステータス',
-        status: { does_not_equal: '完了' }
+        status: {
+            does_not_equal: '完了'
+        }
     };
     
     try {
-        const response = await apiFetch(targetUrl, 'POST', { filter: filter }, 'notionToken', NOTION_TOKEN);
-        response.results.forEach(task => task.sourceDbName = dbConfig.name); 
+        console.log(`DB "${dbConfig.name}" のタスク取得中...`);
+        const response = await apiFetch(targetUrl, 'POST', { filter }, 'notionToken', NOTION_TOKEN);
+        
+        // ✅ 安全ガード：responseとresultsの存在確認
+        console.log('Notion Response:', response);
+        
+        if (!response) {
+            console.warn(`DB "${dbConfig.name}" のレスポンスが空です`);
+            return [];
+        }
+        
+        if (!response.results || !Array.isArray(response.results)) {
+            console.warn(`DB "${dbConfig.name}" のresultsが配列でない:`, response.results);
+            return [];
+        }
+        
+        // ✅ 安全にforEach実行
+        response.results.forEach(task => {
+            task.sourceDbName = dbConfig.name;
+        });
+        
+        console.log(`DB "${dbConfig.name}" から ${response.results.length} 件取得`);
         return response.results;
+        
     } catch (e) {
-        console.warn(`DB "${dbConfig.name}" のタスクロードに失敗しました: ${e.message}`);
-        return []; 
+        console.warn(`DB "${dbConfig.name}" のタスクロードに失敗しました:`, e.message);
+        return [];
     }
 }
 
-// loadTaskList をマルチDB対応に修正
+// loadTaskList（変更なし）
 async function loadTaskList() { 
     console.log(`タスク一覧をロード中 (ビュー: ${CURRENT_VIEW_ID})...`);
     
@@ -336,7 +302,6 @@ async function loadTaskList() {
     }
 
     let dbConfigsToLoad = [];
-
     if (CURRENT_VIEW_ID === 'all') {
         dbConfigsToLoad = ALL_DB_CONFIGS;
     } else {
@@ -351,7 +316,6 @@ async function loadTaskList() {
 
     try {
         showLoading();
-        
         const taskPromises = dbConfigsToLoad.map(dbConfig => loadTasksFromSingleDb(dbConfig));
         const results = await Promise.all(taskPromises);
         const allTasks = results.flat();
@@ -362,7 +326,6 @@ async function loadTaskList() {
             return;
         }
 
-        // タスク一覧のレンダリング
         allTasks.forEach(task => {
             const title = task.properties['タスク名']?.title?.[0]?.plain_text || '名前なしタスク';
             const category = task.properties['カテゴリ']?.select?.name || '未設定';
@@ -389,10 +352,9 @@ async function loadTaskList() {
                         style="width:auto;">▶ 計測開始</button> 
                 </div>
             `;
-            // 計測開始ボタンのリスナーを設定
+            
             listItem.querySelector('.start-tracking-btn').addEventListener('click', (e) => {
                 const button = e.target;
-                // ここで渡す順番は (タスク名, ページID)
                 startTogglTracking(button.dataset.taskTitle, button.dataset.pageId);
             });
             $taskList.appendChild(listItem);
@@ -406,6 +368,7 @@ async function loadTaskList() {
     }
 }
 
+// loadKpi（変更なし）
 async function loadKpi() {
     console.log('KPIをロード中...');
     
