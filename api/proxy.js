@@ -21,12 +21,20 @@ module.exports = async function(req, res) {
         headers,
         body: body.body ? JSON.stringify(body.body) : undefined
       });
-      const data = await upstream.json();
+      
+      // ✅ 1回だけtext() → JSON.parse
+      const text = await upstream.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
       res.status(upstream.status).json(data);
       return;
     }
     
-    // ★ Toggl API（完全対応）
+    // Toggl API（修正版）
     if (body.tokenKey === 'togglApiToken') {
       const basicAuth = Buffer.from(`${body.tokenValue}:api_token`).toString('base64');
       const headers = {
@@ -40,11 +48,13 @@ module.exports = async function(req, res) {
         body: body.body ? JSON.stringify(body.body) : undefined
       });
       
+      // ✅ 1回だけtext() → JSON.parse
+      const text = await upstream.text();
       let data;
       try {
-        data = await upstream.json();
+        data = JSON.parse(text);
       } catch {
-        data = await upstream.text();
+        data = text;
       }
       res.status(upstream.status).json(data);
       return;
