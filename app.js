@@ -179,30 +179,17 @@ function renderFormOptions() {
     const departmentDiv = document.getElementById('newDeptContainer');
 
     // カテゴリ (Select)
-    // 既存の要素を参照し、中身をクリアして再構築
-    const existingCategorySelect = document.getElementById('taskCategory');
-    if (existingCategorySelect) {
-        existingCategorySelect.innerHTML = '';
-        existingCategorySelect.innerHTML = '<option value="">-- 選択 --</option>';
-        CATEGORIES.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat;
-            option.textContent = cat;
-            existingCategorySelect.appendChild(option);
-        });
-    } else {
-        // taskCategoryが存在しない場合は新規作成（index.htmlの構造を維持）
-        categoryContainer.innerHTML = '<h4>カテゴリ</h4><select id="taskCategory"></select>';
-        const taskCategorySelect = document.getElementById('taskCategory');
-        taskCategorySelect.innerHTML = '<option value="">-- 選択 --</option>';
-        CATEGORIES.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat;
-            option.textContent = cat;
-            taskCategorySelect.appendChild(option);
-        });
-    }
-
+    // ★★★ 修正箇所: H4タグを削除し、SELECT要素のみを生成する ★★★
+    categoryContainer.innerHTML = '<select id="taskCategory"></select>';
+    
+    const taskCategorySelect = document.getElementById('taskCategory');
+    taskCategorySelect.innerHTML = '<option value="">-- 選択 --</option>';
+    CATEGORIES.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        taskCategorySelect.appendChild(option);
+    });
 
     // 部門 (Multi-Select)
     departmentDiv.innerHTML = '';
