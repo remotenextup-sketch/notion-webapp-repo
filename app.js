@@ -45,34 +45,16 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
   const response = await fetch('/api/proxy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
+    body: JSON.stringify({ targetUrl, method: method || 'GET', body, tokenKey, tokenValue })
   });
   
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`API Error ${response.status}: ${err}`);
+    throw new Error(`API ${response.status}: ${err}`);
   }
   
   const text = await response.text();
-  return text ? JSON.parse(text) : null;
-}
-
-async function apiCustomFetch(customEndpoint, params) {
-    const response = await fetch(PROXY_URL, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customEndpoint, ...params })
-    });
-
-    if (response.status === 500) {
-        const errorBody = await response.json();
-        throw new Error(`Custom API Error (500): ${errorBody.message}`);
-    }
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Custom API Error (${response.status}): ${errorText}`);
-    }
-    return response.json();
+  return text ? JSON.parse(text) : {};
 }
 
 // =========================================================================
@@ -447,49 +429,44 @@ function addDbEntry() {
 
 async function startTogglTracking(taskTitle, pageId) {
   if (!TOGGL_API_TOKEN || !TOGGL_WID) {
-    alert('⚙️ Toggl設定が必要です（設定画面）');
+    alert('⚙️ Toggl設定確認');
     return;
   }
 
   try {
     showLoading();
     
-    // 1. 既存計測チェック
-    const runningEntry = await apiFetch(
+    // 既存計測チェック
+    const running = await apiFetch(
       'https://api.track.toggl.com/api/v9/me/time_entries/current',
       'GET', null, 'togglApiToken', TOGGL_API_TOKEN
     );
     
-    if (runningEntry?.data) {
-      alert('⏹️ 既に計測中です');
-      await checkRunningState();
+    if (running?.data) {
+      alert('⏹️ 既に計測中');
       return;
     }
     
-    // 2. 正しいToggl v9形式（参考コード準拠）
+    // ★フラット構造（このproxy用）★
     const now = new Date().toISOString();
-    const startResponse = await apiFetch(
+    await apiFetch(
       'https://api.track.toggl.com/api/v9/time_entries',
       'POST',
       {
-        "time_entry": {  // ✅ ネスト必須
-          "description": `${taskTitle} (Notion: ${pageId})`,
-          "wid": parseInt(TOGGL_WID),
-          "start": now,     // ✅ ISO8601必須
-          "duration": -1,   // ✅ 実行中
-          "created_with": "Notion Toggl Timer"
-        }
+        description: `${taskTitle} (Notion: ${pageId})`,
+        wid: parseInt(TOGGL_WID),
+        start: now,
+        duration: -1,
+        created_with: 'Notion Toggl Timer'
       },
       'togglApiToken', TOGGL_API_TOKEN
     );
     
-    console.log('✅ Toggl開始:', startResponse);
     alert(`✅ 計測開始: ${taskTitle}`);
     await checkRunningState();
     
   } catch (e) {
-    console.error('Togglエラー詳細:', e);
-    alert(`❌ 計測失敗\n${e.message}\n\nToggl Token/Workspace確認`);
+    alert(`❌ ${e.message}`);
   } finally {
     hideLoading();
   }
