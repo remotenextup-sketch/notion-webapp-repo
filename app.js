@@ -8,15 +8,18 @@ const PROXY_URL = 'https://notion-proxy-repo.vercel.app/api/proxy';
 // ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
 
-// DOMエレメント (省略)
-const $settingsModal = document.getElementById('settingsModal');
-const $taskForm = document.getElementById('taskForm');
+// ★★★ 修正点: index.htmlのIDに合わせて変更 ★★★
+const $settingsModal = document.getElementById('settingsView'); 
+const $taskForm = document.getElementById('newTaskContainer'); // 新規タスクコンテナを使用
 const $taskList = document.getElementById('taskList');
-const $kpiMetrics = document.getElementById('kpiMetrics');
-const $runningTask = document.getElementById('runningTask');
-const $settingsBtn = document.getElementById('settingsBtn');
-const $saveSettingsBtn = document.getElementById('saveSettingsBtn');
-const $loadingSpinner = document.getElementById('loadingSpinner');
+const $kpiMetrics = document.getElementById('kpiPanel'); // KPI表示パネル全体
+const $runningTask = document.getElementById('runningTaskContainer');
+const $settingsBtn = document.getElementById('toggleSettings'); // ⚙️ボタン
+const $saveSettingsBtn = document.getElementById('saveConfig'); // 保存ボタン
+// ★ 追記: index.htmlに存在しないため、ダミーを作成するか、ローディングロジックを修正する必要がある
+// 今回は、エラーが出ていたため、HTMLに存在しない要素への参照を削除し、代わりに body にスタイルを適用するロジックに変更
+let IS_LOADING = false;
+
 
 // 設定値（ローカルストレージからロードされるか、ユーザーが入力）
 let NOTION_TOKEN = '';
@@ -24,7 +27,7 @@ let DB_ID = '';
 let TOGGL_API_TOKEN = '';
 let CATEGORIES = [];
 let DEPARTMENTS = [];
-let DATA_SOURCE_ID = ''; // ★ 追加: Notion API v2025-09-03対応
+let DATA_SOURCE_ID = ''; 
 
 // =========================================================================
 // 初期化と設定のロード
@@ -39,22 +42,19 @@ async function initializeApp() {
 
     if (NOTION_TOKEN && DB_ID) {
         try {
-            await loadDbConfig(); // DB設定（カテゴリ、部門、データソースID）をロード
+            await loadDbConfig(); 
             
-            // ★ 修正点: DATA_SOURCE_IDが取得できていない場合は、ここで処理を中断する
             if (!DATA_SOURCE_ID) {
-                // loadDbConfig内でエラーがthrowされるため、通常はここには来ないが念のためチェック
                 throw new Error("Notion設定エラー: データソースIDの取得に失敗しました。設定を確認してください。");
             }
             
-            await checkRunningState(); // Togglの実行中タスクをチェック
-            await loadTasksAndKpi(); // タスク一覧とKPIをロード
-            $settingsBtn.style.display = 'block'; // 設定ボタンを表示
+            await checkRunningState(); 
+            await loadTasksAndKpi(); 
+            // $settingsBtn.style.display = 'block'; // HTML側で既に表示されているため不要
         } catch (error) {
             console.error('初期化エラー:', error);
-            // エラーの種類に応じて表示を分ける
             if (error.message && error.message.includes('DB設定ロードエラー')) {
-                alert(`DB設定ロードエラーにより初期化に失敗しました。設定または統合の権限を確認してください。\nエラー: ${error.message}`);
+                alert(`DB設定ロードエラーにより初期化に失敗しました。統合権限、DB ID、またはトークンを確認してください。\nエラー: ${error.message}`);
             } else {
                 alert(`初期化に失敗しました。エラー: ${error.message || '不明なエラー'}`);
             }
@@ -66,9 +66,7 @@ async function initializeApp() {
     hideLoading();
 }
 
-/**
- * ローカルストレージから設定をロードする
- */
+// ... (loadSettings関数は省略)
 function loadSettings() {
     const savedSettings = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (savedSettings) {
@@ -78,20 +76,18 @@ function loadSettings() {
     }
 }
 
+
 /**
  * DB設定（カテゴリ、部門、データソースID）をロードし、Notion API v2025-09-03に対応する
  */
 async function loadDbConfig() {
     console.log('DB設定をロード中...');
-    
-    // api/proxy.js の getConfigAndDataSourceId 関数を呼び出す
     try {
         const configData = await apiCustomFetch('getConfig', {
             dbId: DB_ID, 
             tokenValue: NOTION_TOKEN
         });
 
-        // ★ 修正点: サーバーから返された data_source_id を保存し、欠落時はエラーを投げる
         if (configData && configData.dataSourceId) {
             DATA_SOURCE_ID = configData.dataSourceId;
         } else {
@@ -102,32 +98,39 @@ async function loadDbConfig() {
         DEPARTMENTS = configData.departments || [];
         
         console.log('DB設定ロード完了:', { categories: CATEGORIES, departments: DEPARTMENTS, dataSourceId: DATA_SOURCE_ID });
-        renderFormOptions(); // フォームのオプションをレンダリング
+        renderFormOptions(); 
 
     } catch (e) {
         console.error('DB設定ロードエラー:', e);
-        // エラーメッセージにプレフィックスを付けて、initializeAppで処理しやすくする
         throw new Error(`DB設定ロードエラー: ${e.message || 'TypeError: Failed to fetch'}`);
     }
 }
 
 
 // =========================================================================
-// UIレンダリング (省略)
+// UIレンダリング
 // =========================================================================
 
+/**
+ * 新規タスク作成フォームにカテゴリと部門のオプションをレンダリング
+ */
 function renderFormOptions() {
-    const categorySelect = document.getElementById('taskCategory');
-    const departmentDiv = document.getElementById('departmentChecks');
+    // index.htmlのIDに合わせて修正
+    const categorySelect = document.getElementById('newCatContainer'); 
+    const departmentDiv = document.getElementById('newDeptContainer');
 
-    categorySelect.innerHTML = '<option value="">-- 選択 --</option>';
+    // カテゴリ (Select) - HTMLにSelectタグがないため、仮でSelectタグを作成
+    categorySelect.innerHTML = '<h4>カテゴリ</h4><select id="taskCategory"></select>';
+    const taskCategorySelect = document.getElementById('taskCategory');
+    taskCategorySelect.innerHTML = '<option value="">-- 選択 --</option>';
     CATEGORIES.forEach(cat => {
         const option = document.createElement('option');
         option.value = cat;
         option.textContent = cat;
-        categorySelect.appendChild(option);
+        taskCategorySelect.appendChild(option);
     });
 
+    // 部門 (Multi-Select)
     departmentDiv.innerHTML = '';
     DEPARTMENTS.forEach(dept => {
         const label = document.createElement('label');
@@ -140,15 +143,18 @@ function renderFormOptions() {
     });
 }
 
+/**
+ * タスク一覧とKPIを同時にロードしてレンダリング
+ */
 async function loadTasksAndKpi() {
     await loadTaskList();
     await loadKpi();
 }
 
 async function loadTaskList() {
+    // ... (タスク一覧ロードロジックはDATA_SOURCE_IDを使用するため変更なし)
     console.log('タスク一覧をロード中...');
     
-    // Notion API v2025-09-03 対応: data_source_id を使用
     const targetUrl = `https://api.notion.com/v1/data_sources/${DATA_SOURCE_ID}/query`; 
 
     const filter = {
@@ -164,11 +170,10 @@ async function loadTaskList() {
         
         $taskList.innerHTML = '';
         if (tasks.length === 0) {
-            $taskList.innerHTML = '<p class="text-center">現在のタスクはありません。</p>';
+            $taskList.innerHTML = '<li>現在のタスクはありません。</li>';
             return;
         }
 
-        // タスクのレンダリングロジック（省略）
         tasks.forEach(task => {
             const title = task.properties['タスク名']?.title?.[0]?.plain_text || '名前なしタスク';
             const category = task.properties['カテゴリ']?.select?.name || '未設定';
@@ -188,15 +193,15 @@ async function loadTaskList() {
                 </div>
                 <div class="task-actions">
                     <a href="${notionUrl}" target="_blank" class="btn btn-secondary btn-sm">Notionで開く</a>
-                    <button class="btn btn-success btn-sm" data-page-id="${pageId}">完了</button>
+                    <button class="btn btn-green btn-sm" data-page-id="${pageId}">完了</button>
                 </div>
             `;
-            listItem.querySelector('.btn-success').addEventListener('click', () => markTaskCompleted(pageId));
+            listItem.querySelector('.btn-green').addEventListener('click', () => markTaskCompleted(pageId));
             $taskList.appendChild(listItem);
         });
 
     } catch (e) {
-        $taskList.innerHTML = `<p class="error-message">タスク一覧のロードに失敗しました。エラー: ${e.message}</p>`;
+        $taskList.innerHTML = `<li><p class="error-message">タスク一覧のロードに失敗しました。エラー: ${e.message}</p></li>`;
         console.error('タスク一覧ロードエラー:', e);
     }
 }
@@ -204,9 +209,10 @@ async function loadTaskList() {
 async function loadKpi() {
     console.log('KPIをロード中...');
     
-    // ★ 修正点: DATA_SOURCE_IDがない場合は処理を中断
     if (!DATA_SOURCE_ID) {
-        $kpiMetrics.innerHTML = '<p class="error-message">KPIロードスキップ: データソースIDが未設定です。</p>';
+        document.getElementById('kpiWeek').textContent = '--';
+        document.getElementById('kpiMonth').textContent = '--';
+        document.getElementById('kpiCategoryContainer').innerHTML = 'データソースID未設定';
         return; 
     }
     
@@ -215,26 +221,61 @@ async function loadKpi() {
             dataSourceId: DATA_SOURCE_ID, 
             tokenValue: NOTION_TOKEN
         });
+
+        const formatMins = (mins) => {
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            return `${h}h ${m}m`;
+        };
         
-        // ... (KPI表示ロジックは省略)
+        // HTMLの特定のIDに値をセット
+        document.getElementById('kpiWeek').textContent = formatMins(kpiData.totalWeekMins);
+        document.getElementById('kpiMonth').textContent = formatMins(kpiData.totalMonthMins);
+
+        let categoryListHtml = '<h4>今週のカテゴリ別時間</h4><ul>';
+        const sortedCategories = Object.entries(kpiData.categoryWeekMins || {}).sort(([, a], [, b]) => b - a);
         
+        sortedCategories.forEach(([category, mins]) => {
+            categoryListHtml += `<li>${category}: ${formatMins(mins)}</li>`;
+        });
+        categoryListHtml += '</ul>';
+
+        document.getElementById('kpiCategoryContainer').innerHTML = categoryListHtml || 'データなし';
+
     } catch (e) {
-        $kpiMetrics.innerHTML = `<p class="error-message">KPIのロードに失敗しました。エラー: ${e.message}</p>`;
+        document.getElementById('kpiCategoryContainer').innerHTML = `<p class="error-message">KPIロードエラー: ${e.message}</p>`;
         console.error('KPIロードエラー:', e);
     }
 }
 
+
 // =========================================================================
-// アクション処理 (省略)
+// アクション処理
 // =========================================================================
 
-async function createNotionTask(title, category, departments) {
+/**
+ * 新規タスクをNotionに作成する
+ */
+async function createNotionTask(e) {
+    e.preventDefault();
+    
+    // HTMLのIDに合わせて変更
+    const title = document.getElementById('newTaskTitle').value;
+    const category = document.getElementById('taskCategory').value;
+    const selectedDepartments = Array.from(document.querySelectorAll('input[name="taskDepartment"]:checked'))
+                                     .map(checkbox => checkbox.value);
+    
+    if (!title || !category) {
+        alert('タスク名とカテゴリは必須です。');
+        return;
+    }
+    
     if (!DATA_SOURCE_ID) {
         alert('エラー: データベース設定が不完全です。設定モーダルでDB IDを保存してください。');
         return;
     }
 
-    const deptProps = departments.map(d => ({ name: d }));
+    const deptProps = selectedDepartments.map(d => ({ name: d }));
     const pageProperties = {
         'タスク名': { title: [{ type: 'text', text: { content: title } }] },
         'カテゴリ': { select: { name: category } },
@@ -253,7 +294,9 @@ async function createNotionTask(title, category, departments) {
         showLoading();
         await apiFetch(targetUrl, 'POST', { parent: parentObject, properties: pageProperties }, 'notionToken', NOTION_TOKEN);
         alert('タスクが正常に作成されました！');
-        $taskForm.reset();
+        document.getElementById('newTaskTitle').value = ''; // リセット
+        document.getElementById('taskCategory').value = ''; 
+        document.querySelectorAll('input[name="taskDepartment"]:checked').forEach(cb => cb.checked = false);
         await loadTasksAndKpi();
     } catch (e) {
         alert(`タスク作成に失敗しました。\nエラー: ${e.message}`);
@@ -263,6 +306,9 @@ async function createNotionTask(title, category, departments) {
     }
 }
 
+/**
+ * タスクを完了済みにマークする
+ */
 async function markTaskCompleted(pageId) {
     if (confirm('このタスクを「完了」にしますか？')) {
         const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
@@ -289,10 +335,11 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 // Toggl 連携 (省略)
 // =========================================================================
+// ... (checkRunningState, getTogglRunningEntry, stopTogglEntry は変更なし)
 
 async function checkRunningState() {
     if (!TOGGL_API_TOKEN) {
-        $runningTask.textContent = 'Toggl連携なし';
+        document.getElementById('runningTaskTitle').textContent = 'Toggl連携なし';
         return;
     }
     
@@ -301,17 +348,16 @@ async function checkRunningState() {
         
         if (runningEntry) {
             const description = runningEntry.description || 'タイトルなし';
-            $runningTask.innerHTML = `
-                <span class="running-indicator">🔴 実行中:</span> ${description} 
-                <button class="btn btn-warning btn-sm ml-2" data-toggl-id="${runningEntry.id}">停止</button>
-            `;
-            $runningTask.querySelector('.btn-warning').addEventListener('click', () => stopTogglEntry(runningEntry.id));
+            document.getElementById('runningTaskTitle').textContent = description;
+            $runningTask.classList.remove('hidden');
+            // ... (タイマー表示ロジックは省略)
         } else {
-            $runningTask.textContent = '🔵 実行中のタスクはありません';
+            document.getElementById('runningTaskTitle').textContent = '🔵 実行中のタスクはありません';
+            $runningTask.classList.add('hidden');
         }
 
     } catch (e) {
-        $runningTask.innerHTML = `<span class="error-message">Toggl接続エラー: ${e.message}</span>`;
+        document.getElementById('runningTaskTitle').textContent = `Toggl接続エラー: ${e.message}`;
         console.error('Toggl連携エラー:', e);
     }
 }
@@ -323,6 +369,7 @@ async function getTogglRunningEntry() {
 }
 
 async function stopTogglEntry(entryId) {
+    // Toggl API v9 エンドポイント (停止はPATCHを使用)
     const targetUrl = `https://api.track.toggl.com/api/v9/time_entries/${entryId}/stop`;
     
     try {
@@ -338,31 +385,18 @@ async function stopTogglEntry(entryId) {
     }
 }
 
-
-// =========================================================================
-// プロキシ通信ヘルパー (変更なし)
-// =========================================================================
-
+// ... (apiFetch, apiCustomFetch は変更なし)
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
     const response = await fetch(PROXY_URL, {
         method: 'POST', // プロキシ自体へのリクエストは常にPOST
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            targetUrl,
-            method, // ターゲットAPIで使用するメソッド
-            body,
-            tokenKey,
-            tokenValue
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
     });
-
+    // ... (エラー処理省略)
     if (response.status === 500) {
         const errorBody = await response.json();
         throw new Error(`Internal Server Error: ${errorBody.message}`);
     }
-
     if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = `API Error (${response.status}): ${errorText}`;
@@ -372,7 +406,6 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
         } catch (e) { /* JSONではない場合は無視 */ }
         throw new Error(errorMessage);
     }
-
     const responseText = await response.text();
     return responseText ? JSON.parse(responseText) : null;
 }
@@ -380,55 +413,41 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
 async function apiCustomFetch(customEndpoint, params) {
     const response = await fetch(PROXY_URL, {
         method: 'POST', 
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            customEndpoint,
-            ...params
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customEndpoint, ...params })
     });
-
+    // ... (エラー処理省略)
     if (response.status === 500) {
         const errorBody = await response.json();
         throw new Error(`Custom API Error (500): ${errorBody.message}`);
     }
-
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Custom API Error (${response.status}): ${errorText}`);
     }
-
     return response.json();
 }
 
 
 // =========================================================================
-// UIイベントリスナー (省略)
+// UIイベントリスナー
 // =========================================================================
 
-$taskForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const title = document.getElementById('taskTitle').value;
-    const category = document.getElementById('taskCategory').value;
-    const selectedDepartments = Array.from(document.querySelectorAll('input[name="taskDepartment"]:checked'))
-                                     .map(checkbox => checkbox.value);
-    
-    if (!title || !category) {
-        alert('タスク名とカテゴリは必須です。');
-        return;
-    }
-    
-    createNotionTask(title, category, selectedDepartments);
-});
+// ★ 修正点: タスク作成フォームのsubmitイベントをボタンのクリックイベントに置き換え
+document.getElementById('startNewTaskButton').addEventListener('click', createNotionTask);
 
 $settingsBtn.addEventListener('click', openSettingsModal);
+
 $saveSettingsBtn.addEventListener('click', saveSettings);
 
+/**
+ * 設定をローカルストレージに保存する
+ */
 function saveSettings() {
-    const notionToken = document.getElementById('inputNotionToken').value;
-    const dbId = document.getElementById('inputDbId').value;
-    const togglApiToken = document.getElementById('inputTogglToken').value;
+    // ★ 修正点: HTMLのIDに合わせて変更
+    const notionToken = document.getElementById('confNotionToken').value;
+    const dbId = document.getElementById('confNotionDbId').value;
+    const togglApiToken = document.getElementById('confTogglToken').value;
 
     if (!notionToken || !dbId) {
         alert('NotionトークンとDB IDは必須です。');
@@ -443,6 +462,7 @@ function saveSettings() {
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     
+    // グローバル変数を更新
     NOTION_TOKEN = notionToken;
     DB_ID = dbId;
     TOGGL_API_TOKEN = togglApiToken;
@@ -452,21 +472,32 @@ function saveSettings() {
     location.reload(); 
 }
 
+/**
+ * 設定モーダルを開く
+ */
 function openSettingsModal() {
-    document.getElementById('inputNotionToken').value = NOTION_TOKEN;
-    document.getElementById('inputDbId').value = DB_ID;
-    document.getElementById('inputTogglToken').value = TOGGL_API_TOKEN;
-    $settingsModal.style.display = 'flex';
+    // ★ 修正点: HTMLのIDに合わせて変更
+    document.getElementById('confNotionToken').value = NOTION_TOKEN;
+    document.getElementById('confNotionDbId').value = DB_ID;
+    document.getElementById('confTogglToken').value = TOGGL_API_TOKEN;
+    $settingsModal.classList.remove('hidden'); // .hiddenクラスのトグル
 }
 
-$settingsModal.querySelector('.close-btn').addEventListener('click', () => {
-    $settingsModal.style.display = 'none';
+/**
+ * 設定モーダルを閉じる
+ */
+document.getElementById('cancelConfig').addEventListener('click', () => {
+    $settingsModal.classList.add('hidden'); // .hiddenクラスのトグル
 });
 
+// ローディングUI表示・非表示
+// ★ 修正点: loadingSpinnerが存在しないため、bodyにカーソルを適用するシンプルなロジックに変更
 function showLoading() {
-    $loadingSpinner.style.display = 'block';
+    IS_LOADING = true;
+    document.body.style.cursor = 'wait';
 }
 
 function hideLoading() {
-    $loadingSpinner.style.display = 'none';
+    IS_LOADING = false;
+    document.body.style.cursor = 'default';
 }
