@@ -16,7 +16,7 @@ const $settingsBtn = document.getElementById('toggleSettings');
 const $saveSettingsBtn = document.getElementById('saveConfig'); 
 const $cancelConfigBtn = document.getElementById('cancelConfig'); 
 const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
-const $reloadTasksBtn = document.getElementById('reloadTasks'); 
+const $reloadTasksBtn = doinitializeAppcument.getElementById('reloadTasks'); 
 const $taskDbFilterSelect = document.getElementById('taskDbFilter');
 
 // グローバル変数の定義
@@ -98,20 +98,36 @@ async function apiCustomFetch(customEndpoint, params) {
 
 document.addEventListener('DOMContentLoaded', initializeApp);
 
+// app.js の initializeApp 関数 (抜粋)
+
 async function initializeApp() {
     console.log('アプリケーションを初期化中...');
     showLoading(); 
 
     loadSettings(); // グローバル変数にローカルストレージの設定をロード
 
-    // ★★★ 修正箇所 ★★★
-    // Notion TokenまたはDB設定が存在しない場合は、後続の処理をすべてスキップし、設定モーダルを開く
+    // Notion TokenまたはDB設定が存在しない場合は、設定モーダルを強制的に開く
     if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
         console.log('設定データが存在しないため、設定モーダルを開きます。');
-        hideLoading(); // モーダル表示前にローディングを終了
-        openSettingsModal();
-        return; // 後続のすべての初期化処理をスキップ
+        hideLoading(); 
+        openSettingsModal(); // ★ 修正: openSettingsModalが確実に呼ばれるように
+        return; 
     } 
+    
+    // ... (既存の処理を続ける)
+
+    if (initialDbConfig) {
+        try {
+            await loadDbProperties(initialDbConfig.id); 
+            CURRENT_DB_CONFIG = initialDbConfig;
+        } catch (error) {
+            console.warn('初期DBプロパティロード失敗:', error);
+            // エラーが発生しても、UI表示を妨げないようにする
+        }
+    }
+    
+    // ... (以降、UI描画とタスクロード)
+}
     // ★★★ 修正箇所ここまで ★★★
 
     // UIの初期化
