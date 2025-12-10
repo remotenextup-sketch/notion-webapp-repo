@@ -10,9 +10,7 @@ const STORAGE_KEY = 'taskTrackerSettings';
 
 // DOM要素の参照
 const $settingsModal = document.getElementById('settingsView'); 
-const $taskForm = document.getElementById('newTaskContainer'); 
 const $taskList = document.getElementById('taskList');
-const $kpiPanel = document.getElementById('kpiPanel'); 
 const $runningTaskContainer = document.getElementById('runningTaskContainer');
 const $settingsBtn = document.getElementById('toggleSettings'); 
 const $saveSettingsBtn = document.getElementById('saveConfig'); 
@@ -22,14 +20,18 @@ const $reloadTasksBtn = document.getElementById('reloadTasks');
 
 // グローバル変数の定義
 let NOTION_TOKEN = '';
-let DB_ID = '';
 let TOGGL_API_TOKEN = '';
 let CATEGORIES = [];
 let DEPARTMENTS = [];
 let DATA_SOURCE_ID = ''; 
+let TOGGL_WID = ''; // WIDを追記
+
+// ★ 複数DB対応のための変数
+let ALL_DB_CONFIGS = []; 
+let CURRENT_DB_CONFIG = null; // {name: '...', id: '...'}
 
 // =========================================================================
-// API通信ヘルパー (★★★ 修正点: 冒頭に移動 ★★★)
+// API通信ヘルパー (定義の巻き上げ対策のため冒頭に配置)
 // =========================================================================
 
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
@@ -87,14 +89,18 @@ async function initializeApp() {
 
     loadSettings();
 
-    if (NOTION_TOKEN && DB_ID) {
+    // Notion Tokenと現在選択中のDB IDが存在するかチェック
+    if (NOTION_TOKEN && CURRENT_DB_CONFIG) {
         try {
-            await loadDbConfig(); 
+            // 現在のDB IDを使って設定をロード
+            await loadDbConfig(CURRENT_DB_CONFIG.id); 
             
             if (!DATA_SOURCE_ID) {
                 throw new Error("Notion設定エラー: データソースIDの取得に失敗しました。設定を確認してください。");
             }
             
+            displayCurrentDbTitle(CURRENT_DB_CONFIG.name);
+
             await checkRunningState(); 
             await loadTasksAndKpi(); 
 
@@ -113,17 +119,26 @@ function loadSettings() {
     const savedSettings = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (savedSettings) {
         NOTION_TOKEN = savedSettings.notionToken || '';
-        DB_ID = savedSettings.dbId || '';
         TOGGL_API_TOKEN = savedSettings.togglApiToken || '';
+        TOGGL_WID = savedSettings.togglWid || '';
+        
+        // 複数DBの設定をロード
+        ALL_DB_CONFIGS = savedSettings.allDbConfigs || [];
+        
+        // 最後に選択されていたDB IDを取得 (未選択の場合は最初のDB ID)
+        const currentDbId = savedSettings.currentDbId || (ALL_DB_CONFIGS[0] ? ALL_DB_CONFIGS[0].id : '');
+        
+        // 現在のDB設定を特定
+        CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === currentDbId) || ALL_DB_CONFIGS[0] || null;
     }
 }
 
-async function loadDbConfig() {
+// DB IDを引数として受け取るように変更
+async function loadDbConfig(dbId) {
     console.log('DB設定をロード中...');
     try {
-        // ★ apiCustomFetch の定義がこの行より上にあるため、エラー解消 ★
         const configData = await apiCustomFetch('getConfig', {
-            dbId: DB_ID, 
+            dbId: dbId, 
             tokenValue: NOTION_TOKEN
         });
 
@@ -138,6 +153,7 @@ async function loadDbConfig() {
         
         console.log('DB設定ロード完了:', { categories: CATEGORIES, departments: DEPARTMENTS, dataSourceId: DATA_SOURCE_ID });
         renderFormOptions(); 
+        renderDbSelectOptions(); 
 
     } catch (e) {
         console.error('DB設定ロードエラー:', e);
@@ -149,6 +165,14 @@ async function loadDbConfig() {
 // =========================================================================
 // UIレンダリング
 // =========================================================================
+
+// メイン画面のタイトルにDB名を表示
+function displayCurrentDbTitle(dbName) {
+    const titleElement = document.querySelector('h2');
+    if (titleElement) {
+        titleElement.textContent = `Notion Toggl Timer - [${dbName}]`;
+    }
+}
 
 function renderFormOptions() {
     const categoryContainer = document.getElementById('newCatContainer'); 
@@ -184,6 +208,7 @@ async function loadTasksAndKpi() {
 }
 
 async function loadTaskList() {
+// ... (loadTaskList 関数は変更なし、既存のロジックを使用) ...
     console.log('タスク一覧をロード中...');
     
     if (!DATA_SOURCE_ID) {
@@ -245,6 +270,7 @@ async function loadTaskList() {
 }
 
 async function loadKpi() {
+// ... (loadKpi 関数は変更なし、既存のロジックを使用) ...
     console.log('KPIをロード中...');
     
     if (!DATA_SOURCE_ID) {
@@ -287,7 +313,79 @@ async function loadKpi() {
 
 
 // =========================================================================
-// アクション処理
+// 複数DB管理と選択UIの関数
+// =========================================================================
+
+// 設定画面のDB入力UIの生成
+function renderDbInputs() {
+    const $container = document.getElementById('dbListContainer');
+    if (!$container) return;
+
+    $container.innerHTML = '';
+    
+    ALL_DB_CONFIGS.forEach((db, index) => {
+        const div = document.createElement('div');
+        div.className = 'db-entry';
+        div.style.marginBottom = '15px';
+        div.innerHTML = `
+            <h4 style="margin-top: 0; margin-bottom: 5px;">DB ${index + 1}</h4>
+            <label style="font-size: 12px; display: block;">DB名:</label>
+            <input type="text" class="confDbName" value="${db.name || ''}" placeholder="例: 仕事用タスクDB">
+            <label style="font-size: 12px; display: block;">Database ID:</label>
+            <input type="text" class="confDbId" value="${db.id || ''}" placeholder="32桁のDB ID">
+            <button class="removeDbEntry btn-gray" data-index="${index}" style="width: auto; padding: 5px 10px; font-size: 12px; margin-top: 5px;">削除</button>
+            <hr style="border: 0; border-top: 1px dashed #ddd; margin-top: 10px;">
+        `;
+        $container.appendChild(div);
+    });
+
+    // 削除ボタンのリスナー設定
+    document.querySelectorAll('.removeDbEntry').forEach(button => {
+        button.addEventListener('click', (e) => removeDbEntry(e.target.dataset.index));
+    });
+}
+
+// DBエントリーの削除
+function removeDbEntry(index) {
+    ALL_DB_CONFIGS.splice(index, 1);
+    renderDbInputs(); // UIを再描画
+}
+
+// DBエントリーの追加
+function addDbEntry() {
+    // プレースホルダーとして空のエントリを追加
+    ALL_DB_CONFIGS.push({ name: '', id: '' }); 
+    renderDbInputs();
+}
+
+// DB切り替えドロップダウンのレンダリング
+function renderDbSelectOptions() {
+    const $dbSelect = document.getElementById('new-db-select');
+    if (!$dbSelect) return;
+
+    $dbSelect.innerHTML = '';
+    
+    if (ALL_DB_CONFIGS.length === 0) {
+        $dbSelect.innerHTML = '<option value="">--- DB設定がありません ---</option>';
+        return;
+    }
+
+    ALL_DB_CONFIGS.forEach(db => {
+        const option = document.createElement('option');
+        option.value = db.id;
+        option.textContent = `${db.name} (${db.id.substring(0, 8)}...)`;
+        $dbSelect.appendChild(option);
+    });
+
+    // 現在選択中のDB IDを選択状態にする
+    if (CURRENT_DB_CONFIG) {
+        $dbSelect.value = CURRENT_DB_CONFIG.id;
+    }
+}
+
+
+// =========================================================================
+// アクション処理 (apiFetchを使う関数は変更なし)
 // =========================================================================
 
 async function createNotionTask(e) {
@@ -308,6 +406,7 @@ async function createNotionTask(e) {
         return;
     }
     
+    // ... (以下、既存のNotion API呼び出しロジック) ...
     const deptProps = selectedDepartments.map(d => ({ name: d }));
     const pageProperties = {
         'タスク名': { title: [{ type: 'text', text: { content: title } }] },
@@ -340,6 +439,7 @@ async function createNotionTask(e) {
 }
 
 async function markTaskCompleted(pageId) {
+    // ... (markTaskCompleted 関数は変更なし、既存のロジックを使用) ...
     if (confirm('このタスクを「完了」にしますか？')) {
         const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
         const updateProperties = {
@@ -363,10 +463,11 @@ async function markTaskCompleted(pageId) {
 
 
 // =========================================================================
-// Toggl 連携
+// Toggl 連携 (apiFetchを使う関数は変更なし)
 // =========================================================================
 
 async function checkRunningState() {
+    // ... (checkRunningState 関数は変更なし、既存のロジックを使用) ...
     if (!TOGGL_API_TOKEN) {
         document.getElementById('runningTaskTitle').textContent = 'Toggl連携なし';
         $runningTaskContainer.classList.remove('hidden'); 
@@ -423,6 +524,49 @@ if ($reloadTasksBtn) {
     $reloadTasksBtn.addEventListener('click', loadTasksAndKpi);
 } 
 
+// タスクモード切り替えリスナー (既存タスク / 新規タスク)
+const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
+const $existingTaskContainer = document.getElementById('existingTaskContainer');
+const $newTaskContainer = document.getElementById('newTaskContainer');
+
+$taskModeRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+        if (this.value === 'new') {
+            $existingTaskContainer.classList.add('hidden');
+            $newTaskContainer.classList.remove('hidden');
+        } else {
+            $existingTaskContainer.classList.remove('hidden');
+            $newTaskContainer.classList.add('hidden');
+        }
+    });
+});
+
+// DB追加ボタンのリスナー
+const $addDbEntryBtn = document.getElementById('addDbEntry');
+if ($addDbEntryBtn) {
+    $addDbEntryBtn.addEventListener('click', addDbEntry);
+}
+
+// DB切り替え時の処理 (new-db-select)
+const $dbSelect = document.getElementById('new-db-select');
+if ($dbSelect) {
+    $dbSelect.addEventListener('change', function() {
+        const newDbId = this.value;
+        if (newDbId && (CURRENT_DB_CONFIG ? newDbId !== CURRENT_DB_CONFIG.id : true)) {
+            
+            // 選択したDB IDをlocalStorageのcurrentDbIdとして保存
+            const currentSettings = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+            currentSettings.currentDbId = newDbId;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
+            
+            alert(`DBを切り替えます: ${this.options[this.selectedIndex].text}`);
+            
+            // アプリを再ロードし、新しいDB設定で初期化
+            location.reload(); 
+        }
+    });
+}
+
 
 // =========================================================================
 // 設定モーダル関数
@@ -430,21 +574,41 @@ if ($reloadTasksBtn) {
 
 function saveSettings() {
     const notionToken = document.getElementById('confNotionToken').value;
-    const dbId = document.getElementById('confNotionDbId').value;
     const togglApiToken = document.getElementById('confTogglToken').value;
+    const togglWid = document.getElementById('confTogglWid').value;
+    
+    // 複数DB設定を取得
+    const newAllDbConfigs = [];
+    const dbNames = document.querySelectorAll('.confDbName');
+    const dbIds = document.querySelectorAll('.confDbId');
 
-    if (!notionToken || !dbId) {
-        alert('NotionトークンとDB IDは必須です。');
+    for (let i = 0; i < dbNames.length; i++) {
+        // IDと名前が両方あるものだけを保存
+        if (dbIds[i].value && dbNames[i].value) {
+            newAllDbConfigs.push({
+                name: dbNames[i].value,
+                id: dbIds[i].value
+            });
+        }
+    }
+    
+    if (!notionToken || newAllDbConfigs.length === 0) {
+        alert('Notionトークンと少なくとも一つのDBの設定（名前とID）は必須です。');
         return;
     }
 
-    const settings = { notionToken, dbId, togglApiToken };
+    // 現在選択中のDB IDを取得 (選択されていない場合は最初のDB IDをセット)
+    const currentDbId = document.getElementById('new-db-select')?.value || (newAllDbConfigs[0] ? newAllDbConfigs[0].id : '');
+
+    const settings = { 
+        notionToken, 
+        togglApiToken,
+        togglWid,
+        allDbConfigs: newAllDbConfigs,
+        currentDbId: currentDbId
+    };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     
-    NOTION_TOKEN = notionToken;
-    DB_ID = dbId;
-    TOGGL_API_TOKEN = togglApiToken;
-
     alert('設定を保存しました。アプリケーションをリロードします。');
     $settingsModal.classList.add('hidden');
     location.reload(); 
@@ -452,8 +616,12 @@ function saveSettings() {
 
 function openSettingsModal() {
     document.getElementById('confNotionToken').value = NOTION_TOKEN;
-    document.getElementById('confNotionDbId').value = DB_ID;
     document.getElementById('confTogglToken').value = TOGGL_API_TOKEN;
+    document.getElementById('confTogglWid').value = TOGGL_WID;
+    
+    // 設定画面を開く際にDB入力フィールドをレンダリング
+    renderDbInputs(); 
+    
     $settingsModal.classList.remove('hidden'); 
 }
 
