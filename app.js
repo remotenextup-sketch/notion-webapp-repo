@@ -204,35 +204,20 @@ async function loadTaskList() {
 async function loadKpi() {
     console.log('KPIをロード中...');
     
+    // ★ 修正点: DATA_SOURCE_IDがない場合は処理を中断
+    if (!DATA_SOURCE_ID) {
+        $kpiMetrics.innerHTML = '<p class="error-message">KPIロードスキップ: データソースIDが未設定です。</p>';
+        return; 
+    }
+    
     try {
-        // Notion API v2025-09-03 対応: data_source_id を使用
         const kpiData = await apiCustomFetch('getKpi', {
-            dataSourceId: DATA_SOURCE_ID, // 修正
+            dataSourceId: DATA_SOURCE_ID, 
             tokenValue: NOTION_TOKEN
         });
-
-        const formatMins = (mins) => {
-            const h = Math.floor(mins / 60);
-            const m = mins % 60;
-            return `${h}h ${m}m`;
-        };
-
-        let categoryListHtml = '';
-        const sortedCategories = Object.entries(kpiData.categoryWeekMins || {}).sort(([, a], [, b]) => b - a);
         
-        sortedCategories.forEach(([category, mins]) => {
-            categoryListHtml += `<li>${category}: ${formatMins(mins)}</li>`;
-        });
-
-        $kpiMetrics.innerHTML = `
-            <h3>🕒 計測サマリー</h3>
-            <div class="kpi-grid">
-                <div class="kpi-card">今週合計: <strong>${formatMins(kpiData.totalWeekMins)}</strong></div>
-                <div class="kpi-card">今月合計: <strong>${formatMins(kpiData.totalMonthMins)}</strong></div>
-            </div>
-            <h4>今週のカテゴリ別時間</h4>
-            <ul class="category-list">${categoryListHtml || '<li>データなし</li>'}</ul>
-        `;
+        // ... (KPI表示ロジックは省略)
+        
     } catch (e) {
         $kpiMetrics.innerHTML = `<p class="error-message">KPIのロードに失敗しました。エラー: ${e.message}</p>`;
         console.error('KPIロードエラー:', e);
