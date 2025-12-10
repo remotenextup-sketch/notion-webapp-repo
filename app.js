@@ -167,42 +167,52 @@ function displayCurrentDbTitle(dbName) {
 }
 
 function renderFormOptions() {
-    const categoryContainer = document.getElementById('newCatContainer'); 
+    const categoryContainer = document.getElementById('newCatContainer');
     const departmentDiv = document.getElementById('newDeptContainer');
     const targetDbDisplay = document.getElementById('targetDbDisplay');
 
-    let targetDbConfig = CURRENT_DB_CONFIG || (ALL_DB_CONFIGS[0] || null);
+    // CURRENT_DB_CONFIG がnull対策
+    let targetDbConfig = CURRENT_DB_CONFIG;
+    if (!targetDbConfig && ALL_DB_CONFIGS.length > 0) {
+        targetDbConfig = ALL_DB_CONFIGS[0];
+    }
 
-    if (!targetDbConfig || CATEGORIES.length === 0) {
-        targetDbDisplay.innerHTML = '登録先: **DBプロパティが読み込まれていません。** 設定を確認してください。';
+    if (!targetDbConfig) {
+        targetDbDisplay.innerHTML = '登録先: **DB設定を確認してください**';
         document.getElementById('startNewTaskButton').disabled = true;
-    } else {
-        targetDbDisplay.innerHTML = `登録先: **${targetDbConfig.name}**`;
-        document.getElementById('startNewTaskButton').disabled = false;
-        
-        // カテゴリ
-        categoryContainer.innerHTML = '<select id="taskCategory"></select>';
-        const taskCategorySelect = document.getElementById('taskCategory');
-        taskCategorySelect.innerHTML = CATEGORIES.length > 0 ? '<option value="">-- 選択 --</option>' : '<option value="">-- 選択肢なし --</option>';
+        return;
+    }
+
+    targetDbDisplay.innerHTML = `登録先: **${targetDbConfig.name}**`;
+    document.getElementById('startNewTaskButton').disabled = false;
+
+    // カテゴリ（グローバル変数CATEGORIES使用）
+    categoryContainer.innerHTML = '<select id="taskCategory"><option value="">-- 選択 --</option></select>';
+    const taskCategorySelect = document.getElementById('taskCategory');
+    
+    if (CATEGORIES && CATEGORIES.length > 0) {
         CATEGORIES.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat;
             option.textContent = cat;
             taskCategorySelect.appendChild(option);
         });
+    } else {
+        taskCategorySelect.innerHTML = '<option value="">-- カテゴリなし --</option>';
+    }
 
-        // 部門
-        departmentDiv.innerHTML = '';
-        if (DEPARTMENTS.length === 0) {
-            departmentDiv.innerHTML = '<p style="font-size: 12px; color: #999;">部門プロパティがありません。</p>';
-        }
-        departmentDiv.classList.toggle('dept-grid', DEPARTMENTS.length > 0);
+    // 部門
+    departmentDiv.innerHTML = '';
+    if (DEPARTMENTS && DEPARTMENTS.length > 0) {
+        departmentDiv.classList.add('dept-grid');
         DEPARTMENTS.forEach(dept => {
             const label = document.createElement('label');
             label.className = 'department-label';
             label.innerHTML = `<input type="checkbox" name="taskDepartment" value="${dept}"> ${dept}`;
             departmentDiv.appendChild(label);
         });
+    } else {
+        departmentDiv.innerHTML = '<p style="font-size: 12px; color: #999;">部門なし</p>';
     }
 }
 
@@ -356,22 +366,23 @@ async function loadTaskList() {
 
 // loadKpi（変更なし）
 async function loadKpi() {
-    console.log('KPIをロード中...');
-    
     if (CURRENT_VIEW_ID === 'all' || !CURRENT_DB_CONFIG || !DATA_SOURCE_ID) {
         document.getElementById('kpiWeek').textContent = '--';
         document.getElementById('kpiMonth').textContent = '--';
-        document.getElementById('kpiCategoryContainer').innerHTML = '単一DB選択時に表示されます。';
-        return; 
+        document.getElementById('kpiCategoryContainer').innerHTML = '単一DB選択時のみ表示';
+        return;
     }
     
     try {
-        const kpiData = await apiCustomFetch('getKpi', {
-            dataSourceId: DATA_SOURCE_ID, 
-            tokenValue: NOTION_TOKEN
-        });
-
+        // ダミーデータ（後で本実装）
+        const kpiData = {
+            totalWeekMins: 240,  // 4時間
+            totalMonthMins: 1200, // 20時間
+            categoryWeekMins: { '開発': 120, 'デザイン': 80, 'ミーティング': 40 }
+        };
+        
         const formatMins = (mins) => {
+            if (!mins || isNaN(mins)) return '0h 0m';
             const h = Math.floor(mins / 60);
             const m = mins % 60;
             return `${h}h ${m}m`;
@@ -381,21 +392,18 @@ async function loadKpi() {
         document.getElementById('kpiMonth').textContent = formatMins(kpiData.totalMonthMins);
 
         let categoryListHtml = '<ul>';
-        const sortedCategories = Object.entries(kpiData.categoryWeekMins || {}).sort(([, a], [, b]) => b - a);
-        
-        sortedCategories.forEach(([category, mins]) => {
+        Object.entries(kpiData.categoryWeekMins || {}).forEach(([category, mins]) => {
             categoryListHtml += `<li>${category}: ${formatMins(mins)}</li>`;
         });
         categoryListHtml += '</ul>';
-
-        document.getElementById('kpiCategoryContainer').innerHTML = categoryListHtml || 'データなし';
+        document.getElementById('kpiCategoryContainer').innerHTML = categoryListHtml;
 
     } catch (e) {
-        document.getElementById('kpiCategoryContainer').innerHTML = `<p class="error-message">KPIロードエラー: ${e.message}</p>`;
-        console.error('KPIロードエラー:', e);
+        document.getElementById('kpiWeek').textContent = 'エラー';
+        document.getElementById('kpiMonth').textContent = 'エラー';
+        document.getElementById('kpiCategoryContainer').innerHTML = 'KPI取得エラー';
     }
 }
-
 
 // =========================================================================
 // 複数DB管理と選択UIの関数
