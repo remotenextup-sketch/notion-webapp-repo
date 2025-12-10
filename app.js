@@ -92,48 +92,59 @@ async function apiCustomFetch(customEndpoint, params) {
 // 初期化と設定のロード
 // =========================================================================
 
+// =========================================================================
+// 初期化と設定のロード
+// =========================================================================
+
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 async function initializeApp() {
     console.log('アプリケーションを初期化中...');
     showLoading(); 
 
-    const savedSettings = loadSettings();
+    loadSettings(); // グローバル変数にローカルストレージの設定をロード
 
-    // Notion TokenとDB設定が存在するかチェック
-    if (NOTION_TOKEN && ALL_DB_CONFIGS.length > 0) {
-        
-        // UIの初期化
-        renderDbFilterOptions(); 
-        
-        // 初期ロード時のターゲットDBを決定
-        let initialDbConfig = CURRENT_DB_CONFIG;
-        if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
-            initialDbConfig = ALL_DB_CONFIGS[0];
-        }
-
-        if (initialDbConfig) {
-            try {
-                await loadDbProperties(initialDbConfig.id); 
-                CURRENT_DB_CONFIG = initialDbConfig;
-            } catch (error) {
-                console.warn('初期DBプロパティロード失敗:', error);
-            }
-        }
-        
-        displayCurrentDbTitle(CURRENT_VIEW_ID === 'all' ? '統合ビュー' : (CURRENT_DB_CONFIG ? CURRENT_DB_CONFIG.name : 'エラー'));
-        renderFormOptions(); 
-
-        try {
-            await checkRunningState(); 
-            await loadTasksAndKpi(); 
-        } catch (error) {
-            console.error('初期化エラー:', error);
-            alert(`初期化に失敗しました。エラー: ${error.message || '不明なエラー'}`);
-        }
-    } else {
+    // ★★★ 修正箇所 ★★★
+    // Notion TokenまたはDB設定が存在しない場合は、後続の処理をすべてスキップし、設定モーダルを開く
+    if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
+        console.log('設定データが存在しないため、設定モーダルを開きます。');
+        hideLoading(); // モーダル表示前にローディングを終了
         openSettingsModal();
+        return; // 後続のすべての初期化処理をスキップ
+    } 
+    // ★★★ 修正箇所ここまで ★★★
+
+    // UIの初期化
+    renderDbFilterOptions(); 
+    
+    // 初期ロード時のターゲットDBを決定
+    let initialDbConfig = CURRENT_DB_CONFIG;
+    if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
+        initialDbConfig = ALL_DB_CONFIGS[0];
     }
+
+    if (initialDbConfig) {
+        try {
+            // トークンがグローバル変数 (NOTION_TOKEN) に入っている状態でプロキシへアクセス
+            await loadDbProperties(initialDbConfig.id); 
+            CURRENT_DB_CONFIG = initialDbConfig;
+        } catch (error) {
+            console.warn('初期DBプロパティロード失敗:', error);
+            // エラーが発生しても、設定画面を開くことなく、タスク表示は試みる
+        }
+    }
+    
+    displayCurrentDbTitle(CURRENT_VIEW_ID === 'all' ? '統合ビュー' : (CURRENT_DB_CONFIG ? CURRENT_DB_CONFIG.name : 'エラー'));
+    renderFormOptions(); 
+
+    try {
+        await checkRunningState(); 
+        await loadTasksAndKpi(); 
+    } catch (error) {
+        console.error('初期化エラー:', error);
+        alert(`初期化に失敗しました。エラー: ${error.message || '不明なエラー'}`);
+    }
+
     hideLoading();
 }
 
@@ -150,9 +161,9 @@ function loadSettings() {
         
         CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === CURRENT_VIEW_ID) || null;
     }
-    return savedSettings;
+    // return savedSettings; // 呼び出し側で不要になったためコメントアウト
 }
-
+// （他の関数は省略）
 // DB IDを引数として、そのDBのカテゴリ、部門、データソースIDを取得・更新する関数
 async function loadDbProperties(dbId) {
     console.log(`DB ${dbId} の設定をロード中...`);
