@@ -38,10 +38,7 @@ let ALL_DB_CONFIGS = [];
 // 'all' または 特定のDB ID。現在のタスク一覧の表示と新規タスクの作成先DBを決定します。
 let CURRENT_VIEW_ID = 'all'; 
 
-// CURRENT_DB_CONFIG は、CURRENT_VIEW_IDが単一DBのIDである場合にそのDB設定を保持します
-// 'all'の場合は、新規タスク作成時のターゲットとして ALL_DB_CONFIGS[0] が使われますが、
-// CURRENT_DB_CONFIG自体はnullまたは最後に選択されたDBのままになる可能性があります。
-// 新規タスク作成時のターゲットは targetDbConfig で決定します。
+// CURRENT_DB_CONFIG は、単一DB選択時または初期ロード時のカテゴリ/部門ロードターゲットDBとして使用
 let CURRENT_DB_CONFIG = null; 
 
 // =========================================================================
@@ -112,23 +109,20 @@ async function initializeApp() {
         // 初期ロード時のターゲットDBを決定
         let initialDbConfig = CURRENT_DB_CONFIG;
         if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
-            // 'all'ビューの場合、新規タスク作成のために最初のDBのプロパティをロード
             initialDbConfig = ALL_DB_CONFIGS[0];
         }
 
         if (initialDbConfig) {
             try {
-                // 初期のカテゴリ/部門をロードし、CURRENT_DB_CONFIGも更新（最初のDBまたは選択されていたDB）
                 await loadDbProperties(initialDbConfig.id); 
                 CURRENT_DB_CONFIG = initialDbConfig;
             } catch (error) {
                 console.warn('初期DBプロパティロード失敗:', error);
-                // 失敗した場合、CATEGORIES/DEPARTMENTSは空のままになり、renderFormOptionsでメッセージが表示される
             }
         }
         
         displayCurrentDbTitle(CURRENT_VIEW_ID === 'all' ? '統合ビュー' : (CURRENT_DB_CONFIG ? CURRENT_DB_CONFIG.name : 'エラー'));
-        renderFormOptions(); // フォームをレンダリング
+        renderFormOptions(); 
 
         try {
             await checkRunningState(); 
@@ -154,7 +148,6 @@ function loadSettings() {
         const currentViewId = savedSettings.currentViewId || 'all';
         CURRENT_VIEW_ID = currentViewId;
         
-        // CURRENT_DB_CONFIG は、単一DB選択時または初期ロード時のカテゴリ/部門ロードターゲットDBとして使用
         CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === CURRENT_VIEW_ID) || null;
     }
     return savedSettings;
@@ -172,7 +165,6 @@ async function loadDbProperties(dbId) {
         if (configData && configData.dataSourceId) {
             DATA_SOURCE_ID = configData.dataSourceId;
         } else {
-            // DBが選択されているがデータソースIDがない場合、エラーをスロー
             throw new Error("データソースIDを取得できませんでした。データベース設定または統合の権限を確認してください。");
         }
 
@@ -200,7 +192,6 @@ function displayCurrentDbTitle(dbName) {
     }
 }
 
-// ★★★ 修正: カテゴリ/部門が消えないようにロジックを修正 ★★★
 function renderFormOptions() {
     const categoryContainer = document.getElementById('newCatContainer'); 
     const departmentDiv = document.getElementById('newDeptContainer');
@@ -209,10 +200,8 @@ function renderFormOptions() {
     let targetDbConfig = null;
 
     if (CURRENT_VIEW_ID !== 'all' && CURRENT_DB_CONFIG) {
-        // 1. 特定のDBが選択されている場合
         targetDbConfig = CURRENT_DB_CONFIG;
     } else if (ALL_DB_CONFIGS.length > 0) {
-        // 2. 'all'ビューの場合、またはCURRENT_DB_CONFIGがセットされていない場合、最初のDBをターゲットにする
         targetDbConfig = ALL_DB_CONFIGS[0];
     }
 
@@ -227,8 +216,6 @@ function renderFormOptions() {
         targetDbDisplay.innerHTML = `登録先: **${targetDbConfig.name}**`;
         document.getElementById('startNewTaskButton').disabled = false;
         
-        // ここで、**グローバルに設定されている** CATEGORIES/DEPARTMENTS を使用します。
-        // これらの変数は、初期ロード時、または taskDbFilter 変更時に更新されています。
         formCategories = CATEGORIES;
         formDepartments = DEPARTMENTS;
     }
@@ -294,7 +281,6 @@ async function loadTasksAndKpi() {
 
 // 特定のDBからタスクをロードするヘルパー関数
 async function loadTasksFromSingleDb(dbConfig) {
-    // dataSourceIdを一時的にロード
     let dataSourceId = dbConfig.dataSourceId;
     if (!dataSourceId) {
         const configData = await apiCustomFetch('getConfig', {
@@ -302,7 +288,7 @@ async function loadTasksFromSingleDb(dbConfig) {
             tokenValue: NOTION_TOKEN
         });
         dataSourceId = configData.dataSourceId;
-        dbConfig.dataSourceId = dataSourceId; // キャッシュ
+        dbConfig.dataSourceId = dataSourceId; 
     }
     
     const targetUrl = `https://api.notion.com/v1/data_sources/${dataSourceId}/query`; 
@@ -378,11 +364,16 @@ async function loadTaskList() {
                 </div>
                 <div class="task-actions">
                     <a href="${notionUrl}" target="_blank" class="btn btn-blue btn-sm" style="width:auto; margin-right:5px;">Notionで開く</a>
-                    <button class="btn btn-green btn-sm" data-page-id="${pageId}" style="width:auto;">完了</button>
+                    <button class="btn btn-green btn-sm start-tracking-btn" 
+                        data-page-id="${pageId}" 
+                        data-task-title="${title}"
+                        style="width:auto;">▶ 計測開始</button> 
                 </div>
             `;
-            listItem.querySelector('.btn-green').addEventListener('click', (e) => {
-                markTaskCompleted(e.target.dataset.pageId);
+            // ★ 修正: 計測開始ボタンのリスナーを設定
+            listItem.querySelector('.start-tracking-btn').addEventListener('click', (e) => {
+                const button = e.target;
+                startTogglTracking(button.dataset.pageId, button.dataset.taskTitle);
             });
             $taskList.appendChild(listItem);
         });
@@ -398,7 +389,6 @@ async function loadTaskList() {
 async function loadKpi() {
     console.log('KPIをロード中...');
     
-    // KPIはCURRENT_DB_CONFIG（単一DB）がある場合のみ表示
     if (CURRENT_VIEW_ID === 'all' || !CURRENT_DB_CONFIG || !DATA_SOURCE_ID) {
         document.getElementById('kpiWeek').textContent = '--';
         document.getElementById('kpiMonth').textContent = '--';
@@ -483,6 +473,42 @@ function addDbEntry() {
 // アクション処理
 // =========================================================================
 
+// ★ 新規追加: Togglでの計測を開始する関数
+async function startTogglTracking(pageId, taskTitle) {
+    if (!TOGGL_API_TOKEN) {
+        alert('Toggl APIトークンが設定されていません。設定画面を確認してください。');
+        return;
+    }
+    if (!TOGGL_WID) {
+        alert('Toggl Workspace IDが設定されていません。設定画面を確認してください。');
+        return;
+    }
+
+    try {
+        showLoading();
+        // 既存の計測を停止し、新しい計測を開始
+        const newEntry = await apiCustomFetch('startTogglTracking', {
+            tokenValue: TOGGL_API_TOKEN,
+            workspaceId: TOGGL_WID,
+            // Notionのタスク名とIDを説明に含め、連携を可能にする
+            description: `${taskTitle} (Notion ID: ${pageId})` 
+        });
+
+        if (newEntry) {
+            alert(`タスク「${taskTitle}」の計測を開始しました！`);
+            await checkRunningState(); 
+        } else {
+            throw new Error("Togglでの計測開始に失敗しました。");
+        }
+    } catch (e) {
+        alert(`計測開始に失敗しました。\nエラー: ${e.message}`);
+        console.error('計測開始エラー:', e);
+    } finally {
+        hideLoading();
+    }
+}
+
+
 async function createNotionTask(e) {
     e.preventDefault();
     
@@ -496,10 +522,8 @@ async function createNotionTask(e) {
         return;
     }
     
-    // 新規タスクの登録先DBを決定
     let targetDbConfig = CURRENT_DB_CONFIG;
     if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
-        // 'all'ビューの場合は最初のDBをターゲットにする
         targetDbConfig = ALL_DB_CONFIGS[0];
     }
 
@@ -518,15 +542,21 @@ async function createNotionTask(e) {
     
     const parentObject = {
         type: 'database_id', 
-        database_id: targetDbConfig.id // 決定されたターゲットDB IDを使用
+        database_id: targetDbConfig.id 
     };
 
     const targetUrl = 'https://api.notion.com/v1/pages';
     
     try {
         showLoading();
-        await apiFetch(targetUrl, 'POST', { parent: parentObject, properties: pageProperties }, 'notionToken', NOTION_TOKEN);
+        const pageResponse = await apiFetch(targetUrl, 'POST', { parent: parentObject, properties: pageProperties }, 'notionToken', NOTION_TOKEN);
+        const newPageId = pageResponse.id; 
+
         alert(`タスクが正常にDB「${targetDbConfig.name}」に作成されました！`);
+        
+        // ★ 追記: 新規タスク作成後、そのまま計測開始
+        await startTogglTracking(newPageId, title); 
+        
         document.getElementById('newTaskTitle').value = ''; 
         if (document.getElementById('taskCategory')) document.getElementById('taskCategory').value = ''; 
         document.querySelectorAll('#newDeptContainer input[name="taskDepartment"]:checked').forEach(cb => cb.checked = false);
@@ -539,6 +569,8 @@ async function createNotionTask(e) {
     }
 }
 
+// markTaskCompleted は残しておきますが、リストからはボタンを削除しました。
+// 今後は実行中タスクパネルのボタンでのみ使用されます。
 async function markTaskCompleted(pageId) {
     if (confirm('このタスクを「完了」にしますか？')) {
         const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
@@ -566,6 +598,7 @@ async function markTaskCompleted(pageId) {
 // Toggl 連携
 // =========================================================================
 
+// ... (checkRunningState, getTogglRunningEntry は変更なし)
 async function checkRunningState() {
     if (!TOGGL_API_TOKEN) {
         document.getElementById('runningTaskTitle').textContent = 'Toggl連携なし';
@@ -625,30 +658,24 @@ if ($reloadTasksBtn) {
     $reloadTasksBtn.addEventListener('click', loadTasksAndKpi);
 } 
 
-// taskDbFilter 変更リスナー
 if ($taskDbFilterSelect) {
     $taskDbFilterSelect.addEventListener('change', async function() {
         const newViewId = this.value;
         CURRENT_VIEW_ID = newViewId;
         
-        // 1. CURRENT_DB_CONFIGを更新 (単一DB選択時のみ)
         CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === newViewId) || null;
         
-        // 2. 選択状態を保存
         const currentSettings = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
         currentSettings.currentViewId = newViewId;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
         
-        // 3. フォームオプション (カテゴリ/部門) を更新
         let targetDbConfig = CURRENT_DB_CONFIG;
         if (!targetDbConfig && ALL_DB_CONFIGS.length > 0) {
-             // 'all'ビューの場合、最初のDBをターゲットにする
             targetDbConfig = ALL_DB_CONFIGS[0];
         }
 
         if (targetDbConfig) {
             try {
-                // CATEGORIES, DEPARTMENTS, DATA_SOURCE_ID をターゲットDBの設定で更新
                 await loadDbProperties(targetDbConfig.id); 
                 renderFormOptions();
                 displayCurrentDbTitle(newViewId === 'all' ? '統合ビュー' : targetDbConfig.name);
@@ -658,17 +685,14 @@ if ($taskDbFilterSelect) {
                 displayCurrentDbTitle(newViewId === 'all' ? '統合ビュー' : 'エラー');
             }
         } else {
-            // DBが全く登録されていない場合やエラーの場合
             CATEGORIES = []; DEPARTMENTS = []; renderFormOptions();
             displayCurrentDbTitle('エラー');
         }
 
-        // 4. タスク一覧とKPIをロード
         loadTasksAndKpi(); 
     });
 }
 
-// タスクモード切り替えリスナー (既存タスク / 新規タスク)
 const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
 const $existingTaskContainer = document.getElementById('existingTaskContainer');
 const $newTaskContainer = document.getElementById('newTaskContainer');
@@ -685,7 +709,6 @@ $taskModeRadios.forEach(radio => {
     });
 });
 
-// DB追加ボタンのリスナー
 const $addDbEntryBtn = document.getElementById('addDbEntry');
 if ($addDbEntryBtn) {
     $addDbEntryBtn.addEventListener('click', addDbEntry);
@@ -700,7 +723,6 @@ function saveSettings() {
     const togglApiToken = document.getElementById('confTogglToken').value;
     const togglWid = document.getElementById('confTogglWid').value;
     
-    // 複数DB設定を取得
     const newAllDbConfigs = [];
     const dbNames = document.querySelectorAll('.confDbName');
     const dbIds = document.querySelectorAll('.confDbId');
