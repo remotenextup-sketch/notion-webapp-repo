@@ -703,6 +703,7 @@ if ($addDbEntryBtn) {
 }
 
 // 実行中タスク停止ボタン
+const $stopRunningTaskBtn = document.getElementById('stopRunningTask');
 if ($stopRunningTaskBtn) {
     $stopRunningTaskBtn.addEventListener('click', () => {
         if (localRunningTask) {
