@@ -43,16 +43,6 @@
 
     <div id="mainView">
         
-        <div id="kpiPanel" class="panel">
-            <h4>📈 今週/今月</h4>
-            <div id="kpiContainer">
-                <div class="kpi-item"><div class="kpi-label">今週</div><div class="kpi-value" id="kpiWeek">--</div></div>
-                <div class="kpi-item"><div class="kpi-label">今月</div><div class="kpi-value" id="kpiMonth">--</div></div>
-            </div>
-            <div id="kpiCategoryContainer" style="font-size: 12px; text-align: center; color: #7f8c8d;">
-                </div>
-        </div>
-        
         <div id="runningTaskContainer" class="panel hidden">
             <div class="status-line">計測中: <strong id="runningTaskTitle"></strong></div>
             <div class="status-line">開始: <span id="runningStartTime"></span></div>
@@ -88,13 +78,23 @@
                 
                 <h4>部門</h4>
                 <div class="dept-grid" id="newDeptContainer">
-                    </div>
+                </div>
 
                 <h4>カテゴリ</h4>
                 <div id="newCatContainer" style="margin: 10px 0;">
-                    </div>
+                </div>
 
                 <button id="startNewTaskButton" class="btn-green">▶ 作成＆開始</button>
+            </div>
+        </div>
+
+        <div id="kpiPanel" class="panel">
+            <h4>📈 今週/今月</h4>
+            <div id="kpiContainer">
+                <div class="kpi-item"><div class="kpi-label">今週</div><div class="kpi-value" id="kpiWeek">--</div></div>
+                <div class="kpi-item"><div class="kpi-label">今月</div><div class="kpi-value" id="kpiMonth">--</div></div>
+            </div>
+            <div id="kpiCategoryContainer" style="font-size: 12px; text-align: center; color: #7f8c8d;">
             </div>
         </div>
     </div>
