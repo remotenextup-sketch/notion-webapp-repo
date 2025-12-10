@@ -537,7 +537,7 @@ async function createNotionTask(e) {
         'タスク名': { title: [{ type: 'text', text: { content: title } }] },
         'カテゴリ': { select: { name: category } },
         '部門': { multi_select: deptProps },
-        'ステータス': { status: { name: 'ToDo' } }
+        'ステータス': { status: { name: '未着手' } }
     };
     
     const parentObject = {
