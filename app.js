@@ -142,46 +142,10 @@ function loadSettings() {
 // ✅ 修正済み：DBプロパティロード（安全ガード追加）
 // =========================================================================
 async function loadDbProperties(dbId) {
-    console.log(`🔄 DB ${dbId} のプロパティ取得中...`);
-    
-    try {
-        const targetUrl = `https://api.notion.com/v1/databases/${dbId}/properties`;
-        
-        const response = await apiFetch(targetUrl, 'GET', null, 'notionToken', NOTION_TOKEN);
-        
-        console.log('📋 全プロパティ:', Object.keys(response.results));
-        
-        const categories = [];
-        const departments = [];
-        
-        // 全プロパティを走査してselect/multi_selectを探す
-        Object.values(response.results).forEach(prop => {
-            if (prop.select?.options) {
-                prop.select.options.forEach(opt => {
-                    if (opt.name) categories.push(opt.name);
-                });
-            }
-            if (prop.multi_select?.options) {
-                prop.multi_select.options.forEach(opt => {
-                    if (opt.name) departments.push(opt.name);
-                });
-            }
-        });
-        
-        // 重複除去＆ソート
-        CATEGORIES = [...new Set(categories)].sort();
-        DEPARTMENTS = [...new Set(departments)].sort();
-        DATA_SOURCE_ID = dbId;
-        
-        console.log(`✅ カテゴリ: ${CATEGORIES.length}件`, CATEGORIES.slice(0, 3));
-        console.log(`✅ 部門: ${DEPARTMENTS.length}件`, DEPARTMENTS.slice(0, 3));
-        
-    } catch (e) {
-        console.error('❌ DBプロパティ取得エラー:', e);
-        CATEGORIES = ['開発', 'デザイン', 'ミーティング']; // フォールバック
-        DEPARTMENTS = ['営業', 'エンジニア', 'デザイン']; 
-        DATA_SOURCE_ID = dbId;
-    }
+    console.log(`✅ DB ${dbId} 設定完了（固定値使用）`);
+    DATA_SOURCE_ID = dbId;
+    // CATEGORIES, DEPARTMENTS はグローバル変数で設定済み
+    renderFormOptions(); // 即フォーム更新
 }
 
 // =========================================================================
