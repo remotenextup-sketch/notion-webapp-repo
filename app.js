@@ -9,7 +9,6 @@ const PROXY_URL = 'https://notion-proxy-repo.vercel.app/api/proxy';
 const STORAGE_KEY = 'taskTrackerSettings';
 
 // DOM要素の参照
-// index.htmlのIDに合わせて調整済み
 const $settingsModal = document.getElementById('settingsView'); 
 const $taskForm = document.getElementById('newTaskContainer'); 
 const $taskList = document.getElementById('taskList');
@@ -20,7 +19,6 @@ const $saveSettingsBtn = document.getElementById('saveConfig');
 const $cancelConfigBtn = document.getElementById('cancelConfig'); 
 const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
 const $reloadTasksBtn = document.getElementById('reloadTasks'); 
-// ローディングスピナー要素はHTMLに存在しないため、参照しない
 
 // グローバル変数の定義
 let NOTION_TOKEN = '';
@@ -29,6 +27,53 @@ let TOGGL_API_TOKEN = '';
 let CATEGORIES = [];
 let DEPARTMENTS = [];
 let DATA_SOURCE_ID = ''; 
+
+// =========================================================================
+// API通信ヘルパー (★★★ 修正点: 冒頭に移動 ★★★)
+// =========================================================================
+
+async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
+    const response = await fetch(PROXY_URL, {
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
+    });
+
+    if (response.status === 500) {
+        const errorBody = await response.json();
+        throw new Error(`Internal Server Error: ${errorBody.message}`);
+    }
+    if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `API Error (${response.status}): ${errorText}`;
+        try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.code) errorMessage = `API Error (${response.status}): ${errorJson.code} - ${errorJson.message}`;
+        } catch (e) { /* JSONではない場合は無視 */ }
+        throw new Error(errorMessage);
+    }
+    const responseText = await response.text();
+    return responseText ? JSON.parse(responseText) : null;
+}
+
+async function apiCustomFetch(customEndpoint, params) {
+    const response = await fetch(PROXY_URL, {
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customEndpoint, ...params })
+    });
+
+    if (response.status === 500) {
+        const errorBody = await response.json();
+        throw new Error(`Custom API Error (500): ${errorBody.message}`);
+    }
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Custom API Error (${response.status}): ${errorText}`);
+    }
+    return response.json();
+}
+
 
 // =========================================================================
 // 初期化と設定のロード
@@ -76,6 +121,7 @@ function loadSettings() {
 async function loadDbConfig() {
     console.log('DB設定をロード中...');
     try {
+        // ★ apiCustomFetch の定義がこの行より上にあるため、エラー解消 ★
         const configData = await apiCustomFetch('getConfig', {
             dbId: DB_ID, 
             tokenValue: NOTION_TOKEN
@@ -319,7 +365,6 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 // Toggl 連携
 // =========================================================================
-// (このセクションの関数は前回の修正で問題ありません)
 
 async function checkRunningState() {
     if (!TOGGL_API_TOKEN) {
@@ -353,57 +398,9 @@ async function getTogglRunningEntry() {
 
 
 // =========================================================================
-// プロキシ通信ヘルパー
-// =========================================================================
-
-async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
-    const response = await fetch(PROXY_URL, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
-    });
-
-    if (response.status === 500) {
-        const errorBody = await response.json();
-        throw new Error(`Internal Server Error: ${errorBody.message}`);
-    }
-    if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `API Error (${response.status}): ${errorText}`;
-        try {
-            const errorJson = JSON.parse(errorText);
-            if (errorJson.code) errorMessage = `API Error (${response.status}): ${errorJson.code} - ${errorJson.message}`;
-        } catch (e) { /* JSONではない場合は無視 */ }
-        throw new Error(errorMessage);
-    }
-    const responseText = await response.text();
-    return responseText ? JSON.parse(responseText) : null;
-}
-
-async function apiCustomFetch(customEndpoint, params) {
-    const response = await fetch(PROXY_URL, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customEndpoint, ...params })
-    });
-
-    if (response.status === 500) {
-        const errorBody = await response.json();
-        throw new Error(`Custom API Error (500): ${errorBody.message}`);
-    }
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Custom API Error (${response.status}): ${errorText}`);
-    }
-    return response.json();
-}
-
-
-// =========================================================================
 // UIイベントリスナー
 // =========================================================================
 
-// イベントリスナーの存在チェックは前回対応済み
 if ($startNewTaskButton) {
     $startNewTaskButton.addEventListener('click', createNotionTask);
 } 
@@ -465,7 +462,6 @@ function openSettingsModal() {
 // ローディングUI
 // =========================================================================
 
-// エラー対策として、$loadingSpinnerを参照せず、bodyに直接スタイルを当てる
 function showLoading() {
     document.body.style.cursor = 'wait';
     document.body.style.pointerEvents = 'none'; // 操作不可にする
