@@ -5,7 +5,7 @@ console.log('*** APP.JS EXECUTION START ***');
 // =========================================================================
 
 // プロキシサーバーのURL (Vercelデプロイ後のURLに置き換えてください)
-const PROXY_URL = 'https://notion-proxy-live.vercel.app/api/proxy'; 
+const PROXY_URL = 'https://notion-toggl-proxy.vercel.app/api/proxy'; 
 
 // ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
