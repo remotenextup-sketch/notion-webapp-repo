@@ -466,32 +466,34 @@ async function startTogglTracking(taskTitle, pageId) {
       return;
     }
     
-    // 2. 新規計測開始（start必須）
+    // 2. Toggl v9 正しい形式（start必須）
     const now = new Date().toISOString();
     const startResponse = await apiFetch(
-      'https://api.track.toggl.com/api/v9/time_entries',
+      'https://api.track.toggl.com/api/v9/workspaces/' + TOGGL_WID + '/time_entries',
       'POST',
       {
-        time_entry: {
-          description: `${taskTitle} (Notion: ${pageId})`,
-          wid: parseInt(TOGGL_WID),
-          start: now,  // ✅ これが必須！
-          duration: -1  // 実行中（負数）
+        "time_entry": {
+          "description": `${taskTitle} (Notion: ${pageId})`,
+          "wid": parseInt(TOGGL_WID),
+          "start": now,     // ✅ ISO8601必須
+          "duration": -1    // ✅ 実行中
         }
       },
       'togglApiToken', TOGGL_API_TOKEN
     );
     
+    console.log('✅ Toggl開始成功:', startResponse);
     alert(`✅ 計測開始: ${taskTitle}`);
     await checkRunningState();
     
   } catch (e) {
-    alert(`❌ 計測エラー: ${e.message}`);
-    console.error('Toggl Error:', e);
+    console.error('Toggl詳細エラー:', e);
+    alert(`❌ 計測開始失敗\n${e.message}\n\n設定画面でToggl Token/Workspace確認`);
   } finally {
     hideLoading();
   }
 }
+
 
 async function createNotionTask(e) {
     e.preventDefault();
