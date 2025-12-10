@@ -16,22 +16,28 @@ const $settingsBtn = document.getElementById('toggleSettings');
 const $saveSettingsBtn = document.getElementById('saveConfig'); 
 const $cancelConfigBtn = document.getElementById('cancelConfig'); 
 const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
-const $reloadTasksBtn = doinitializeAppcument.getElementById('reloadTasks'); 
+const $reloadTasksBtn = document.getElementById('reloadTasks'); 
 const $taskDbFilterSelect = document.getElementById('taskDbFilter');
+// 新規タスク作成フォームの関連要素
+const $existingTaskContainer = document.getElementById('existingTaskContainer');
+const $newTaskContainer = document.getElementById('newTaskContainer');
+const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
+const $addDbEntryBtn = document.getElementById('addDbEntry');
+
 
 // グローバル変数の定義
 let NOTION_TOKEN = '';
 let TOGGL_API_TOKEN = '';
 
-// ★ カテゴリと部門は、新規タスク作成時に使うため、選択中のDBのものに更新されます
+// カテゴリと部門は、新規タスク作成時に使うため、選択中のDBのものに更新されます
 let CATEGORIES = [];
 let DEPARTMENTS = [];
 
-// ★ 現在選択されているDBのDATA_SOURCE_ID（単一DBのKPI/フォーム用）
+// 現在選択されているDBのDATA_SOURCE_ID（単一DBのKPI/フォーム用）
 let DATA_SOURCE_ID = ''; 
 let TOGGL_WID = ''; 
 
-// ★ 複数DB対応のための変数
+// 複数DB対応のための変数
 let ALL_DB_CONFIGS = []; 
 
 // ★★★ 状態管理用の変数 ★★★
@@ -92,42 +98,29 @@ async function apiCustomFetch(customEndpoint, params) {
 // 初期化と設定のロード
 // =========================================================================
 
-// =========================================================================
-// 初期化と設定のロード
-// =========================================================================
-
 document.addEventListener('DOMContentLoaded', initializeApp);
-
-// app.js の initializeApp 関数 (抜粋)
 
 async function initializeApp() {
     console.log('アプリケーションを初期化中...');
+    
+    // 致命的エラーチェック：最低限必要なDOM要素が存在するか
+    if (!$settingsModal || !$taskList) {
+        console.error('FATAL: 必要なDOM要素 (settingsView, taskListなど) が見つかりません。HTML IDを確認してください。');
+        alert('アプリの読み込みに失敗しました。HTMLのIDを確認してください。');
+        return; 
+    }
+
     showLoading(); 
 
     loadSettings(); // グローバル変数にローカルストレージの設定をロード
 
-    // Notion TokenまたはDB設定が存在しない場合は、設定モーダルを強制的に開く
+    // ★★★ 修正箇所: 設定がない場合は即座に設定モーダルを開く ★★★
     if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
         console.log('設定データが存在しないため、設定モーダルを開きます。');
         hideLoading(); 
-        openSettingsModal(); // ★ 修正: openSettingsModalが確実に呼ばれるように
-        return; 
+        openSettingsModal();
+        return; // 後続のすべての初期化処理をスキップ
     } 
-    
-    // ... (既存の処理を続ける)
-
-    if (initialDbConfig) {
-        try {
-            await loadDbProperties(initialDbConfig.id); 
-            CURRENT_DB_CONFIG = initialDbConfig;
-        } catch (error) {
-            console.warn('初期DBプロパティロード失敗:', error);
-            // エラーが発生しても、UI表示を妨げないようにする
-        }
-    }
-    
-    // ... (以降、UI描画とタスクロード)
-}
     // ★★★ 修正箇所ここまで ★★★
 
     // UIの初期化
@@ -177,9 +170,8 @@ function loadSettings() {
         
         CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === CURRENT_VIEW_ID) || null;
     }
-    // return savedSettings; // 呼び出し側で不要になったためコメントアウト
 }
-// （他の関数は省略）
+
 // DB IDを引数として、そのDBのカテゴリ、部門、データソースIDを取得・更新する関数
 async function loadDbProperties(dbId) {
     console.log(`DB ${dbId} の設定をロード中...`);
@@ -192,7 +184,9 @@ async function loadDbProperties(dbId) {
         if (configData && configData.dataSourceId) {
             DATA_SOURCE_ID = configData.dataSourceId;
         } else {
-            throw new Error("データソースIDを取得できませんでした。データベース設定または統合の権限を確認してください。");
+            // Notion API v1ではDB IDをそのままデータソースIDとして利用することが多いため、
+            // 取得できなかった場合はDB IDをフォールバックとして使用
+            DATA_SOURCE_ID = dbId;
         }
 
         CATEGORIES = configData.categories || [];
@@ -202,7 +196,7 @@ async function loadDbProperties(dbId) {
         
     } catch (e) {
         console.error('DBプロパティロードエラー:', e);
-        throw new Error(`DBプロパティロードエラー: ${e.message || 'TypeError: Failed to fetch'}`);
+        throw new Error(`DBプロパティロードエラー: ${e.message || 'Failed to fetch'}`);
     }
 }
 
@@ -236,7 +230,7 @@ function renderFormOptions() {
     let formDepartments = [];
     
     // 登録先DB表示の更新とボタンの有効化/無効化
-    if (!targetDbConfig) {
+    if (!targetDbConfig || CATEGORIES.length === 0) {
         targetDbDisplay.innerHTML = '登録先: **DBプロパティが読み込まれていません。** 設定を確認してください。';
         document.getElementById('startNewTaskButton').disabled = true;
     } else {
@@ -308,17 +302,10 @@ async function loadTasksAndKpi() {
 
 // 特定のDBからタスクをロードするヘルパー関数
 async function loadTasksFromSingleDb(dbConfig) {
-    let dataSourceId = dbConfig.dataSourceId;
-    if (!dataSourceId) {
-        const configData = await apiCustomFetch('getConfig', {
-            dbId: dbConfig.id, 
-            tokenValue: NOTION_TOKEN
-        });
-        dataSourceId = configData.dataSourceId;
-        dbConfig.dataSourceId = dataSourceId; 
-    }
+    let dataSourceId = dbConfig.id; // DB IDをデータソースIDとして使用
     
-    const targetUrl = `https://api.notion.com/v1/data_sources/${dataSourceId}/query`; 
+    const targetUrl = `https://api.notion.com/v1/databases/${dataSourceId}/query`; 
+    // ステータスが「完了」ではないタスクをフィルタリング
     const filter = {
         property: 'ステータス',
         status: { does_not_equal: '完了' }
@@ -397,7 +384,7 @@ async function loadTaskList() {
                         style="width:auto;">▶ 計測開始</button> 
                 </div>
             `;
-            // ★ 修正: 計測開始ボタンのリスナーを設定
+            // 計測開始ボタンのリスナーを設定
             listItem.querySelector('.start-tracking-btn').addEventListener('click', (e) => {
                 const button = e.target;
                 // ここで渡す順番は (タスク名, ページID)
@@ -597,8 +584,7 @@ async function createNotionTask(e) {
     }
 }
 
-// markTaskCompleted は残しておきますが、リストからはボタンを削除しました。
-// 今後は実行中タスクパネルのボタンでのみ使用されます。
+// markTaskCompleted は現在実行中タスクパネルでのみ使用
 async function markTaskCompleted(pageId) {
     if (confirm('このタスクを「完了」にしますか？')) {
         const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
@@ -626,7 +612,6 @@ async function markTaskCompleted(pageId) {
 // Toggl 連携
 // =========================================================================
 
-// ... (checkRunningState, getTogglRunningEntry は変更なし)
 async function checkRunningState() {
     if (!TOGGL_API_TOKEN) {
         document.getElementById('runningTaskTitle').textContent = 'Toggl連携なし';
@@ -640,9 +625,35 @@ async function checkRunningState() {
         if (runningEntry) {
             const description = runningEntry.description || 'タイトルなし';
             document.getElementById('runningTaskTitle').textContent = description;
-            document.getElementById('runningStartTime').textContent = new Date(runningEntry.start).toLocaleTimeString();
+            
+            const startTime = new Date(runningEntry.start);
+            document.getElementById('runningStartTime').textContent = startTime.toLocaleTimeString();
+            
+            // 実行中タスクパネルのボタンを設定（便宜上、ここで完了ボタンのロジックも追加）
+            const completeBtn = document.getElementById('completeRunningTask');
+            completeBtn.textContent = '✅ 完了にして停止';
+            completeBtn.disabled = false;
+            
+            // タスクの説明からNotion IDを抽出
+            const match = description.match(/\(Notion ID: ([a-z0-9]+)\)/i);
+            const notionId = match ? match[1] : null;
+
+            if (notionId) {
+                 completeBtn.onclick = async () => {
+                    await stopTogglTracking(runningEntry.id);
+                    await markTaskCompleted(notionId);
+                    await checkRunningState();
+                };
+            } else {
+                 completeBtn.onclick = async () => {
+                    await stopTogglTracking(runningEntry.id);
+                    await checkRunningState();
+                };
+                 completeBtn.textContent = '▶ 停止';
+            }
+
+
             $runningTaskContainer.classList.remove('hidden');
-            // TODO: タイマー更新ロジックを実装
         } else {
             document.getElementById('runningTaskTitle').textContent = '🔵 実行中のタスクはありません';
             $runningTaskContainer.classList.add('hidden'); 
@@ -655,8 +666,27 @@ async function checkRunningState() {
 
 async function getTogglRunningEntry() {
     const targetUrl = 'https://api.track.toggl.com/api/v9/me/time_entries/current';
+    // 標準のapiFetchではなく、トークンを直接渡してGETリクエストを行う特殊処理が必要になるため、
+    // Togglのトークンチェックとリクエストをプロキシ経由で行う
     const response = await apiFetch(targetUrl, 'GET', null, 'togglApiToken', TOGGL_API_TOKEN);
     return response;
+}
+
+async function stopTogglTracking(entryId) {
+    if (!entryId) return;
+    try {
+        showLoading();
+        const stopEntryUrl = `https://api.track.toggl.com/api/v9/time_entries/${entryId}/stop`;
+        // プロキシ経由でPATCHリクエストを送信
+        await apiFetch(stopEntryUrl, 'PATCH', null, 'togglApiToken', TOGGL_API_TOKEN);
+        alert('タスクの計測を停止しました。');
+    } catch (e) {
+        alert(`タスク停止に失敗しました。\nエラー: ${e.message}`);
+        console.error('タスク停止エラー:', e);
+        throw e;
+    } finally {
+        hideLoading();
+    }
 }
 
 
@@ -721,26 +751,43 @@ if ($taskDbFilterSelect) {
     });
 }
 
-const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
-const $existingTaskContainer = document.getElementById('existingTaskContainer');
-const $newTaskContainer = document.getElementById('newTaskContainer');
-
-$taskModeRadios.forEach(radio => {
-    radio.addEventListener('change', function() {
-        if (this.value === 'new') {
-            $existingTaskContainer.classList.add('hidden');
-            $newTaskContainer.classList.remove('hidden');
-        } else {
-            $existingTaskContainer.classList.remove('hidden');
-            $newTaskContainer.classList.add('hidden');
-        }
+if ($taskModeRadios) {
+    $taskModeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'new') {
+                $existingTaskContainer.classList.add('hidden');
+                $newTaskContainer.classList.remove('hidden');
+            } else {
+                $existingTaskContainer.classList.remove('hidden');
+                $newTaskContainer.classList.add('hidden');
+            }
+        });
     });
-});
+}
 
-const $addDbEntryBtn = document.getElementById('addDbEntry');
 if ($addDbEntryBtn) {
     $addDbEntryBtn.addEventListener('click', addDbEntry);
 }
+
+// 実行中タスク停止ボタン
+const $stopRunningTaskBtn = document.getElementById('stopRunningTask');
+if ($stopRunningTaskBtn) {
+    $stopRunningTaskBtn.addEventListener('click', async () => {
+        try {
+            const runningEntry = await getTogglRunningEntry();
+            if (runningEntry) {
+                await stopTogglTracking(runningEntry.id);
+                await checkRunningState();
+            } else {
+                alert('実行中のタスクはありません。');
+            }
+        } catch (e) {
+            console.error('停止処理失敗:', e);
+            alert(`停止処理に失敗しました: ${e.message}`);
+        }
+    });
+}
+
 
 // =========================================================================
 // 設定モーダル関数
@@ -795,6 +842,12 @@ function saveSettings() {
 }
 
 function openSettingsModal() {
+    if (!$settingsModal) {
+         console.error('設定モーダル要素が見つかりません。');
+         alert('設定モーダルを開けませんでした。');
+         return;
+    }
+
     document.getElementById('confNotionToken').value = NOTION_TOKEN;
     document.getElementById('confTogglToken').value = TOGGL_API_TOKEN;
     document.getElementById('confTogglWid').value = TOGGL_WID;
@@ -812,9 +865,15 @@ function openSettingsModal() {
 function showLoading() {
     document.body.style.cursor = 'wait';
     document.body.style.pointerEvents = 'none'; 
+    // ローディングアニメーション要素があれば表示
+    const loader = document.getElementById('loader');
+    if (loader) loader.classList.remove('hidden');
 }
 
 function hideLoading() {
     document.body.style.cursor = 'default';
     document.body.style.pointerEvents = 'auto';
+    // ローディングアニメーション要素があれば非表示
+    const loader = document.getElementById('loader');
+    if (loader) loader.classList.add('hidden');
 }
