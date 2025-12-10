@@ -41,47 +41,14 @@ let CURRENT_DB_CONFIG = null;
 // API通信ヘルパー（変更なし）
 // =========================================================================
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
-    console.log(`🔄 API CALL: ${tokenKey} → ${targetUrl.substring(targetUrl.lastIndexOf('/') + 1)}`);
-    
-    // Notion直アクセス（CORS回避のためVercelの別ドメイン経由）
-    if (tokenKey === 'notionToken') {
-        // VercelのfetchはCORS制約なし
-        const notionHeaders = {
-            'Authorization': `Bearer ${tokenValue}`,
-            'Content-Type': 'application/json',
-            'Notion-Version': '2022-06-28'
-        };
-        
-        const res = await fetch(targetUrl, { 
-            method: method || 'GET',
-            headers: notionHeaders,
-            body: body ? JSON.stringify(body) : undefined 
-        });
-        
-        if (!res.ok) {
-            const errText = await res.text();
-            console.error('Notion API Error:', res.status, errText);
-            throw new Error(`Notion ${res.status}: ${errText}`);
-        }
-        
-        const data = await res.json();
-        console.log('✅ Notion Response OK:', data);
-        return data;
-    }
-    
-    // Togglは従来通りproxy
-    const proxyRes = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
-    });
-    
-    if (!proxyRes.ok) {
-        throw new Error(`Proxy ${proxyRes.status}`);
-    }
-    
-    const proxyData = await proxyRes.json();
-    return proxyData;
+  const response = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetUrl, method, body, tokenKey, tokenValue })
+  });
+  
+  if (!response.ok) throw new Error(`Proxy ${response.status}`);
+  return await response.json();
 }
 
 async function apiCustomFetch(customEndpoint, params) {
