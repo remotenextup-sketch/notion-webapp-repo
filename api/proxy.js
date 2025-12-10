@@ -9,7 +9,7 @@ module.exports = async function(req, res) {
   try {
     const body = req.body || {};
     
-    // Notion
+    // Notion API
     if (body.tokenKey === 'notionToken') {
       const headers = {
         'Authorization': `Bearer ${body.tokenValue}`,
@@ -17,32 +17,42 @@ module.exports = async function(req, res) {
         'Notion-Version': '2022-06-28'
       };
       const upstream = await fetch(body.targetUrl, {
-        method: body.method || 'POST',
-        headers,
-        body: body.body ? JSON.stringify(body.body) : undefined
-      });
-      const data = await upstream.json();
-      return res.status(upstream.status).json(data);
-    }
-    
-    // Toggl（CORS回避）
-    if (body.tokenKey === 'togglApiToken') {
-      const basic = btoa(`${body.tokenValue}:api_token`);
-      const headers = {
-        'Authorization': `Basic ${basic}`,
-        'Content-Type': 'application/json'
-      };
-      const upstream = await fetch(body.targetUrl, {
         method: body.method || 'GET',
         headers,
         body: body.body ? JSON.stringify(body.body) : undefined
       });
       const data = await upstream.json();
-      return res.status(upstream.status).json(data);
+      res.status(upstream.status).json(data);
+      return;
     }
     
-    res.status(400).json({ error: 'tokenKey required' });
+    // ★ Toggl API（完全対応）
+    if (body.tokenKey === 'togglApiToken') {
+      const basicAuth = Buffer.from(`${body.tokenValue}:api_token`).toString('base64');
+      const headers = {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/json'
+      };
+      
+      const upstream = await fetch(body.targetUrl, {
+        method: body.method || 'GET',
+        headers,
+        body: body.body ? JSON.stringify(body.body) : undefined
+      });
+      
+      let data;
+      try {
+        data = await upstream.json();
+      } catch {
+        data = await upstream.text();
+      }
+      res.status(upstream.status).json(data);
+      return;
+    }
+    
+    res.status(400).json({ error: 'Invalid tokenKey' });
   } catch (err) {
+    console.error('Proxy error:', err);
     res.status(500).json({ error: err.message });
   }
 };
