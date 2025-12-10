@@ -53,15 +53,19 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
     }
     if (!response.ok) {
         const errorText = await response.text();
-        let errorMessage = `API Error (${response.status}): ${errorText}`;
-        try {
-            const errorJson = JSON.parse(errorText);
-            if (errorJson.code) errorMessage = `API Error (${response.status}): ${errorJson.code} - ${errorJson.message}`;
-        } catch (e) { }
-        throw new Error(errorMessage);
+        throw new Error(`API Error (${response.status}): ${errorText}`);
     }
+    
     const responseText = await response.text();
-    return responseText ? JSON.parse(responseText) : null;
+    const parsed = responseText ? JSON.parse(responseText) : null;
+    
+    // ✅ プロキシ確認レスポンスを弾く
+    if (parsed && parsed.status === 'Proxy OK!') {
+        console.warn('プロキシ確認レスポンスが返されました。proxy.js の処理を確認してください。');
+        throw new Error('プロキシがNotion APIを正しく転送していません');
+    }
+    
+    return parsed;
 }
 
 async function apiCustomFetch(customEndpoint, params) {
