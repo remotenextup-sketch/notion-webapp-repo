@@ -9,6 +9,10 @@ const PROXY_URL = 'https://notion-webapp-repo.vercel.app/api/proxy';
 // ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
 
+// カテゴリと部門（手動設定）
+let CATEGORIES = ['思考', '作業', '教育'];
+let DEPARTMENTS = ['CS', 'デザイン', '人事', '広告', '採用', '改善', '物流', '秘書', '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo'];
+
 // DOM要素の参照
 const $settingsModal = document.getElementById('settingsView'); 
 const $taskList = document.getElementById('taskList');
