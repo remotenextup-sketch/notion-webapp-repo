@@ -24,14 +24,14 @@ let TOGGL_API_TOKEN = '';
 let CATEGORIES = [];
 let DEPARTMENTS = [];
 let DATA_SOURCE_ID = ''; 
-let TOGGL_WID = ''; // WIDを追記
+let TOGGL_WID = ''; 
 
 // ★ 複数DB対応のための変数
 let ALL_DB_CONFIGS = []; 
 let CURRENT_DB_CONFIG = null; // {name: '...', id: '...'}
 
 // =========================================================================
-// API通信ヘルパー (定義の巻き上げ対策のため冒頭に配置)
+// API通信ヘルパー
 // =========================================================================
 
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
@@ -179,15 +179,30 @@ function renderFormOptions() {
     const departmentDiv = document.getElementById('newDeptContainer');
 
     // カテゴリ (Select)
-    categoryContainer.innerHTML = '<h4>カテゴリ</h4><select id="taskCategory"></select>';
-    const taskCategorySelect = document.getElementById('taskCategory');
-    taskCategorySelect.innerHTML = '<option value="">-- 選択 --</option>';
-    CATEGORIES.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        taskCategorySelect.appendChild(option);
-    });
+    // 既存の要素を参照し、中身をクリアして再構築
+    const existingCategorySelect = document.getElementById('taskCategory');
+    if (existingCategorySelect) {
+        existingCategorySelect.innerHTML = '';
+        existingCategorySelect.innerHTML = '<option value="">-- 選択 --</option>';
+        CATEGORIES.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            existingCategorySelect.appendChild(option);
+        });
+    } else {
+        // taskCategoryが存在しない場合は新規作成（index.htmlの構造を維持）
+        categoryContainer.innerHTML = '<h4>カテゴリ</h4><select id="taskCategory"></select>';
+        const taskCategorySelect = document.getElementById('taskCategory');
+        taskCategorySelect.innerHTML = '<option value="">-- 選択 --</option>';
+        CATEGORIES.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            taskCategorySelect.appendChild(option);
+        });
+    }
+
 
     // 部門 (Multi-Select)
     departmentDiv.innerHTML = '';
@@ -208,7 +223,6 @@ async function loadTasksAndKpi() {
 }
 
 async function loadTaskList() {
-// ... (loadTaskList 関数は変更なし、既存のロジックを使用) ...
     console.log('タスク一覧をロード中...');
     
     if (!DATA_SOURCE_ID) {
@@ -270,7 +284,6 @@ async function loadTaskList() {
 }
 
 async function loadKpi() {
-// ... (loadKpi 関数は変更なし、既存のロジックを使用) ...
     console.log('KPIをロード中...');
     
     if (!DATA_SOURCE_ID) {
@@ -385,7 +398,7 @@ function renderDbSelectOptions() {
 
 
 // =========================================================================
-// アクション処理 (apiFetchを使う関数は変更なし)
+// アクション処理
 // =========================================================================
 
 async function createNotionTask(e) {
@@ -406,7 +419,6 @@ async function createNotionTask(e) {
         return;
     }
     
-    // ... (以下、既存のNotion API呼び出しロジック) ...
     const deptProps = selectedDepartments.map(d => ({ name: d }));
     const pageProperties = {
         'タスク名': { title: [{ type: 'text', text: { content: title } }] },
@@ -416,8 +428,8 @@ async function createNotionTask(e) {
     };
     
     const parentObject = {
-        type: 'data_source_id',
-        data_source_id: DATA_SOURCE_ID
+        type: 'database_id', // database_id を使用
+        database_id: CURRENT_DB_CONFIG.id 
     };
 
     const targetUrl = 'https://api.notion.com/v1/pages';
@@ -439,7 +451,6 @@ async function createNotionTask(e) {
 }
 
 async function markTaskCompleted(pageId) {
-    // ... (markTaskCompleted 関数は変更なし、既存のロジックを使用) ...
     if (confirm('このタスクを「完了」にしますか？')) {
         const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
         const updateProperties = {
@@ -463,11 +474,10 @@ async function markTaskCompleted(pageId) {
 
 
 // =========================================================================
-// Toggl 連携 (apiFetchを使う関数は変更なし)
+// Toggl 連携
 // =========================================================================
 
 async function checkRunningState() {
-    // ... (checkRunningState 関数は変更なし、既存のロジックを使用) ...
     if (!TOGGL_API_TOKEN) {
         document.getElementById('runningTaskTitle').textContent = 'Toggl連携なし';
         $runningTaskContainer.classList.remove('hidden'); 
@@ -480,10 +490,12 @@ async function checkRunningState() {
         if (runningEntry) {
             const description = runningEntry.description || 'タイトルなし';
             document.getElementById('runningTaskTitle').textContent = description;
+            document.getElementById('runningStartTime').textContent = new Date(runningEntry.start).toLocaleTimeString();
             $runningTaskContainer.classList.remove('hidden');
-            // ... (タイマー表示ロジックは省略)
+            // TODO: タイマー更新ロジックを実装
         } else {
             document.getElementById('runningTaskTitle').textContent = '🔵 実行中のタスクはありません';
+            $runningTaskContainer.classList.add('hidden'); // 非実行時はコンテナを隠す
         }
     } catch (e) {
         document.getElementById('runningTaskTitle').textContent = `Toggl接続エラー: ${e.message}`;
@@ -552,6 +564,7 @@ const $dbSelect = document.getElementById('new-db-select');
 if ($dbSelect) {
     $dbSelect.addEventListener('change', function() {
         const newDbId = this.value;
+        // 現在のDB IDと異なる場合にのみ処理を実行
         if (newDbId && (CURRENT_DB_CONFIG ? newDbId !== CURRENT_DB_CONFIG.id : true)) {
             
             // 選択したDB IDをlocalStorageのcurrentDbIdとして保存
