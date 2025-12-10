@@ -6,7 +6,7 @@
     <title>Notion Toggl Timer (統合版)</title>
     <link rel="manifest" href="manifest.json">
     <style>
-        /* (お客様の既存のスタイルは省略。変更点のみ追加) */
+        /* 基本スタイル */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f4f4; color: #333; }
         h2 { text-align: center; margin-top: 0; font-size: 1.2rem; }
         button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 10px; touch-action: manipulation; }
@@ -22,12 +22,12 @@
         ul { list-style: none; padding: 0; margin: 0; }
         li { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
         li:last-child { border-bottom: none; }
-        input[type="text"], input[type="password"], select { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
+        input[type="text"], input[type="password"], select, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
         .dept-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         .dept-grid label { font-size: 12px; display: block; background: #eee; padding: 8px; text-align: center; border-radius: 4px; }
         #toggleSettings { position: fixed; top: 10px; right: 10px; background: none; border: none; color: #666; font-size: 24px; width: auto; padding: 0; }
         
-        /* --- 統合後の追加スタイル --- */
+        /* KPIスタイル */
         #kpiContainer { display: flex; justify-content: space-around; text-align: center; margin-bottom: 15px; }
         .kpi-item { flex: 1; padding: 5px 0; border-right: 1px solid #eee; }
         .kpi-item:last-child { border-right: none; }
@@ -66,7 +66,7 @@
                     <label style="font-size: 12px; display: block;">プロジェクトでフィルタ:</label>
                     <select id="projectFilter">
                         <option value="">全てのタスク</option>
-                        </select>
+                    </select>
                 </div>
                 
                 <button id="reloadTasks" class="btn-blue" style="font-size: 14px; padding: 8px;">🔄 タスク更新</button>
@@ -76,13 +76,18 @@
             <div id="newTaskContainer" class="hidden">
                 <input type="text" id="newTaskTitle" placeholder="タスク名 *必須">
                 
-                <h4>部門</h4>
-                <div class="dept-grid" id="newDeptContainer">
-                </div>
+                <h4>登録先 Notion タスクDB</h4>
+                <select id="new-db-select" style="margin-bottom: 15px;">
+                    <option value="">--- DB設定がありません ---</option>
+                </select>
 
                 <h4>カテゴリ</h4>
                 <div id="newCatContainer" style="margin: 10px 0;">
-                </div>
+                    </div>
+
+                <h4>部門</h4>
+                <div class="dept-grid" id="newDeptContainer">
+                    </div>
 
                 <button id="startNewTaskButton" class="btn-green">▶ 作成＆開始</button>
             </div>
@@ -105,16 +110,18 @@
             <label>Notion Token</label>
             <input type="password" id="confNotionToken">
             
-            <label>Notion Database ID</label>
-            <input type="text" id="confNotionDbId">
+            <h3>Notion 接続データベース (複数登録可能)</h3>
+            <div id="dbListContainer">
+                </div>
             
-            <label>Notion User ID</label>
-            <input type="text" id="confNotionUserId">
-            
+            <button id="addDbEntry" class="btn-blue" style="width: auto; padding: 5px 10px; font-size: 14px; margin-bottom: 10px;">
+                + データベースを追加
+            </button>
+            <p style="font-size: 12px; color: #777;">最初に登録したDBがデフォルトDBとして扱われます。</p>
             <label>Toggl API Token</label>
             <input type="password" id="confTogglToken">
             
-            <label>Toggl Workspace ID</label>
+            <label>Toggl Workspace ID (任意)</label>
             <input type="text" id="confTogglWid">
             
             <button id="saveConfig" class="btn-green">保存して戻る</button>
