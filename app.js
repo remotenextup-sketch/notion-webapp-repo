@@ -445,14 +445,51 @@ function addDbEntry() {
 // アクション処理
 // =========================================================================
 
-// ★ 修正箇所: 引数の順序を (taskTitle, pageId) に変更
 async function startTogglTracking(taskTitle, pageId) {
-    alert(`⏱️ 計測開始: ${taskTitle} (Notion ID: ${pageId})\n\nToggl: CORS問題のため後で実装\nNotionタスク管理は完璧動作中！✅`);
-    
-    // ★ Togglは後回し → Notion連携完璧で十分！
-    console.log('🎯 Toggl計測開始（保留）:', taskTitle, pageId);
-}
+  if (!TOGGL_API_TOKEN || !TOGGL_WID) {
+    alert('⚙️ Toggl設定が必要です（設定画面）');
+    return;
+  }
 
+  try {
+    showLoading();
+    
+    // 既存計測チェック
+    const runningEntry = await apiFetch(
+      'https://api.track.toggl.com/api/v9/me/time_entries/current',
+      'GET', null, 'togglApiToken', TOGGL_API_TOKEN
+    );
+    
+    if (runningEntry?.data) {
+      alert('⏹️ 既に計測中です');
+      await checkRunningState();
+      return;
+    }
+    
+    // 新規計測開始
+    const newEntry = await apiFetch(
+      'https://api.track.toggl.com/api/v9/time_entries',
+      'POST', 
+      { 
+        time_entry: {
+          description: `${taskTitle} (Notion: ${pageId})`,
+          wid: parseInt(TOGGL_WID),
+          start: new Date().toISOString()
+        }
+      }, 
+      'togglApiToken', TOGGL_API_TOKEN
+    );
+    
+    alert(`✅ 計測開始: ${taskTitle}`);
+    await checkRunningState();
+    
+  } catch (e) {
+    alert(`❌ 計測エラー: ${e.message}`);
+    console.error('Toggl Error:', e);
+  } finally {
+    hideLoading();
+  }
+}
 
 async function createNotionTask(e) {
     e.preventDefault();
@@ -543,55 +580,47 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 
 async function checkRunningState() {
-    if (!TOGGL_API_TOKEN) {
-        document.getElementById('runningTaskTitle').textContent = 'Toggl連携なし';
-        $runningTaskContainer.classList.remove('hidden'); 
-        return;
-    }
+  if (!TOGGL_API_TOKEN) {
+    document.getElementById('runningTaskTitle').textContent = 'Toggl未設定';
+    $runningTaskContainer.classList.remove('hidden');
+    return;
+  }
+  
+  try {
+    const runningEntry = await getTogglRunningEntry();
     
-    try {
-        const runningEntry = await getTogglRunningEntry();
-        
-        if (runningEntry) {
-            const description = runningEntry.description || 'タイトルなし';
-            document.getElementById('runningTaskTitle').textContent = description;
-            
-            const startTime = new Date(runningEntry.start);
-            document.getElementById('runningStartTime').textContent = startTime.toLocaleTimeString();
-            
-            // 実行中タスクパネルのボタンを設定（便宜上、ここで完了ボタンのロジックも追加）
-            const completeBtn = document.getElementById('completeRunningTask');
-            completeBtn.textContent = '✅ 完了にして停止';
-            completeBtn.disabled = false;
-            
-            // タスクの説明からNotion IDを抽出
-            const match = description.match(/\(Notion ID: ([a-z0-9]+)\)/i);
-            const notionId = match ? match[1] : null;
-
-            if (notionId) {
-                 completeBtn.onclick = async () => {
-                    await stopTogglTracking(runningEntry.id);
-                    await markTaskCompleted(notionId);
-                    await checkRunningState();
-                };
-            } else {
-                 completeBtn.onclick = async () => {
-                    await stopTogglTracking(runningEntry.id);
-                    await checkRunningState();
-                };
-                 completeBtn.textContent = '▶ 停止';
-            }
-
-
-            $runningTaskContainer.classList.remove('hidden');
-        } else {
-            document.getElementById('runningTaskTitle').textContent = '🔵 実行中のタスクはありません';
-            $runningTaskContainer.classList.add('hidden'); 
-        }
-    } catch (e) {
-        document.getElementById('runningTaskTitle').textContent = `Toggl接続エラー: ${e.message}`;
-        console.error('Toggl連携エラー:', e);
+    if (runningEntry?.data) {
+      const description = runningEntry.data.description || '不明';
+      document.getElementById('runningTaskTitle').textContent = description;
+      document.getElementById('runningStartTime').textContent = 
+        new Date(runningEntry.data.start).toLocaleTimeString();
+      
+      const completeBtn = document.getElementById('completeRunningTask');
+      completeBtn.textContent = '✅ 完了にして停止';
+      
+      // Notion ID抽出
+      const match = description.match(/\(Notion: ([a-z0-9-]+)\)/i);
+      if (match) {
+        completeBtn.onclick = async () => {
+          await stopTogglTracking(runningEntry.data.id);
+          await markTaskCompleted(match[1]);
+        };
+      }
+      
+      $runningTaskContainer.classList.remove('hidden');
+    } else {
+      $runningTaskContainer.classList.add('hidden');
     }
+  } catch (e) {
+    console.error('Toggl状態確認エラー:', e);
+  }
+}
+
+async function getTogglRunningEntry() {
+  return await apiFetch(
+    'https://api.track.toggl.com/api/v9/me/time_entries/current',
+    'GET', null, 'togglApiToken', TOGGL_API_TOKEN
+  );
 }
 
 async function getTogglRunningEntry() {
