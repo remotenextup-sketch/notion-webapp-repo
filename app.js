@@ -373,7 +373,8 @@ async function loadTaskList() {
             // ★ 修正: 計測開始ボタンのリスナーを設定
             listItem.querySelector('.start-tracking-btn').addEventListener('click', (e) => {
                 const button = e.target;
-                startTogglTracking(button.dataset.pageId, button.dataset.taskTitle);
+                // ここで渡す順番は (タスク名, ページID)
+                startTogglTracking(button.dataset.taskTitle, button.dataset.pageId);
             });
             $taskList.appendChild(listItem);
         });
@@ -473,8 +474,8 @@ function addDbEntry() {
 // アクション処理
 // =========================================================================
 
-// ★ 新規追加: Togglでの計測を開始する関数
-async function startTogglTracking(pageId, taskTitle) {
+// ★ 修正箇所: 引数の順序を (taskTitle, pageId) に変更
+async function startTogglTracking(taskTitle, pageId) {
     if (!TOGGL_API_TOKEN) {
         alert('Toggl APIトークンが設定されていません。設定画面を確認してください。');
         return;
@@ -554,8 +555,8 @@ async function createNotionTask(e) {
 
         alert(`タスクが正常にDB「${targetDbConfig.name}」に作成されました！`);
         
-        // ★ 追記: 新規タスク作成後、そのまま計測開始
-        await startTogglTracking(newPageId, title); 
+        // ★ 追記: 新規タスク作成後、そのまま計測開始 (引数の順番は taskTitle, newPageId)
+        await startTogglTracking(title, newPageId); 
         
         document.getElementById('newTaskTitle').value = ''; 
         if (document.getElementById('taskCategory')) document.getElementById('taskCategory').value = ''; 
