@@ -138,21 +138,45 @@ function loadSettings() {
 // ✅ 修正済み：DBプロパティロード（安全ガード追加）
 // =========================================================================
 async function loadDbProperties(dbId) {
-    console.log(`DB ${dbId} の設定をロード中...`);
+    console.log(`🔄 DB ${dbId} のプロパティ取得中...`);
+    
     try {
-        const configData = await apiCustomFetch('getConfig', {
-            dbId: dbId, 
-            tokenValue: NOTION_TOKEN
-        });
-
-        DATA_SOURCE_ID = configData?.dataSourceId || dbId;
-        CATEGORIES = configData?.categories || [];
-        DEPARTMENTS = configData?.departments || [];
+        const targetUrl = `https://api.notion.com/v1/databases/${dbId}/properties`;
         
-        console.log('DBプロパティロード完了');
+        const response = await apiFetch(targetUrl, 'GET', null, 'notionToken', NOTION_TOKEN);
+        
+        console.log('📋 全プロパティ:', Object.keys(response.results));
+        
+        const categories = [];
+        const departments = [];
+        
+        // 全プロパティを走査してselect/multi_selectを探す
+        Object.values(response.results).forEach(prop => {
+            if (prop.select?.options) {
+                prop.select.options.forEach(opt => {
+                    if (opt.name) categories.push(opt.name);
+                });
+            }
+            if (prop.multi_select?.options) {
+                prop.multi_select.options.forEach(opt => {
+                    if (opt.name) departments.push(opt.name);
+                });
+            }
+        });
+        
+        // 重複除去＆ソート
+        CATEGORIES = [...new Set(categories)].sort();
+        DEPARTMENTS = [...new Set(departments)].sort();
+        DATA_SOURCE_ID = dbId;
+        
+        console.log(`✅ カテゴリ: ${CATEGORIES.length}件`, CATEGORIES.slice(0, 3));
+        console.log(`✅ 部門: ${DEPARTMENTS.length}件`, DEPARTMENTS.slice(0, 3));
+        
     } catch (e) {
-        console.error('DBプロパティロードエラー:', e);
-        throw new Error(`DBプロパティロードエラー: ${e.message}`);
+        console.error('❌ DBプロパティ取得エラー:', e);
+        CATEGORIES = ['開発', 'デザイン', 'ミーティング']; // フォールバック
+        DEPARTMENTS = ['営業', 'エンジニア', 'デザイン']; 
+        DATA_SOURCE_ID = dbId;
     }
 }
 
@@ -452,39 +476,55 @@ function addDbEntry() {
 
 // ★ 修正箇所: 引数の順序を (taskTitle, pageId) に変更
 async function startTogglTracking(taskTitle, pageId) {
-    if (!TOGGL_API_TOKEN) {
-        alert('Toggl APIトークンが設定されていません。設定画面を確認してください。');
-        return;
-    }
-    if (!TOGGL_WID) {
-        alert('Toggl Workspace IDが設定されていません。設定画面を確認してください。');
-        return;
-    }
-
     try {
         showLoading();
-        // 既存の計測を停止し、新しい計測を開始
-        const newEntry = await apiCustomFetch('startTogglTracking', {
-            tokenValue: TOGGL_API_TOKEN,
-            workspaceId: TOGGL_WID,
-            // Notionのタスク名とIDを説明に含め、連携を可能にする
-            description: `${taskTitle} (Notion ID: ${pageId})` 
+        
+        // Toggl API直アクセス（proxyエラー回避）
+        const togglResponse = await fetch('https://api.track.toggl.com/api/v9/me/time_entries/current', {
+            headers: {
+                'Authorization': `Basic ${btoa(`${TOGGL_API_TOKEN}:api_token`)}`,
+                'Content-Type': 'application/json'
+            }
         });
-
-        if (newEntry) {
-            alert(`タスク「${taskTitle}」の計測を開始しました！`);
-            await checkRunningState(); 
-        } else {
-            throw new Error("Togglでの計測開始に失敗しました。");
+        
+        if (togglResponse.ok) {
+            const running = await togglResponse.json();
+            if (running.data) {
+                alert('既に計測中です');
+                return;
+            }
         }
+        
+        // 新規計測開始
+        const startResponse = await fetch('https://api.track.toggl.com/api/v9/time_entries', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${btoa(`${TOGGL_API_TOKEN}:api_token`)}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                time_entry: {
+                    description: `${taskTitle} (Notion: ${pageId})`,
+                    wid: parseInt(TOGGL_WID),
+                    start: new Date().toISOString()
+                }
+            })
+        });
+        
+        if (startResponse.ok) {
+            alert(`✅ 計測開始: ${taskTitle}`);
+            await checkRunningState();
+        } else {
+            alert('❌ Toggl計測開始失敗（設定確認）');
+        }
+        
     } catch (e) {
-        alert(`計測開始に失敗しました。\nエラー: ${e.message}`);
-        console.error('計測開始エラー:', e);
+        alert(`❌ 計測エラー: ${e.message}`);
+        console.error('Toggl Error:', e);
     } finally {
         hideLoading();
     }
 }
-
 
 async function createNotionTask(e) {
     e.preventDefault();
