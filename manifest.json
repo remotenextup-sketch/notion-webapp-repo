@@ -1,5 +1,5 @@
 {
-  "name": "Notion Timer",
+  "name": "Notion Toggl Timer",
   "short_name": "Timer App",
   "start_url": "index.html",
   "display": "standalone",
