@@ -3,20 +3,20 @@
 // =========================================================================
 
 // プロキシサーバーのURL (Vercelデプロイ後のURLに置き換えてください)
-const PROXY_URL = 'https://notion-proxy-live.vercel.app/api/proxy'; 
+const PROXY_URL = 'https://notion-proxy-live.vercel.app/api/proxy'; 
 
 // ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
 
 // DOM要素の参照
-const $settingsModal = document.getElementById('settingsView'); 
+const $settingsModal = document.getElementById('settingsView'); 
 const $taskList = document.getElementById('taskList');
 const $runningTaskContainer = document.getElementById('runningTaskContainer');
-const $settingsBtn = document.getElementById('toggleSettings'); 
-const $saveSettingsBtn = document.getElementById('saveConfig'); 
-const $cancelConfigBtn = document.getElementById('cancelConfig'); 
-const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
-const $reloadTasksBtn = document.getElementById('reloadTasks'); 
+const $settingsBtn = document.getElementById('toggleSettings'); 
+const $saveSettingsBtn = document.getElementById('saveConfig'); 
+const $cancelConfigBtn = document.getElementById('cancelConfig'); 
+const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
+const $reloadTasksBtn = document.getElementById('reloadTasks'); 
 const $taskDbFilterSelect = document.getElementById('taskDbFilter');
 // 新規タスク作成フォームの関連要素
 const $existingTaskContainer = document.getElementById('existingTaskContainer');
@@ -24,6 +24,9 @@ const $newTaskContainer = document.getElementById('newTaskContainer');
 const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
 const $addDbEntryBtn = document.getElementById('addDbEntry');
 
+// ★★★ 追記：HTMLにある要素をDOM変数として定義する (見つからなくてもエラーにしない) ★★★
+const $loader = document.getElementById('loader'); 
+// (他の要素も全てHTMLに存在することを確認済みです)
 
 // グローバル変数の定義
 let NOTION_TOKEN = '';
