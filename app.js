@@ -445,11 +445,6 @@ function addDbEntry() {
 // =========================================================================
 
 async function startTogglTracking(taskTitle, pageId) {
-  if (localRunningTask) {
-    alert('⏹️ 既に計測中');
-    return;
-  }
-
   localRunningTask = {
     title: taskTitle,
     pageId: pageId,
@@ -461,10 +456,8 @@ async function startTogglTracking(taskTitle, pageId) {
   timerInterval = setInterval(updateTimerDisplay, 1000);
   updateTimerDisplay();
   
-  document.getElementById('runningTaskTitle').textContent = taskTitle;
-  document.getElementById('runningTaskContainer').classList.remove('hidden');
-  
   alert(`✅ 計測開始: ${taskTitle}`);
+  checkRunningState();
 }
 
 async function createNotionTask(e) {
@@ -556,10 +549,10 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 
 async function checkRunningState() {
-  // ★ローカルストレージから復元★
-  const storedTask = localStorage.getItem('runningTask');
-  if (storedTask) {
-    localRunningTask = JSON.parse(storedTask);
+  // ローカルストレージから復元
+  const stored = localStorage.getItem('runningTask');
+  if (stored) {
+    localRunningTask = JSON.parse(stored);
     document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
     document.getElementById('runningStartTime').textContent = 
       new Date(localRunningTask.startTime).toLocaleTimeString();
@@ -569,14 +562,17 @@ async function checkRunningState() {
     timerInterval = setInterval(updateTimerDisplay, 1000);
     updateTimerDisplay();
     
-    document.getElementById('completeRunningTask').textContent = '✅ 完了';
-    document.getElementById('completeRunningTask').onclick = async () => {
+    // 完了ボタン設定
+    const completeBtn = document.getElementById('completeRunningTask');
+    completeBtn.textContent = '✅ 完了';
+    completeBtn.onclick = async () => {
       await markTaskCompleted(localRunningTask.pageId);
       localRunningTask = null;
       localStorage.removeItem('runningTask');
-      clearInterval(timerInterval);
-      document.getElementById('runningTaskContainer').classList.add('hidden');
+      if (timerInterval) clearInterval(timerInterval);
+      $runningTaskContainer.classList.add('hidden');
       loadTasksAndKpi();
+      alert('✅ タスク完了');
     };
     
     $runningTaskContainer.classList.remove('hidden');
@@ -585,7 +581,24 @@ async function checkRunningState() {
   
   // 計測なし
   localRunningTask = null;
+  if (timerInterval) clearInterval(timerInterval);
   $runningTaskContainer.classList.add('hidden');
+}
+
+// ★3. updateTimerDisplay() 新規追加（checkRunningState直下）★
+function updateTimerDisplay() {
+  if (!localRunningTask) return;
+  
+  const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 60000);
+  const s = Math.floor((elapsed % 60));
+  
+  // タイマー表示（runningTimer要素がある場合）
+  const timerEl = document.getElementById('runningTimer') || document.getElementById('runningStartTime');
+  if (timerEl) {
+    timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  }
 }
 
 async function getTogglRunningEntry() {
