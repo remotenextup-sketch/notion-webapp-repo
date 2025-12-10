@@ -32,8 +32,6 @@ const $loader = document.getElementById('loader');
 // グローバル変数の定義
 let NOTION_TOKEN = '';
 let TOGGL_API_TOKEN = '';
-let CATEGORIES = [];
-let DEPARTMENTS = [];
 let DATA_SOURCE_ID = ''; 
 let TOGGL_WID = ''; 
 let ALL_DB_CONFIGS = []; 
