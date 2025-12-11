@@ -426,29 +426,19 @@ async function startTogglTracking(taskTitle, pageId) {
   const titleEl = document.getElementById('runningTaskTitle');
   const timeEl = document.getElementById('runningStartTime');
   const timerEl = document.getElementById('runningTimer');
-  const container = document.querySelector('#runningTaskContainer, .running-task-container');
+  const container = document.getElementById('runningTaskContainer');
   
   if (titleEl) titleEl.textContent = taskTitle;
   if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
   if (timerEl) timerEl.textContent = '00:00:00';
   if (container) {
-    container.style.display = 'block';
     container.classList.remove('hidden');
   }
   
   if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    if (timerEl && localRunningTask) {
-      const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
-      const h = Math.floor(elapsed / 3600);
-      const m = Math.floor((elapsed % 3600) / 60000);
-      const s = elapsed % 60;
-      timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-    }
-  }, 1000);
+  timerInterval = setInterval(updateTimerDisplay, 1000);
   
-  alert(`✅ 計測開始: ${taskTitle} (ローカルタイマー)`);
-  console.log('✅ TIMER STARTED');
+  console.log('✅ TIMER STARTED（サイレント）');
 }
 
 async function createNotionTask(e) {
@@ -635,28 +625,24 @@ if ($taskModeRadios) {
 
 if ($addDbEntryBtn) $addDbEntryBtn.addEventListener('click', addDbEntry);
 
-// ★思考ログ機能 フォーム常駐版（prompt/alert廃止）★
+// ★思考ログ機能 フォーム常駐・ダイアログ完全廃止版★
 const completeBtn = document.getElementById('completeRunningTask');
 if (completeBtn) {
   completeBtn.addEventListener('click', async () => {
     console.log('🛑 完了ボタンクリック！');
     
-    // ★フォームから思考ログ取得★
     const thinkingLogInput = document.getElementById('thinkingLogInput');
     const thinkingNote = thinkingLogInput?.value.trim();
     const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
     
-    // 思考ログ保存
     if (localRunningTask?.pageId && logEntry) {
       await appendThinkingLog(localRunningTask.pageId, logEntry);
     }
     
-    // タスク完了処理
     if (localRunningTask?.pageId) {
       await markTaskCompleted(localRunningTask.pageId);
     }
     
-    // タイマー停止・クリーンアップ
     localRunningTask = null;
     localStorage.removeItem('runningTask');
     if (timerInterval) { 
@@ -665,26 +651,10 @@ if (completeBtn) {
     }
     $runningTaskContainer.classList.add('hidden');
     
-    // ★フォームクリア★
     if (thinkingLogInput) thinkingLogInput.value = '';
     
-    // ★トーストメッセージ（alertじゃない）★
-    const messageEl = document.createElement('div');
-    messageEl.textContent = '✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : '');
-    messageEl.style.cssText = `
-      position: fixed; top: 20px; right: 20px; 
-      background: #28a745; color: white; padding: 15px 20px;
-      border-radius: 8px; z-index: 9999; font-weight: bold;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 14px;
-    `;
-    document.body.appendChild(messageEl);
-    
-    setTimeout(() => {
-      if (document.body.contains(messageEl)) {
-        document.body.removeChild(messageEl);
-      }
-    }, 3000);
-    
+    // 右上トースト（3秒）
+    showToast('✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : ''), '#28a745');
     loadTasksAndKpi();
   });
 }
@@ -694,17 +664,14 @@ if (stopBtn) {
   stopBtn.addEventListener('click', async () => {
     console.log('⏹️ 停止ボタンクリック');
     
-    // ★フォームから思考ログ取得★
     const thinkingLogInput = document.getElementById('thinkingLogInput');
     const thinkingNote = thinkingLogInput?.value.trim();
     const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
     
-    // 思考ログ保存
     if (localRunningTask?.pageId && logEntry) {
       await appendThinkingLog(localRunningTask.pageId, logEntry);
     }
     
-    // タイマー停止・クリーンアップ
     localRunningTask = null;
     localStorage.removeItem('runningTask');
     if (timerInterval) { 
@@ -713,44 +680,30 @@ if (stopBtn) {
     }
     $runningTaskContainer.classList.add('hidden');
     
-    // ★フォームクリア★
     if (thinkingLogInput) thinkingLogInput.value = '';
     
-    // ★トーストメッセージ★
-    const messageEl = document.createElement('div');
-    messageEl.textContent = '⏹️ 計測停止' + (logEntry ? '（思考ログ保存）' : '');
-    messageEl.style.cssText = `
-      position: fixed; top: 20px; right: 20px; 
-      background: #ffc107; color: #333; padding: 15px 20px;
-      border-radius: 8px; z-index: 9999; font-weight: bold;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 14px;
-    `;
-    document.body.appendChild(messageEl);
-    
-    setTimeout(() => {
-      if (document.body.contains(messageEl)) {
-        document.body.removeChild(messageEl);
-      }
-    }, 3000);
+    showToast('⏹️ 計測停止' + (logEntry ? '（思考ログ保存）' : ''), '#ffc107');
   });
 }
 
-
-const stopBtn = document.getElementById('stopRunningTask');
-if (stopBtn) {
-  stopBtn.addEventListener('click', async () => {
-    console.log('⏹️ 停止ボタンクリック');
-    const thinkingNote = prompt('思考ログ（任意）:');
-    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
-    
-    if (localRunningTask?.pageId && logEntry) await appendThinkingLog(localRunningTask.pageId, logEntry);
-    
-    localRunningTask = null; localStorage.removeItem('runningTask');
-    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-    $runningTaskContainer.classList.add('hidden');
-    
-    alert('計測停止' + (logEntry ? '（思考ログ保存）' : ''));
-  });
+// ★トースト通知関数（共通）★
+function showToast(message, bgColor) {
+  const messageEl = document.createElement('div');
+  messageEl.textContent = message;
+  messageEl.style.cssText = `
+    position: fixed; top: 20px; right: 20px; 
+    background: ${bgColor}; color: ${bgColor === '#ffc107' ? '#333' : 'white'}; 
+    padding: 15px 20px; border-radius: 8px; z-index: 10001; 
+    font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
+    font-size: 14px; max-width: 300px;
+  `;
+  document.body.appendChild(messageEl);
+  
+  setTimeout(() => {
+    if (document.body.contains(messageEl)) {
+      document.body.removeChild(messageEl);
+    }
+  }, 3000);
 }
 
 // =========================================================================
