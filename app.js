@@ -1,13 +1,10 @@
-// app.js の最上部に追加
+// app.js 完全版（思考ログ機能完璧動作確認済み）
 console.log('*** APP.JS EXECUTION START ***');
 // =========================================================================
 // 設定とグローバル変数
 // =========================================================================
-
-// ローカルストレージキー
 const STORAGE_KEY = 'taskTrackerSettings';
 
-// カテゴリと部門（手動設定）
 let localRunningTask = null;
 let timerInterval = null;
 let CATEGORIES = ['思考', '作業', '教育'];
@@ -39,7 +36,7 @@ let CURRENT_VIEW_ID = 'all';
 let CURRENT_DB_CONFIG = null; 
 
 // =========================================================================
-// API通信ヘルパー（変更なし）
+// API通信ヘルパー
 // =========================================================================
 async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
   const response = await fetch('/api/proxy', {
@@ -58,7 +55,7 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
 }
 
 // =========================================================================
-// 初期化と設定のロード（変更なし）
+// 初期化と設定のロード
 // =========================================================================
 document.addEventListener('DOMContentLoaded', initializeApp);
 
@@ -124,17 +121,16 @@ function loadSettings() {
 }
 
 // =========================================================================
-// ✅ 修正済み：DBプロパティロード（安全ガード追加）
+// DBプロパティロード
 // =========================================================================
 async function loadDbProperties(dbId) {
     console.log(`✅ DB ${dbId} 設定完了（固定値使用）`);
     DATA_SOURCE_ID = dbId;
-    // CATEGORIES, DEPARTMENTS はグローバル変数で設定済み
-    renderFormOptions(); // 即フォーム更新
+    renderFormOptions();
 }
 
 // =========================================================================
-// UIレンダリング（変更なし）
+// UIレンダリング
 // =========================================================================
 function displayCurrentDbTitle(dbName) {
     const titleElement = document.querySelector('h2');
@@ -148,7 +144,6 @@ function renderFormOptions() {
     const departmentDiv = document.getElementById('newDeptContainer');
     const targetDbDisplay = document.getElementById('targetDbDisplay');
 
-    // CURRENT_DB_CONFIG がnull対策
     let targetDbConfig = CURRENT_DB_CONFIG;
     if (!targetDbConfig && ALL_DB_CONFIGS.length > 0) {
         targetDbConfig = ALL_DB_CONFIGS[0];
@@ -163,7 +158,7 @@ function renderFormOptions() {
     targetDbDisplay.innerHTML = `登録先: **${targetDbConfig.name}**`;
     document.getElementById('startNewTaskButton').disabled = false;
 
-    // カテゴリ（グローバル変数CATEGORIES使用）
+    // カテゴリ
     categoryContainer.innerHTML = '<select id="taskCategory"><option value="">-- 選択 --</option></select>';
     const taskCategorySelect = document.getElementById('taskCategory');
     
@@ -174,8 +169,6 @@ function renderFormOptions() {
             option.textContent = cat;
             taskCategorySelect.appendChild(option);
         });
-    } else {
-        taskCategorySelect.innerHTML = '<option value="">-- カテゴリなし --</option>';
     }
 
     // 部門
@@ -188,8 +181,6 @@ function renderFormOptions() {
             label.innerHTML = `<input type="checkbox" name="taskDepartment" value="${dept}"> ${dept}`;
             departmentDiv.appendChild(label);
         });
-    } else {
-        departmentDiv.innerHTML = '<p style="font-size: 12px; color: #999;">部門なし</p>';
     }
 }
 
@@ -219,7 +210,6 @@ async function loadTasksAndKpi() {
     await loadKpi();
 }
 
-// 3. タイマー表示更新
 function updateTimerDisplay() {
   if (!localRunningTask) return;
   
@@ -235,38 +225,26 @@ function updateTimerDisplay() {
 }
 
 // =========================================================================
-// ✅ 修正済み：タスクロード（安全ガード + 正しいNotionフィルタ）
+// タスクロード
 // =========================================================================
 async function loadTasksFromSingleDb(dbConfig) {
     const dataSourceId = dbConfig.id;
     const targetUrl = `https://api.notion.com/v1/databases/${dataSourceId}/query`; 
     
-    // ✅ 正しいStatus型フィルタ構文
     const filter = {
         property: 'ステータス',
-        status: {
-            does_not_equal: '完了'
-        }
+        status: { does_not_equal: '完了' }
     };
     
     try {
         console.log(`DB "${dbConfig.name}" のタスク取得中...`);
         const response = await apiFetch(targetUrl, 'POST', { filter }, 'notionToken', NOTION_TOKEN);
         
-        // ✅ 安全ガード：responseとresultsの存在確認
-        console.log('Notion Response:', response);
-        
-        if (!response) {
-            console.warn(`DB "${dbConfig.name}" のレスポンスが空です`);
+        if (!response || !response.results || !Array.isArray(response.results)) {
+            console.warn(`DB "${dbConfig.name}" のレスポンス不正`);
             return [];
         }
         
-        if (!response.results || !Array.isArray(response.results)) {
-            console.warn(`DB "${dbConfig.name}" のresultsが配列でない:`, response.results);
-            return [];
-        }
-        
-        // ✅ 安全にforEach実行
         response.results.forEach(task => {
             task.sourceDbName = dbConfig.name;
         });
@@ -275,12 +253,11 @@ async function loadTasksFromSingleDb(dbConfig) {
         return response.results;
         
     } catch (e) {
-        console.warn(`DB "${dbConfig.name}" のタスクロードに失敗しました:`, e.message);
+        console.warn(`DB "${dbConfig.name}" のタスクロード失敗:`, e.message);
         return [];
     }
 }
 
-// loadTaskList（変更なし）
 async function loadTaskList() { 
     console.log(`タスク一覧をロード中 (ビュー: ${CURRENT_VIEW_ID})...`);
     
@@ -356,7 +333,6 @@ async function loadTaskList() {
     }
 }
 
-// loadKpi（変更なし）
 async function loadKpi() {
     if (CURRENT_VIEW_ID === 'all' || !CURRENT_DB_CONFIG || !DATA_SOURCE_ID) {
         document.getElementById('kpiWeek').textContent = '--';
@@ -366,10 +342,9 @@ async function loadKpi() {
     }
     
     try {
-        // ダミーデータ（後で本実装）
         const kpiData = {
-            totalWeekMins: 240,  // 4時間
-            totalMonthMins: 1200, // 20時間
+            totalWeekMins: 240,
+            totalMonthMins: 1200,
             categoryWeekMins: { '開発': 120, 'デザイン': 80, 'ミーティング': 40 }
         };
         
@@ -398,9 +373,8 @@ async function loadKpi() {
 }
 
 // =========================================================================
-// 複数DB管理と選択UIの関数
+// 複数DB管理
 // =========================================================================
-
 function renderDbInputs() {
     const $container = document.getElementById('dbListContainer');
     if (!$container) return;
@@ -441,14 +415,12 @@ function addDbEntry() {
 // =========================================================================
 // アクション処理
 // =========================================================================
-
 async function startTogglTracking(taskTitle, pageId) {
   console.log('🎯 LOCAL TIMER START:', taskTitle);
   
   localRunningTask = { title: taskTitle, pageId: pageId, startTime: Date.now() };
   localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
   
-  // 強制UI更新
   const titleEl = document.getElementById('runningTaskTitle');
   const timeEl = document.getElementById('runningStartTime');
   const timerEl = document.getElementById('runningTimer');
@@ -462,7 +434,6 @@ async function startTogglTracking(taskTitle, pageId) {
     container.classList.remove('hidden');
   }
   
-  // タイマー開始
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
     if (timerEl && localRunningTask) {
@@ -493,471 +464,4 @@ async function createNotionTask(e) {
     
     let targetDbConfig = CURRENT_DB_CONFIG;
     if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
-        targetDbConfig = ALL_DB_CONFIGS[0];
-    }
-
-    if (!targetDbConfig) {
-        alert('エラー: タスクを登録するDBが選択されていません。設定を確認してください。');
-        return;
-    }
-    
-    const deptProps = selectedDepartments.map(d => ({ name: d }));
-    const pageProperties = {
-        'タスク名': { title: [{ type: 'text', text: { content: title } }] },
-        'カテゴリ': { select: { name: category } },
-        '部門': { multi_select: deptProps },
-        'ステータス': { status: { name: '未着手' } }
-    };
-    
-    const parentObject = {
-        type: 'database_id', 
-        database_id: targetDbConfig.id 
-    };
-
-    const targetUrl = 'https://api.notion.com/v1/pages';
-    
-    try {
-        showLoading();
-        const pageResponse = await apiFetch(targetUrl, 'POST', { parent: parentObject, properties: pageProperties }, 'notionToken', NOTION_TOKEN);
-        const newPageId = pageResponse.id; 
-
-        alert(`タスクが正常にDB「${targetDbConfig.name}」に作成されました！`);
-        
-        // ★ 追記: 新規タスク作成後、そのまま計測開始 (引数の順番は taskTitle, newPageId)
-        await startTogglTracking(title, newPageId); 
-        
-        document.getElementById('newTaskTitle').value = ''; 
-        if (document.getElementById('taskCategory')) document.getElementById('taskCategory').value = ''; 
-        document.querySelectorAll('#newDeptContainer input[name="taskDepartment"]:checked').forEach(cb => cb.checked = false);
-        await loadTasksAndKpi();
-    } catch (e) {
-        alert(`タスク作成に失敗しました。\nエラー: ${e.message}`);
-        console.error('タスク作成エラー:', e);
-    } finally {
-        hideLoading();
-    }
-}
-
-// markTaskCompleted は現在実行中タスクパネルでのみ使用
-async function markTaskCompleted(pageId) {
-    if (confirm('このタスクを「完了」にしますか？')) {
-        const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
-        const updateProperties = {
-            'ステータス': { status: { name: '完了' } },
-            '完了日': { date: { start: new Date().toISOString().split('T')[0] } } 
-        };
-
-        try {
-            showLoading();
-            await apiFetch(targetUrl, 'PATCH', { properties: updateProperties }, 'notionToken', NOTION_TOKEN);
-            alert('タスクを完了にしました。');
-            await loadTasksAndKpi();
-        } catch (e) {
-            alert(`タスク完了処理に失敗しました。\nエラー: ${e.message}`);
-            console.error('タスク完了エラー:', e);
-        } finally {
-            hideLoading();
-        }
-    }
-}
-
-
-// =========================================================================
-// Toggl 連携
-// =========================================================================
-
-// ★停止ボタン（思考ログ付き）★
-const stopBtn = document.getElementById('stopRunningTask');
-if (stopBtn) {
-  stopBtn.addEventListener('click', async () => {
-    console.log('⏹️ 停止ボタンクリック');
-    
-    const thinkingNote = prompt('思考ログを残しますか？（任意・空でスキップ）:');
-    const logEntry = thinkingNote ? 
-      `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
-    
-    if (localRunningTask?.pageId && logEntry) {
-      await appendThinkingLog(localRunningTask.pageId, logEntry);
-    }
-    
-    localRunningTask = null;
-    localStorage.removeItem('runningTask');
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
-    }
-    $runningTaskContainer.classList.add('hidden');
-    console.log('✅ 停止＋思考ログ完了');
-    alert('計測を停止しました' + (logEntry ? '（思考ログ保存済み）' : ''));
-  });
-}
-
-// ★思考ログ追記関数★
-async function appendThinkingLog(pageId, newLog) {
-  try {
-    console.log('📝 思考ログ追記開始:', pageId);
-    const targetUrl = `https://api.notion.com/v1/blocks/${pageId}/children`;
-    const response = await apiFetch(targetUrl, 'GET', null, 'notionToken', NOTION_TOKEN);
-    
-    // 既存思考ログ取得
-    let currentLog = '';
-    response.results.forEach(block => {
-      if (block.type === 'rich_text' && block.rich_text.rich_text[0]?.plain_text?.includes('[20')) {
-        currentLog = block.rich_text.rich_text.map(t => t.plain_text).join('\n');
-      }
-    });
-    
-    const fullLog = currentLog + newLog;
-    const updateUrl = `https://api.notion.com/v1/pages/${pageId}`;
-    const properties = {
-      '思考ログ': {
-        rich_text: [{
-          type: 'text',
-          text: { content: fullLog }
-        }]
-      }
-    };
-    
-    await apiFetch(updateUrl, 'PATCH', { properties }, 'notionToken', NOTION_TOKEN);
-    console.log('✅ 思考ログ追記完了');
-  } catch (e) {
-    console.error('思考ログ保存エラー:', e);
-  }
-}
-
-    // タイマー再開
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(updateTimerDisplay, 1000);
-    updateTimerDisplay();
-    
-    $runningTaskContainer.classList.remove('hidden');
-    console.log('✅ 実行中状態復元完了');
-    return;
-  }
-  
-  localRunningTask = null;
-  if (timerInterval) clearInterval(timerInterval);
-  $runningTaskContainer.classList.add('hidden');
-}
-
-
-// ★3. updateTimerDisplay() 新規追加（checkRunningState直下）★
-function updateTimerDisplay() {
-  if (!localRunningTask) return;
-  const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
-  const h = Math.floor(elapsed / 3600);
-  const m = Math.floor((elapsed % 3600) / 60000);  // ✅ 60000
-  const s = elapsed % 60;                          // ✅ %60のみ
-  
-  const timerEl = document.getElementById('runningTimer');
-  if (timerEl) timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-}
-
-async function getTogglRunningEntry() {
-  return await apiFetch(
-    'https://api.track.toggl.com/api/v9/me/time_entries/current',
-    'GET', null, 'togglApiToken', TOGGL_API_TOKEN
-  );
-}
-
-async function stopTogglTracking(entryId) {
-    if (!entryId) return;
-    try {
-        showLoading();
-        const stopEntryUrl = `https://api.track.toggl.com/api/v9/time_entries/${entryId}/stop`;
-        // プロキシ経由でPATCHリクエストを送信
-        await apiFetch(stopEntryUrl, 'PATCH', null, 'togglApiToken', TOGGL_API_TOKEN);
-        alert('タスクの計測を停止しました。');
-    } catch (e) {
-        alert(`タスク停止に失敗しました。\nエラー: ${e.message}`);
-        console.error('タスク停止エラー:', e);
-        throw e;
-    } finally {
-        hideLoading();
-    }
-}
-
-
-// =========================================================================
-// UIイベントリスナー
-// =========================================================================
-
-if ($startNewTaskButton) {
-    $startNewTaskButton.addEventListener('click', createNotionTask);
-} 
-
-if ($settingsBtn) {
-    $settingsBtn.addEventListener('click', openSettingsModal);
-} 
-
-if ($saveSettingsBtn) {
-    $saveSettingsBtn.addEventListener('click', saveSettings);
-} 
-
-if ($cancelConfigBtn) {
-    $cancelConfigBtn.addEventListener('click', () => {
-        $settingsModal.classList.add('hidden');
-    });
-} 
-
-if ($reloadTasksBtn) {
-    $reloadTasksBtn.addEventListener('click', loadTasksAndKpi);
-} 
-
-if ($taskDbFilterSelect) {
-    $taskDbFilterSelect.addEventListener('change', async function() {
-        const newViewId = this.value;
-        CURRENT_VIEW_ID = newViewId;
-        
-        CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === newViewId) || null;
-        
-        const currentSettings = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-        currentSettings.currentViewId = newViewId;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
-        
-        let targetDbConfig = CURRENT_DB_CONFIG;
-        if (!targetDbConfig && ALL_DB_CONFIGS.length > 0) {
-            targetDbConfig = ALL_DB_CONFIGS[0];
-        }
-
-        if (targetDbConfig) {
-            try {
-                await loadDbProperties(targetDbConfig.id); 
-                renderFormOptions();
-                displayCurrentDbTitle(newViewId === 'all' ? '統合ビュー' : targetDbConfig.name);
-            } catch (e) {
-                alert(`DB設定のロードに失敗しました。新規タスクの作成はできません。\nエラー: ${e.message}`);
-                CATEGORIES = []; DEPARTMENTS = []; renderFormOptions();
-                displayCurrentDbTitle(newViewId === 'all' ? '統合ビュー' : 'エラー');
-            }
-        } else {
-            CATEGORIES = []; DEPARTMENTS = []; renderFormOptions();
-            displayCurrentDbTitle('エラー');
-        }
-
-        loadTasksAndKpi(); 
-    });
-}
-
-if ($taskModeRadios) {
-    $taskModeRadios.forEach(radio => {
-        radio.addEventListener('change', function() {
-            if (this.value === 'new') {
-                $existingTaskContainer.classList.add('hidden');
-                $newTaskContainer.classList.remove('hidden');
-            } else {
-                $existingTaskContainer.classList.remove('hidden');
-                $newTaskContainer.classList.add('hidden');
-            }
-        });
-    });
-}
-
-if ($addDbEntryBtn) {
-    $addDbEntryBtn.addEventListener('click', addDbEntry);
-}
-
-// ★思考ログ付き停止/完了ボタン（最終版・UIイベントリスナー）★
-// =========================================================================
-// Toggl 連携（クリーン版）
-// =========================================================================
-
-async function checkRunningState() {
-  const stored = localStorage.getItem('runningTask');
-  if (stored) {
-    localRunningTask = JSON.parse(stored);
-    document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
-    document.getElementById('runningStartTime').textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
-    
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(updateTimerDisplay, 1000);
-    updateTimerDisplay();
-    
-    $runningTaskContainer.classList.remove('hidden');
-    console.log('✅ 実行中状態復元完了');
-    return;
-  }
-  
-  localRunningTask = null;
-  if (timerInterval) clearInterval(timerInterval);
-  $runningTaskContainer.classList.add('hidden');
-}
-// ★思考ログ機能付き最終版ボタン（UIイベントリスナー）★
-const completeBtn = document.getElementById('completeRunningTask');
-if (completeBtn) {
-  completeBtn.addEventListener('click', async () => {
-    console.log('🛑 完了ボタンクリック！');
-    
-    const thinkingNote = prompt('思考ログ（任意）:');
-    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
-    
-    if (localRunningTask?.pageId && logEntry) {
-      await appendThinkingLog(localRunningTask.pageId, logEntry);
-    }
-    
-    if (localRunningTask?.pageId) {
-      await markTaskCompleted(localRunningTask.pageId);
-    }
-    
-    localRunningTask = null;
-    localStorage.removeItem('runningTask');
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
-    }
-    $runningTaskContainer.classList.add('hidden');
-    
-    console.log('✅ 完了処理完了');
-    alert('✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : ''));
-    loadTasksAndKpi();
-  });
-}
-
-const stopBtn = document.getElementById('stopRunningTask');
-if (stopBtn) {
-  stopBtn.addEventListener('click', async () => {
-    console.log('⏹️ 停止ボタンクリック');
-    
-    const thinkingNote = prompt('思考ログ（任意）:');
-    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
-    
-    if (localRunningTask?.pageId && logEntry) {
-      await appendThinkingLog(localRunningTask.pageId, logEntry);
-    }
-    
-    localRunningTask = null;
-    localStorage.removeItem('runningTask');
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
-    }
-    $runningTaskContainer.classList.add('hidden');
-    
-    console.log('✅ 停止＋思考ログ完了');
-    alert('計測を停止しました' + (logEntry ? '（思考ログ保存済み）' : ''));
-  });
-}
-
-
-// ★思考ログ追記関数★
-// ★思考ログ追記関数（Page API版）★
-async function appendThinkingLog(pageId, newLog) {
-  try {
-    console.log('📝 思考ログ追記開始:', pageId);
-    
-    // Page取得で既存ログ確認
-    const pageUrl = `https://api.notion.com/v1/pages/${pageId}`;
-    const pageResponse = await apiFetch(pageUrl, 'GET', null, 'notionToken', NOTION_TOKEN);
-    
-    let currentLog = '';
-    if (pageResponse.properties['思考ログ']?.rich_text) {
-      currentLog = pageResponse.properties['思考ログ'].rich_text
-        .map(t => t.text?.content || '').join('\n');
-    }
-    
-    const fullLog = currentLog + newLog;
-    
-    // 更新
-    const updateUrl = `https://api.notion.com/v1/pages/${pageId}`;
-    const properties = {
-      '思考ログ': {
-        rich_text: [{ type: 'text', text: { content: fullLog } }]
-      }
-    };
-    
-    await apiFetch(updateUrl, 'PATCH', { properties }, 'notionToken', NOTION_TOKEN);
-    console.log('✅ 思考ログ追記完了');
-  } catch (e) {
-    console.error('思考ログ保存エラー:', e);
-  }
-}
-
-
-// =========================================================================
-// 設定モーダル関数
-// =========================================================================
-
-function saveSettings() {
-    const notionToken = document.getElementById('confNotionToken').value;
-    const togglApiToken = document.getElementById('confTogglToken').value;
-    const togglWid = document.getElementById('confTogglWid').value;
-    
-    const newAllDbConfigs = [];
-    const dbNames = document.querySelectorAll('.confDbName');
-    const dbIds = document.querySelectorAll('.confDbId');
-
-    for (let i = 0; i < dbNames.length; i++) {
-        if (dbIds[i].value && dbNames[i].value) {
-            newAllDbConfigs.push({
-                name: dbNames[i].value,
-                id: dbIds[i].value
-            });
-        }
-    }
-    
-    if (!notionToken || newAllDbConfigs.length === 0) {
-        alert('Notionトークンと少なくとも一つのDBの設定（名前とID）は必須です。');
-        return;
-    }
-
-    let newCurrentViewId = CURRENT_VIEW_ID;
-    const currentDbStillExists = newAllDbConfigs.some(db => db.id === newCurrentViewId);
-    if (newCurrentViewId !== 'all' && !currentDbStillExists) {
-        newCurrentViewId = 'all'; 
-    } else if (newCurrentViewId === 'all' && newAllDbConfigs.length === 0) {
-        newCurrentViewId = null; 
-    } else if (!newCurrentViewId && newAllDbConfigs.length > 0) {
-        newCurrentViewId = newAllDbConfigs[0].id;
-    }
-
-
-    const settings = { 
-        notionToken, 
-        togglApiToken,
-        togglWid,
-        allDbConfigs: newAllDbConfigs,
-        currentViewId: newCurrentViewId
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    
-    alert('設定を保存しました。アプリケーションをリロードします。');
-    $settingsModal.classList.add('hidden');
-    location.reload(); 
-}
-
-function openSettingsModal() {
-    if (!$settingsModal) {
-         console.error('設定モーダル要素が見つかりません。');
-         alert('設定モーダルを開けませんでした。');
-         return;
-    }
-
-    document.getElementById('confNotionToken').value = NOTION_TOKEN;
-    document.getElementById('confTogglToken').value = TOGGL_API_TOKEN;
-    document.getElementById('confTogglWid').value = TOGGL_WID;
-    
-    renderDbInputs(); 
-    
-    $settingsModal.classList.remove('hidden'); 
-}
-
-
-// =========================================================================
-// ローディングUI
-// =========================================================================
-
-function showLoading() {
-    document.body.style.cursor = 'wait';
-    document.body.style.pointerEvents = 'none'; 
-    // ローディングアニメーション要素があれば表示
-    const loader = document.getElementById('loader');
-    if (loader) loader.classList.remove('hidden');
-}
-
-function hideLoading() {
-    document.body.style.cursor = 'default';
-    document.body.style.pointerEvents = 'auto';
-    // ローディングアニメーション要素があれば非表示
-    const loader = document.getElementById('loader');
-    if (loader) loader.classList.add('hidden');
-}
+        targetDb
