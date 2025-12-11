@@ -1,7 +1,7 @@
-// app.js 完全版（思考ログ機能完璧動作確認済み）
-console.log('*** APP.JS EXECUTION START ***');
+console.log('*** APP.JS (設定モーダル削除版) START ***');
+
 // =========================================================================
-// 設定とグローバル変数（DOM参照を遅延化）
+// 設定とグローバル変数（簡素化）
 // =========================================================================
 const STORAGE_KEY = 'taskTrackerSettings';
 
@@ -10,19 +10,14 @@ let timerInterval = null;
 let CATEGORIES = ['思考', '作業', '教育'];
 let DEPARTMENTS = ['CS', 'デザイン', '人事', '広告', '採用', '改善', '物流', '秘書', '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo'];
 
-// DOM要素 → 初期化関数内で取得（null回避）
-let $settingsModal, $taskList, $runningTaskContainer, $settingsBtn, $saveSettingsBtn;
-let $cancelConfigBtn, $startNewTaskButton, $reloadTasksBtn, $taskDbFilterSelect;
-let $existingTaskContainer, $newTaskContainer, $taskModeRadios, $addDbEntryBtn, $loader;
+// DOM要素
+let $taskList, $runningTaskContainer, $startNewTaskButton, $reloadTasksBtn, $taskDbFilterSelect, $loader;
 
-// グローバル変数の定義
+// グローバル設定（LocalStorage直読み）
 let NOTION_TOKEN = '';
-let TOGGL_API_TOKEN = '';
-let DATA_SOURCE_ID = ''; 
-let TOGGL_WID = ''; 
-let ALL_DB_CONFIGS = []; 
-let CURRENT_VIEW_ID = 'all'; 
-let CURRENT_DB_CONFIG = null; 
+let ALL_DB_CONFIGS = [];
+let CURRENT_VIEW_ID = 'all';
+let CURRENT_DB_CONFIG = null;
 
 // =========================================================================
 // API通信ヘルパー
@@ -44,220 +39,161 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
 }
 
 // =========================================================================
-// 初期化と設定のロード（完全版）
+// 初期化（設定モーダル削除版）
 // =========================================================================
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 async function initializeApp() {
-    console.log('アプリケーションを初期化中...');
+    console.log('アプリケーション初期化中...');
     
-    // ✅ 全DOM要素取得（これがないと$taskListがundefined）
-    $settingsModal = document.getElementById('settingsView');
+    // DOM要素取得
     $taskList = document.getElementById('taskList');
     $runningTaskContainer = document.getElementById('runningTaskContainer');
-    $settingsBtn = document.getElementById('toggleSettings');
-    $saveSettingsBtn = document.getElementById('saveConfig');
-    $cancelConfigBtn = document.getElementById('cancelConfig');
     $startNewTaskButton = document.getElementById('startNewTaskButton');
     $reloadTasksBtn = document.getElementById('reloadTasks');
     $taskDbFilterSelect = document.getElementById('taskDbFilter');
-    $existingTaskContainer = document.getElementById('existingTaskContainer');
-    $newTaskContainer = document.getElementById('newTaskContainer');
-    $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
-    $addDbEntryBtn = document.getElementById('addDbEntry');
     $loader = document.getElementById('loader');
     
-    if (!$settingsModal || !$taskList) {
-        console.error('FATAL: 必要なDOM要素が見つかりません。');
-        alert('アプリの読み込みに失敗しました。');
-        return; 
-    }
-
-    showLoading(); 
-    loadSettings(); 
-
-    if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
-        console.log('設定データが存在しないため、設定モーダルを開きます。');
-        hideLoading(); 
-        openSettingsModal();
+    if (!$taskList) {
+        console.error('FATAL: taskListが見つかりません');
         return;
-    } 
-
-    renderDbFilterOptions(); 
-    
-    let initialDbConfig = CURRENT_DB_CONFIG;
-    if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
-        initialDbConfig = ALL_DB_CONFIGS[0];
     }
 
-    if (initialDbConfig) {
-        try {
-            await loadDbProperties(initialDbConfig.id); 
-            CURRENT_DB_CONFIG = initialDbConfig;
-        } catch (error) {
-            console.warn('初期DBプロパティロード失敗:', error);
-        }
+    // LocalStorageから設定読み込み
+    loadSettings();
+    
+    // 設定がない場合は手動設定促し
+    if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
+        console.log('⚠️ 設定が必要です。LocalStorageに以下を設定:');
+        console.log('localStorage.setItem("taskTrackerSettings", JSON.stringify({');
+        console.log('  notionToken: "your_token",');
+        console.log('  allDbConfigs: [{name: "DB名", id: "32桁DBID"}]'));
+        console.log('}));');
+        $taskList.innerHTML = '<li style="color:red;">設定が必要です。F12→Consoleで設定コマンド実行</li>';
+        return;
     }
     
-    displayCurrentDbTitle(CURRENT_VIEW_ID === 'all' ? '統合ビュー' : (CURRENT_DB_CONFIG ? CURRENT_DB_CONFIG.name : 'エラー'));
-    renderFormOptions(); 
-
-    try {
-        await checkRunningState(); 
-        await loadTasksAndKpi(); 
-    } catch (error) {
-        console.error('初期化エラー:', error);
-        alert(`初期化に失敗しました。エラー: ${error.message || '不明なエラー'}`);
-    }
-
-    hideLoading();
+    renderDbFilterOptions();
+    renderFormOptions();
+    
+    await checkRunningState();
+    await loadTasksAndKpi();
 }
 
 function loadSettings() {
-    const savedSettings = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (savedSettings) {
-        NOTION_TOKEN = savedSettings.notionToken || '';
-        TOGGL_API_TOKEN = savedSettings.togglApiToken || '';
-        TOGGL_WID = savedSettings.togglWid || '';
-        ALL_DB_CONFIGS = savedSettings.allDbConfigs || [];
-        CURRENT_VIEW_ID = savedSettings.currentViewId || 'all';
-        CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === CURRENT_VIEW_ID) || null;
+    try {
+        const savedSettings = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (savedSettings) {
+            NOTION_TOKEN = savedSettings.notionToken || '';
+            ALL_DB_CONFIGS = savedSettings.allDbConfigs || [];
+            CURRENT_VIEW_ID = savedSettings.currentViewId || 'all';
+            CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === CURRENT_VIEW_ID) || null;
+        }
+    } catch(e) {
+        console.error('設定読み込みエラー:', e);
     }
 }
 
 // =========================================================================
-// DBプロパティロード & UIレンダリング
+// UIレンダリング（簡素化）
 // =========================================================================
-async function loadDbProperties(dbId) {
-    console.log(`✅ DB ${dbId} 設定完了（固定値使用）`);
-    DATA_SOURCE_ID = dbId;
-    renderFormOptions();
-}
-
-function displayCurrentDbTitle(dbName) {
-    const titleElement = document.querySelector('h2');
-    if (titleElement) {
-        titleElement.textContent = `Notion Toggl Timer - [${dbName}]`;
-    }
-}
-
 function renderFormOptions() {
     const categoryContainer = document.getElementById('newCatContainer');
     const departmentDiv = document.getElementById('newDeptContainer');
     const targetDbDisplay = document.getElementById('targetDbDisplay');
 
-    let targetDbConfig = CURRENT_DB_CONFIG;
-    if (!targetDbConfig && ALL_DB_CONFIGS.length > 0) {
-        targetDbConfig = ALL_DB_CONFIGS[0];
-    }
-
+    let targetDbConfig = CURRENT_DB_CONFIG || ALL_DB_CONFIGS[0];
+    
     if (!targetDbConfig) {
-        targetDbDisplay.innerHTML = '登録先: **DB設定を確認してください**';
-        document.getElementById('startNewTaskButton').disabled = true;
+        targetDbDisplay.innerHTML = '登録先: **設定確認**';
+        if ($startNewTaskButton) $startNewTaskButton.disabled = true;
         return;
     }
 
     targetDbDisplay.innerHTML = `登録先: **${targetDbConfig.name}**`;
-    document.getElementById('startNewTaskButton').disabled = false;
+    if ($startNewTaskButton) $startNewTaskButton.disabled = false;
 
     // カテゴリ
     categoryContainer.innerHTML = '<select id="taskCategory"><option value="">-- 選択 --</option></select>';
     const taskCategorySelect = document.getElementById('taskCategory');
-    
-    if (CATEGORIES && CATEGORIES.length > 0) {
-        CATEGORIES.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat;
-            option.textContent = cat;
-            taskCategorySelect.appendChild(option);
-        });
-    }
+    CATEGORIES.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        taskCategorySelect.appendChild(option);
+    });
 
     // 部門
     departmentDiv.innerHTML = '';
-    if (DEPARTMENTS && DEPARTMENTS.length > 0) {
-        departmentDiv.classList.add('dept-grid');
-        DEPARTMENTS.forEach(dept => {
-            const label = document.createElement('label');
-            label.className = 'department-label';
-            label.innerHTML = `<input type="checkbox" name="taskDepartment" value="${dept}"> ${dept}`;
-            departmentDiv.appendChild(label);
-        });
-    }
+    departmentDiv.classList.add('dept-grid');
+    DEPARTMENTS.forEach(dept => {
+        const label = document.createElement('label');
+        label.className = 'department-label';
+        label.innerHTML = `<input type="checkbox" name="taskDepartment" value="${dept}"> ${dept}`;
+        departmentDiv.appendChild(label);
+    });
 }
 
 function renderDbFilterOptions() {
     const $filterSelect = document.getElementById('taskDbFilter');
     if (!$filterSelect) return;
 
-    $filterSelect.innerHTML = '';
-    
-    let optionAll = document.createElement('option');
-    optionAll.value = 'all';
-    optionAll.textContent = '全てのタスク';
-    $filterSelect.appendChild(optionAll);
-
+    $filterSelect.innerHTML = '<option value="all">全てのタスク</option>';
     ALL_DB_CONFIGS.forEach(db => {
         const option = document.createElement('option');
         option.value = db.id;
         option.textContent = `${db.name} (${db.id.substring(0, 8)}...)`;
         $filterSelect.appendChild(option);
     });
-
     $filterSelect.value = CURRENT_VIEW_ID;
 }
 
-async function loadTasksAndKpi() {
-    await loadTaskList();
-    await loadKpi();
-}
-
+// =========================================================================
+// タイマー・タスク処理（変更なし）
+// =========================================================================
 function updateTimerDisplay() {
   if (!localRunningTask) return;
-  
   const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
   const h = Math.floor(elapsed / 3600);
   const m = Math.floor((elapsed % 3600) / 60000);
   const s = elapsed % 60;
-  
   const timerEl = document.getElementById('runningTimer');
-  if (timerEl) {
-    timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-  }
+  if (timerEl) timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
 }
 
-// =========================================================================
-// タスクロード
-// =========================================================================
-async function loadTasksFromSingleDb(dbConfig) {
-    const dataSourceId = dbConfig.id;
-    const targetUrl = `https://api.notion.com/v1/databases/${dataSourceId}/query`; 
+async function startTogglTracking(taskTitle, pageId) {
+  console.log('🎯 TIMER START:', taskTitle);
+  localRunningTask = { title: taskTitle, pageId: pageId, startTime: Date.now() };
+  localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
+  
+  document.getElementById('runningTaskTitle').textContent = taskTitle;
+  document.getElementById('runningStartTime').textContent = new Date().toLocaleTimeString();
+  document.getElementById('runningTimer').textContent = '00:00:00';
+  document.getElementById('runningTaskContainer').classList.remove('hidden');
+  
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(updateTimerDisplay, 1000);
+}
+
+// ★思考ログ機能・トースト（変更なし）★
+const completeBtn = document.getElementById('completeRunningTask');
+if (completeBtn) {
+  completeBtn.addEventListener('click', async () => {
+    const thinkingLogInput = document.getElementById('thinkingLogInput');
+    const thinkingNote = thinkingLogInput?.value.trim();
+    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
     
-    const filter = {
-        property: 'ステータス',
-        status: { does_not_equal: '完了' }
-    };
+    if (localRunningTask?.pageId && logEntry) await appendThinkingLog(localRunningTask.pageId, logEntry);
+    if (localRunningTask?.pageId) await markTaskCompleted(localRunningTask.pageId);
     
-    try {
-        console.log(`DB "${dbConfig.name}" のタスク取得中...`);
-        const response = await apiFetch(targetUrl, 'POST', { filter }, 'notionToken', NOTION_TOKEN);
-        
-        if (!response || !response.results || !Array.isArray(response.results)) {
-            console.warn(`DB "${dbConfig.name}" のレスポンス不正`);
-            return [];
-        }
-        
-        response.results.forEach(task => {
-            task.sourceDbName = dbConfig.name;
-        });
-        
-        console.log(`DB "${dbConfig.name}" から ${response.results.length} 件取得`);
-        return response.results;
-        
-    } catch (e) {
-        console.warn(`DB "${dbConfig.name}" のタスクロード失敗:`, e.message);
-        return [];
-    }
+    localRunningTask = null; localStorage.removeItem('runningTask');
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    document.getElementById('runningTaskContainer').classList.add('hidden');
+    if (thinkingLogInput) thinkingLogInput.value = '';
+    
+    showToast('✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : ''), '#28a745');
+    loadTasksAndKpi();
+  });
 }
 
 async function loadTaskList() { 
