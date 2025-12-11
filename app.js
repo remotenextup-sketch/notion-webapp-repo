@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadSettings();
     renderFormOptions();
     renderDbFilterOptions();
-    initTabs(); // 👈 タブ初期化
+    initTabs();
     
     await checkRunningState();
     await loadTasksAndKpi();
@@ -100,45 +100,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     if ($taskDbFilterSelect) $taskDbFilterSelect.addEventListener('change', handleDbFilterChange);
     setupThinkingLogButtons();
     
-    // 👇 設定ボタン（これ1行追加！）
+    // 👇 UI設定モーダル（シンプル版）
     const openSettingsBtn = document.getElementById('openSettings');
-    if (openSettingsBtn) {
-      openSettingsBtn.addEventListener('click', () => {
-        console.clear();
-        console.log('%c🚀 Notion Toggl設定', 'font-size: 20px; color: #28a745; font-weight: bold;');
-        console.log('現在の設定:', JSON.parse(localStorage.getItem('taskTrackerSettings') || '{}'));
-        console.log('');
-        console.log('設定例:', `localStorage.setItem('taskTrackerSettings', JSON.stringify({notionToken: 'secret_xxxx', allDbConfigs: [{id: 'DB_ID', name: 'メイン'}], currentViewId: 'all'})); location.reload();`);
-      });
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettingsBtn = document.getElementById('closeSettings');
+    const saveSettingsBtn = document.getElementById('saveSettings');
+    
+    if (openSettingsBtn && settingsModal) {
+        openSettingsBtn.onclick = () => {
+            const settings = JSON.parse(localStorage.getItem('taskTrackerSettings') || '{}');
+            document.getElementById('notionTokenInput').value = settings.notionToken || '';
+            settingsModal.classList.remove('hidden');
+        };
     }
-    const openSettingsBtn = document.getElementById('openSettings');
-const settingsModal = document.getElementById('settingsModal');
-const closeSettingsBtn = document.getElementById('closeSettings');
-const saveSettingsBtn = document.getElementById('saveSettings');
-const resetSettingsBtn = document.getElementById('resetSettings');
-const addDbBtn = document.getElementById('addDbBtn');
-
-if (openSettingsBtn) openSettingsBtn.onclick = () => settingsModal.classList.remove('hidden');
-if (closeSettingsBtn) closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
-if (settingsModal) settingsModal.onclick = (e) => { if (e.target === settingsModal) settingsModal.classList.add('hidden'); };
-
-if (saveSettingsBtn) {
-  saveSettingsBtn.onclick = () => {
-    const token = document.getElementById('notionTokenInput').value;
-    const dbs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').allDbConfigs || [];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      notionToken: token,
-      allDbConfigs: dbs,
-      currentViewId: 'all'
-    }));
-    settingsModal.classList.add('hidden');
-    loadSettings();
-    renderFormOptions();
-    renderDbFilterOptions();
-    loadTasksAndKpi();
-    showToast('✅ 設定保存！', '#28a745');
-  };
-}
+    
+    if (closeSettingsBtn && settingsModal) closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
+    if (settingsModal) settingsModal.onclick = (e) => { if (e.target === settingsModal) settingsModal.classList.add('hidden'); };
+    
+    if (saveSettingsBtn) {
+        saveSettingsBtn.onclick = () => {
+            const token = document.getElementById('notionTokenInput').value.trim();
+            if (!token) return showToast('トークンを入力してください', '#ffc107');
+            
+            const settings = JSON.parse(localStorage.getItem('taskTrackerSettings') || '{}');
+            settings.notionToken = token;
+            localStorage.setItem('taskTrackerSettings', JSON.stringify(settings));
+            
+            settingsModal.classList.add('hidden');
+            loadSettings();
+            renderFormOptions();
+            renderDbFilterOptions();
+            loadTasksAndKpi();
+            showToast('✅ 設定保存完了！', '#28a745');
+        };
+    }
+    
+    console.log('✅ 初期化完了（UI設定完璧版）');
+});
 
 if (addDbBtn) {
   addDbBtn.onclick = () => {
