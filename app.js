@@ -1,5 +1,5 @@
 // =========================================================
-// app.js (プロパティ名確定・エラー修正済み最終完全版)
+// app.js (カテゴリ Select 修正版)
 // =========================================================
 
 // =========================================================
@@ -400,17 +400,18 @@ async function getDbProperties(dbId) {
     for (const name in props) {
         const prop = props[name];
         
-        // 1. タイトルプロパティ (タスク名)
-        if (prop.type === 'title' && name === 'タイトル') {
+        // 1. タイトルプロパティ (タスク名) - プロパティ名に関わらずタイプで特定
+        if (prop.type === 'title') {
             mappedProps.title = { name, type: 'title' };
         } 
-        // 2. ステータスプロパティ
+        // 2. ステータスプロパティ - 名前が「ステータス」で、タイプがselect
         else if (prop.type === 'select' && name === 'ステータス') {
             mappedProps.status = { name, type: 'select', selectOptions: prop.select.options };
         }
-        // 3. カテゴリプロパティ (マルチセレクト)
-        else if (prop.type === 'multi_select' && name === 'カテゴリ') {
-            mappedProps.category = { name, type: 'multi_select', options: prop.multi_select.options };
+        // 3. カテゴリプロパティ (Select) - 名前が「カテゴリ」で、タイプがselect
+        else if (prop.type === 'select' && name === 'カテゴリ') {
+            // ★修正: カテゴリを Select としてマッピング
+            mappedProps.category = { name, type: 'select', selectOptions: prop.select.options };
         }
         // 4. その他のプロパティ (部門/ログなど - 前回までのロジックを維持)
         else if ((prop.type === 'multi_select' || prop.type === 'people') && (name.includes('部門') || name.includes('Department') || name.includes('担当'))) {
@@ -441,7 +442,8 @@ async function loadTasks() {
 
     const props = await getDbProperties(dbId);
     if (!props || !props.title) {
-        dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--danger-color);">データベースのプロパティ（タイトル）が見つかりません。トークンと権限を確認してください。</p></li>';
+        // Notionのタイトルプロパティが特定できなかった場合
+        dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--danger-color);">エラー: Notionのタイトルプロパティが特定できませんでした。データベースの権限と構造を確認してください。</p></li>';
         return;
     }
     
@@ -499,9 +501,11 @@ async function loadTasks() {
             ? titleProp.title.map(t => t.plain_text).join('')
             : 'タイトルなし';
 
-        // 2. カテゴリ (Multi-select)
-        const categoryProp = getPagePropValue('category', { multi_select: [] });
-        const categories = categoryProp.multi_select.map(s => s.name);
+        // 2. カテゴリ (Select)
+        // ★修正: categoryPropを Select として取得
+        const categoryProp = getPagePropValue('category', { select: null });
+        // Selectプロパティなので、単一の値を取得し、配列に格納する
+        const categories = categoryProp.select ? [categoryProp.select.name] : [];
 
         // 3. ステータス (Select)
         const statusPropValue = getPagePropValue('status', { select: null });
@@ -511,7 +515,7 @@ async function loadTasks() {
             id: page.id,
             dbId: dbId,
             title: title,
-            category: categories,
+            category: categories, // Selectでも表示のため配列のまま使用
             status: status
         };
     });
@@ -540,7 +544,9 @@ function renderTasks() {
         }
 
         const dbInfo = settings.databases.find(db => db.id === task.dbId) || { name: '不明なDB' };
-        const taskMeta = `DB: ${dbInfo.name} | [${task.category.join('][')}] | ステータス: ${task.status}`;
+        // カテゴリは単一値なので、配列から取り出すか、配列のまま表示する
+        const categoryDisplay = task.category.length > 0 ? task.category[0] : 'なし';
+        const taskMeta = `DB: ${dbInfo.name} | [${categoryDisplay}] | ステータス: ${task.status}`;
 
         li.innerHTML = `
             <span class="task-title">${task.title}</span>
@@ -614,23 +620,22 @@ async function initNewTaskForm() {
         return;
     }
 
-    // 1. カテゴリ (マルチセレクト) のレンダリング
+    // 1. カテゴリ (Select) のレンダリング
     clearElement(dom.newCatContainer);
-    if (props.category && props.category.options) {
+    if (props.category && props.category.selectOptions) {
         const catGroup = document.createElement('div');
         catGroup.className = 'form-group';
-        catGroup.innerHTML = '<label style="font-size: 14px; font-weight: 500;">カテゴリ</label><div class="select-group" id="newCatOptions"></div>';
+        catGroup.innerHTML = '<label for="newCatSelect" style="font-size: 14px; font-weight: 500;">カテゴリ</label><select id="newCatSelect" class="input-field" style="width: 100%;"></select>';
         
-        const optionsDiv = catGroup.querySelector('#newCatOptions');
-        props.category.options.forEach(option => {
-            const id = `new-cat-${option.id}`;
-            const colorClass = option.color === 'default' ? '#ccc' : `var(--${option.color})`;
-            optionsDiv.innerHTML += `
-                <input type="checkbox" id="${id}" name="new-task-cat" value="${option.id}" style="display: none;">
-                <label for="${id}" class="select-chip" style="border: 1px solid ${colorClass}; color: ${colorClass}; background: #fff; display: inline-block; margin: 5px; cursor: pointer;">
-                    <span style="padding: 5px 10px; display: block;">${option.name}</span>
-                </label>
-            `;
+        const selectElement = catGroup.querySelector('#newCatSelect');
+        // デフォルトオプション
+        selectElement.innerHTML = '<option value="">--- 選択してください ---</option>';
+
+        props.category.selectOptions.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option.id;
+            optionElement.textContent = option.name;
+            selectElement.appendChild(optionElement);
         });
         dom.newCatContainer.appendChild(catGroup);
     }
@@ -676,14 +681,13 @@ async function createNewTask(e) {
         return;
     }
 
-    // 2. カテゴリ (Multi-select)
-    const selectedCats = Array.from(document.querySelectorAll('input[name="new-task-cat"]:checked'))
-                                .map(input => ({ id: input.value }));
-    if (props.category) {
-        properties[props.category.name] = { multi_select: selectedCats };
+    // 2. カテゴリ (Select)
+    const selectedCatId = document.getElementById('newCatSelect') ? document.getElementById('newCatSelect').value : null;
+    if (props.category && selectedCatId) {
+        properties[props.category.name] = { select: { id: selectedCatId } };
     }
 
-    // 3. 部門/担当者
+    // 3. 部門/担当者 (マルチセレクトを想定)
     if (props.department) {
         if (props.department.type === 'multi_select') {
             const selectedDepts = Array.from(document.querySelectorAll('input[name="new-task-dept"]:checked'))
