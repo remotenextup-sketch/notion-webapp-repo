@@ -1,5 +1,5 @@
 // =========================================================
-// app.js (人間ユーザーID登録と利用 修正版)
+// app.js (担当者エラー・マルチセレクトバグ 最終修正版)
 // =========================================================
 
 // =========================================================
@@ -171,7 +171,7 @@ async function fetchNotionUser() {
 
 
 // =========================================================
-// 設定管理ロジック
+// 設定管理ロジック (変更なし)
 // =========================================================
 
 function renderDbList() {
@@ -315,7 +315,7 @@ async function stopTask(isCompleted) {
         }
     }
 
-    const logProp = props.logRelation || props.logRichText;
+    const logProp = props.logRichText || props.logRelation;
 
     if (logProp && logProp.type === 'rich_text') {
         await notionApi(`/blocks/${settings.currentRunningTask.id}/children`, 'POST', {
@@ -396,8 +396,6 @@ async function getDbProperties(dbId) {
     return mappedProps;
 }
 
-/** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを修正) */
-/** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを修正) */
 /** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを最終修正) */
 async function loadTasks() {
     const dbId = dom.taskDbFilter.value;
@@ -473,7 +471,7 @@ async function loadTasks() {
         return;
     }
 
-    // 取得したタスクデータを安全にマッピングする (以降、変更なし)
+    // 取得したタスクデータを安全にマッピングする (変更なし)
     availableTasks = response.results.map(page => {
         const getPagePropValue = (propKey, defaultValue) => {
             const prop = props[propKey];
@@ -506,11 +504,20 @@ async function loadTasks() {
     renderTasks();
     calculateKpi();
 }
+
 /** タスクをHTMLにレンダリングする (変更なし) */
 function renderTasks() {
     clearElement(dom.taskList);
     
-    const targetUserId = settings.humanUserId || settings.notionUserId;
+    // ----------------------------------------------------------------
+    // ★修正: フィルターに使用するユーザーIDを決定 (厳密なチェック)
+    let targetUserId = '';
+    if (settings.humanUserId && settings.humanUserId.length >= 32) {
+        targetUserId = settings.humanUserId.replace(/-/g, '');
+    } else if (settings.notionUserId && settings.notionUserId.length >= 32) {
+        targetUserId = settings.notionUserId.replace(/-/g, '');
+    }
+    // ----------------------------------------------------------------
     
     if (availableTasks.length === 0) {
         let filterMessage = '該当するタスクはありません。';
@@ -589,7 +596,7 @@ function calculateKpi() {
 // 新規タスク作成ロジック
 // =========================================================
 
-/** 新規タスクフォームを準備する (部門クリック有効化を追加) */
+/** 新規タスクフォームを準備する */
 async function initNewTaskForm() {
     const dbId = dom.taskDbFilter.value;
     if (!dbId) {
@@ -648,9 +655,11 @@ async function initNewTaskForm() {
         });
         dom.newDeptContainer.appendChild(deptGroup);
 
-        // 部門のクリックイベントリスナー
+        // ★修正: 部門のクリックイベントリスナー - e.preventDefault()を追加し、トグルの確実性を上げる
         document.querySelectorAll('.select-chip').forEach(label => {
             label.addEventListener('click', function(e) {
+                e.preventDefault(); // デフォルト動作を防止
+                
                 const inputId = this.getAttribute('for');
                 const checkbox = document.getElementById(inputId);
                 
@@ -658,19 +667,23 @@ async function initNewTaskForm() {
                     checkbox.checked = !checkbox.checked;
 
                     const color = this.dataset.color === 'default' ? '#ccc' : `var(--${this.dataset.color})`;
+                    
+                    // 視覚的な状態を更新
                     if (checkbox.checked) {
                         this.style.backgroundColor = color;
                         this.style.color = '#fff';
+                        this.style.borderColor = color; 
                     } else {
                         this.style.backgroundColor = '#fff';
                         this.style.color = color;
+                        this.style.borderColor = color; 
                     }
                 }
             });
         });
     }
 
-    // 2-2. 担当者 (People) の表示
+    // 2-2. 担当者 (People) の表示 (変更なし)
     const assigneeProp = props.assignee;
     if (assigneeProp && assigneeProp.type === 'people') {
         const status = settings.humanUserId ? '✅ 割り当て設定済み' : '⚠️ 設定が必要です';
@@ -723,15 +736,27 @@ async function createNewTask(e) {
         properties[deptProp.name] = { multi_select: selectedDepts };
     }
     
+    // ----------------------------------------------------------------
     // ★修正: 4. 担当者 (People) - humanUserIdがあればそれを使って設定
     const assigneeProp = props.assignee;
-    if (assigneeProp && assigneeProp.type === 'people' && settings.humanUserId) {
-        properties[assigneeProp.name] = { people: [{ id: settings.humanUserId }] };
-    } else if (assigneeProp && assigneeProp.type === 'people' && settings.notionUserId) {
-         // humanUserIdがない場合はBot IDで試すが、エラーになる可能性が高い
-         console.warn("Human User IDが設定されていません。Bot IDで担当者割り当てを試みますが、Notion APIの制限により失敗する可能性があります。");
-         // properties[assigneeProp.name] = { people: [{ id: settings.notionUserId }] }; // 今回はHuman IDがない場合は割り当て自体をスキップ
+    let targetUserId = '';
+
+    // humanUserId (手動設定した人間ID) を優先
+    if (settings.humanUserId && settings.humanUserId.length >= 32) {
+        targetUserId = settings.humanUserId.replace(/-/g, '');
     }
+    // humanUserIdがなければ、Bot IDを使用（Bot IDも空でなければ）
+    else if (settings.notionUserId && settings.notionUserId.length >= 32) {
+        targetUserId = settings.notionUserId.replace(/-/g, '');
+    }
+
+    // targetUserIdが有効な32文字のIDである場合のみ、担当者を設定
+    if (assigneeProp && assigneeProp.type === 'people' && targetUserId && targetUserId.length === 32) {
+        properties[assigneeProp.name] = { people: [{ id: targetUserId }] };
+    } else if (assigneeProp && assigneeProp.type === 'people' && !targetUserId) {
+        console.warn("担当者IDが設定されていないため、担当者プロパティはスキップされました。");
+    }
+    // ----------------------------------------------------------------
 
     // 5. ステータス 
     const statusProp = props.status;
