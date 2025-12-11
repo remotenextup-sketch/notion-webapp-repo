@@ -283,6 +283,8 @@ function startTask(task) {
 
 // app.js (修正箇所: stopTask 関数, 303行目付近)
 
+// app.js (stopTask 関数, 303行目付近)
+
 async function stopTask(isCompleted) {
     if (!settings.currentRunningTask || !settings.startTime) return;
 
@@ -296,8 +298,24 @@ async function stopTask(isCompleted) {
     saveSettings(settings);
 
     // ★★★ 修正箇所: ページIDを最優先でクリーンアップし、変数に格納 ★★★
-    const taskId = settings.currentRunningTask.id.replace(/-/g, ''); 
+    // ここでIDが有効でない場合は、以降のAPI呼び出しをスキップする準備をする
+    const rawTaskId = settings.currentRunningTask.id;
+    const taskId = rawTaskId ? rawTaskId.replace(/-/g, '') : null;
     
+    if (!taskId || taskId.length !== 32) {
+        alert('エラー: タスクIDが取得できないか、無効な形式です。タスクの更新をスキップし、計測を停止します。');
+        // 計測停止処理のみ実行し、API呼び出しはスキップ
+        settings.currentRunningTask = null;
+        settings.startTime = null;
+        settings.timerInterval = null;
+        saveSettings(settings);
+        updateRunningTaskDisplay();
+        dom.runningTimer.textContent = '00:00:00';
+        dom.thinkingLogInput.value = '';
+        loadTasks();
+        return;
+    }
+
     const logContent = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')}】\n計測時間: ${formatTime(durationSeconds)}\nメモ: ${memo}`;
     
     const dbId = settings.currentRunningTask.dbId;
@@ -305,12 +323,12 @@ async function stopTask(isCompleted) {
 
     if (!props) {
         alert('エラー: データベースのプロパティ情報が見つかりません。');
-        return;
+        // API呼び出しはスキップし、計測停止処理へ (この時点でtaskIdが有効ならAPIが通るはずだが念のため)
     }
 
     const propertiesToUpdate = {};
     
-    const statusProp = props.status;
+    const statusProp = props ? props.status : null;
     if (statusProp && isCompleted) {
         const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
         if (completedOption) {
@@ -320,7 +338,7 @@ async function stopTask(isCompleted) {
         }
     }
 
-    const logProp = props.logRichText || props.logRelation;
+    const logProp = props ? (props.logRichText || props.logRelation) : null;
 
     if (logProp && logProp.type === 'rich_text') {
         // ★★★ 修正箇所: クリーンアップしたIDを使用 (/blocks/...) ★★★
@@ -344,6 +362,7 @@ async function stopTask(isCompleted) {
         });
     }
 
+    // 最後に計測停止処理
     settings.currentRunningTask = null;
     settings.startTime = null;
     settings.timerInterval = null;
