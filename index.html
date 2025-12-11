@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- ✅ CSP 'unsafe-eval'許可（エラー解消） -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'none';">
     <title>Notion Toggl Timer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -124,11 +126,10 @@
             <h3>➕ 新規タスク作成</h3>
             <div id="targetDbDisplay" style="font-weight: bold; color: #666; margin-bottom: 15px; font-size: 15px; padding: 10px; background: #f0f8ff; border-radius: 8px; border-left: 4px solid #28a745;"></div>
             
-            <!-- ✅ 修正1: button type="button" + form onsubmit="return false" -->
+            <!-- ✅ form submit阻止 -->
             <form id="newTaskForm" onsubmit="return false;">
                 <div style="display: grid; grid-template-columns: 1fr auto; gap: 15px; align-items: end; margin-bottom: 15px;">
                     <input type="text" id="newTaskTitle" placeholder="タスク名を入力（例：楽天商品登録）">
-                    <!-- ✅ 修正2: type="button" でform submit阻止 -->
                     <button type="button" id="startNewTaskButton" class="btn btn-green" disabled>🚀 作成＆開始</button>
                 </div>
                 <div id="newCatContainer" style="margin-bottom: 15px;"></div>
