@@ -567,41 +567,54 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 
 async function checkRunningState() {
-  // ローカルストレージから復元
   const stored = localStorage.getItem('runningTask');
   if (stored) {
     localRunningTask = JSON.parse(stored);
+    
+    // UI更新
     document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
-    document.getElementById('runningStartTime').textContent = 
-      new Date(localRunningTask.startTime).toLocaleTimeString();
+    document.getElementById('runningStartTime').textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
+    
+    // ★完了ボタン強制設定★
+    const completeBtn = document.getElementById('completeRunningTask');
+    if (completeBtn) {
+      completeBtn.textContent = '✅ 完了にして停止';
+      completeBtn.style.display = 'inline-block';
+      
+      // イベントリスナー削除→再設定（重複防止）
+      completeBtn.replaceWith(completeBtn.cloneNode(true));
+      const newCompleteBtn = document.getElementById('completeRunningTask');
+      
+      newCompleteBtn.onclick = async () => {
+        console.log('🛑 完了ボタンクリック');
+        if (localRunningTask?.pageId) {
+          await markTaskCompleted(localRunningTask.pageId);
+        }
+        localRunningTask = null;
+        localStorage.removeItem('runningTask');
+        if (timerInterval) clearInterval(timerInterval);
+        $runningTaskContainer.classList.add('hidden');
+        console.log('✅ タスク完了処理完了');
+        alert('✅ タスク完了');
+        loadTasksAndKpi();
+      };
+    }
     
     // タイマー再開
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(updateTimerDisplay, 1000);
     updateTimerDisplay();
     
-    // 完了ボタン設定
-    const completeBtn = document.getElementById('completeRunningTask');
-    completeBtn.textContent = '✅ 完了';
-    completeBtn.onclick = async () => {
-      await markTaskCompleted(localRunningTask.pageId);
-      localRunningTask = null;
-      localStorage.removeItem('runningTask');
-      if (timerInterval) clearInterval(timerInterval);
-      $runningTaskContainer.classList.add('hidden');
-      loadTasksAndKpi();
-      alert('✅ タスク完了');
-    };
-    
     $runningTaskContainer.classList.remove('hidden');
+    console.log('✅ 実行中状態復元完了');
     return;
   }
   
-  // 計測なし
   localRunningTask = null;
   if (timerInterval) clearInterval(timerInterval);
   $runningTaskContainer.classList.add('hidden');
 }
+
 
 // ★3. updateTimerDisplay() 新規追加（checkRunningState直下）★
 function updateTimerDisplay() {
