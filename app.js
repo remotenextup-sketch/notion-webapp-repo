@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadSettings();
     renderFormOptions();
     renderDbFilterOptions();
-    initTabs(); // 👈 タブ初期化！
+    initTabs(); // 👈 タブ初期化
     
     await checkRunningState();
     await loadTasksAndKpi();
@@ -100,8 +100,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     if ($taskDbFilterSelect) $taskDbFilterSelect.addEventListener('change', handleDbFilterChange);
     setupThinkingLogButtons();
     
-    console.log('✅ 初期化完了（タブ対応版）');
+    // 👇 設定ボタン（これ1行追加！）
+    const openSettingsBtn = document.getElementById('openSettings');
+    if (openSettingsBtn) {
+      openSettingsBtn.addEventListener('click', () => {
+        console.clear();
+        console.log('%c🚀 Notion Toggl設定', 'font-size: 20px; color: #28a745; font-weight: bold;');
+        console.log('現在の設定:', JSON.parse(localStorage.getItem('taskTrackerSettings') || '{}'));
+        console.log('');
+        console.log('設定例:', `localStorage.setItem('taskTrackerSettings', JSON.stringify({notionToken: 'secret_xxxx', allDbConfigs: [{id: 'DB_ID', name: 'メイン'}], currentViewId: 'all'})); location.reload();`);
+      });
+    }
+    
+    console.log('✅ 初期化完了（設定ボタン付き）');
 });
+
 
 function loadSettings() {
     try {
