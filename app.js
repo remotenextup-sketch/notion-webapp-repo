@@ -145,6 +145,10 @@ async function externalApi(tokenKey, baseUrl, endpoint, method = 'GET', body = n
 }
 
 async function notionApi(endpoint, method = 'GET', body = null) {
+    const fullUrl = `https://api.notion.com/v1${endpoint}`;
+
+    // ★★★ 最終チェック: 実際にNotionに送ろうとしているURLをコンソールに出力 ★★★
+    console.log(`[NotionAPI] Calling ${method} ${fullUrl}`);
     return externalApi('notionToken', NOTION_API_BASE, endpoint, method, body);
 }
 
@@ -281,10 +285,6 @@ function startTask(task) {
     }
 }
 
-// app.js (修正箇所: stopTask 関数, 303行目付近)
-
-// app.js (stopTask 関数, 303行目付近)
-
 async function stopTask(isCompleted) {
     if (!settings.currentRunningTask || !settings.startTime) return;
 
@@ -300,7 +300,8 @@ async function stopTask(isCompleted) {
     // ★★★ 修正箇所: ページIDを最優先でクリーンアップし、変数に格納 ★★★
     // ここでIDが有効でない場合は、以降のAPI呼び出しをスキップする準備をする
     const rawTaskId = settings.currentRunningTask.id;
-    const taskId = rawTaskId ? rawTaskId.replace(/-/g, '') : null;
+    // ★修正: trim() で前後の空白を確実に除去
+    const taskId = rawTaskId ? rawTaskId.replace(/-/g, '').trim() : null;
     
     if (!taskId || taskId.length !== 32) {
         alert('エラー: タスクIDが取得できないか、無効な形式です。タスクの更新をスキップし、計測を停止します。');
