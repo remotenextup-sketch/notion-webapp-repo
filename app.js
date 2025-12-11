@@ -1,4 +1,4 @@
-console.log('*** APP.JS (カテゴリラジオボタン完璧版) START ***');
+console.log('*** APP.JS (タブ切り替え + カテゴリラジオ完璧版) START ***');
 
 // =========================================================================
 // グローバル変数
@@ -12,6 +12,7 @@ let DEPARTMENTS = ['CS', 'デザイン', '人事', '広告', '採用', '改善',
 
 // DOM要素
 let $taskList, $runningTaskContainer, $startNewTaskButton, $reloadTasksBtn, $taskDbFilterSelect, $loader;
+let $tabTasks, $tabNew, $sectionTasks, $sectionNew;
 
 // 設定
 let NOTION_TOKEN = '';
@@ -39,6 +40,39 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
 }
 
 // =========================================================================
+// ✅ タブ切り替え処理
+// =========================================================================
+function initTabs() {
+    $tabTasks = document.getElementById('tabTasks');
+    $tabNew = document.getElementById('tabNew');
+    $sectionTasks = document.getElementById('sectionTasks');
+    $sectionNew = document.getElementById('sectionNew');
+
+    if (!$tabTasks || !$tabNew || !$sectionTasks || !$sectionNew) return;
+
+    // 初期状態：タスク一覧表示
+    $sectionTasks.style.display = '';
+    $sectionNew.style.display = 'none';
+    $tabTasks.classList.add('tab-active');
+    $tabNew.classList.remove('tab-active');
+
+    $tabTasks.addEventListener('click', () => {
+        $sectionTasks.style.display = '';
+        $sectionNew.style.display = 'none';
+        $tabTasks.classList.add('tab-active');
+        $tabNew.classList.remove('tab-active');
+    });
+
+    $tabNew.addEventListener('click', () => {
+        $sectionTasks.style.display = 'none';
+        $sectionNew.style.display = '';
+        $tabNew.classList.add('tab-active');
+        $tabTasks.classList.remove('tab-active');
+        renderFormOptions(); // 新規タブ→フォーム再描画
+    });
+}
+
+// =========================================================================
 // 初期化
 // =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -55,6 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadSettings();
     renderFormOptions();
     renderDbFilterOptions();
+    initTabs(); // 👈 タブ初期化！
     
     await checkRunningState();
     await loadTasksAndKpi();
@@ -65,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if ($taskDbFilterSelect) $taskDbFilterSelect.addEventListener('change', handleDbFilterChange);
     setupThinkingLogButtons();
     
-    console.log('✅ 初期化完了');
+    console.log('✅ 初期化完了（タブ対応版）');
 });
 
 function loadSettings() {
@@ -98,7 +133,7 @@ function renderFormOptions() {
         return;
     }
     
-    // ✅ カテゴリ：ラジオボタン！
+    // カテゴリ：ラジオボタン
     if (catContainer) {
         catContainer.innerHTML = `
             <div style="margin-bottom: 15px;">
@@ -157,9 +192,6 @@ function updateTimerDisplay() {
   if (timerEl) timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
 }
 
-// =========================================================================
-// タスクロード
-// =========================================================================
 async function loadTasksFromSingleDb(dbConfig) {
     const dataSourceId = dbConfig.id;
     const targetUrl = `https://api.notion.com/v1/databases/${dataSourceId}/query`; 
@@ -296,23 +328,16 @@ async function loadKpi() {
     }
 }
 
-// =========================================================================
-// ✅ createNotionTask（カテゴリラジオボタン対応！）
-// =========================================================================
 async function createNotionTask(e) {
     e.preventDefault();
     
     try {
         showLoading();
         
-        // ✅ カテゴリ：ラジオボタンから取得
         const categoryRadios = document.querySelector('input[name="taskCategory"]:checked');
         const category = categoryRadios ? categoryRadios.value : '';
-        
-        // 部門：チェックボックスから取得
         const departmentCheckboxes = document.querySelectorAll('input[name="taskDepartment"]:checked');
         const departments = Array.from(departmentCheckboxes).map(cb => cb.value);
-        
         const title = document.getElementById('newTaskTitle').value.trim();
         
         if (!title) {
@@ -343,11 +368,8 @@ async function createNotionTask(e) {
         };
         
         const pageResponse = await apiFetch(targetUrl, 'POST', body, 'notionToken', NOTION_TOKEN);
-        
-        // 即開始
         await startTogglTracking(title, pageResponse.id);
         
-        // フォームクリア
         document.getElementById('newTaskTitle').value = '';
         document.querySelectorAll('input[name="taskCategory"]').forEach(r => r.checked = false);
         document.querySelectorAll('input[name="taskDepartment"]').forEach(cb => cb.checked = false);
@@ -363,9 +385,6 @@ async function createNotionTask(e) {
     }
 }
 
-// =========================================================================
-// 必須関数群
-// =========================================================================
 async function startTogglTracking(taskTitle, pageId) {
     localRunningTask = { title: taskTitle, pageId, startTime: Date.now() };
     localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
@@ -522,4 +541,5 @@ function hideLoading() {
     if ($loader) $loader.classList.add('hidden');
 }
 
-console.log('✅ APP.JS LOADED COMPLETELY (カテゴリラジオボタン版)');
+console.log('✅ APP.JS LOADED COMPLETELY (タブ切り替え + カテゴリラジオ完璧版)');
+
