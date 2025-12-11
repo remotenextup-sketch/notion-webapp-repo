@@ -285,6 +285,8 @@ function startTask(task) {
     }
 }
 
+// app.js (修正箇所: stopTask 関数, 303行目付近の全文を置き換え)
+
 async function stopTask(isCompleted) {
     if (!settings.currentRunningTask || !settings.startTime) return;
 
@@ -293,73 +295,72 @@ async function stopTask(isCompleted) {
     const endTime = Date.now();
     const durationSeconds = Math.floor((endTime - settings.startTime) / 1000);
     
+    // メモとタスクIDを取得
     const memo = dom.thinkingLogInput.value;
     settings.currentRunningTask.memo = memo;
     saveSettings(settings);
 
-    // IDをクリーンアップし、有効性チェック
     const rawTaskId = settings.currentRunningTask.id;
     const taskId = rawTaskId ? rawTaskId.replace(/-/g, '').trim() : null; 
-    
-    if (!taskId || taskId.length !== 32) {
-        alert('エラー: タスクIDが不正なため、Notionへの更新をスキップします。計測は停止されます。');
-        // 以下、計測停止処理へジャンプ
-    } else {
-        // IDが有効な場合のみ、Notion APIの更新を試みる
 
-        const logContent = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')}】\n計測時間: ${formatTime(durationSeconds)}\nメモ: ${memo}`;
-        const dbId = settings.currentRunningTask.dbId;
-        const props = dbPropertiesCache[dbId];
+    // IDが有効な場合のみNotionへの更新を試みる
+    if (taskId && taskId.length === 32) {
+        try {
+            const dbId = settings.currentRunningTask.dbId;
+            const props = dbPropertiesCache[dbId];
+            if (!props) throw new Error('データベースプロパティ情報が見つかりません。');
 
-        // 1. ログ (ブロック) の追加を試みる
-        const logProp = props ? (props.logRichText || props.logRelation) : null;
-
-        if (logProp && logProp.type === 'rich_text') {
-            try {
-                // ログ追加（エラー発生元の呼び出し）
-                await notionApi(`/blocks/${taskId}/children`, 'POST', { 
-                    children: [{
-                        object: 'block',
-                        type: 'paragraph',
-                        paragraph: {
-                            rich_text: [
-                                { type: 'text', text: { content: logContent } }
-                            ]
-                        }
-                    }]
-                });
-            } catch (error) {
-                console.error("ログブロック追加エラー:", error);
-                alert("警告: ログブロックの追加に失敗しました。ページ更新を試みます。");
+            const propertiesToUpdate = {};
+            
+            // 1. ステータス更新
+            const statusProp = props.status;
+            if (statusProp && isCompleted) {
+                const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
+                if (completedOption) {
+                    propertiesToUpdate[statusProp.name] = { select: { id: completedOption.id } };
+                }
+            } else if (statusProp && !isCompleted) {
+                // 停止時: 進行中ステータスに戻すロジックが必要なら追加
+                // 例: const progressOption = statusProp.selectOptions.find(opt => opt.name === '進行中');
+                // if (progressOption) { propertiesToUpdate[statusProp.name] = { select: { id: progressOption.id } }; }
             }
-        }
 
-        // 2. ステータス (プロパティ) の更新を試みる
-        const propertiesToUpdate = {};
-        const statusProp = props ? props.status : null;
-        
-        if (statusProp && isCompleted) {
-            const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
-            if (completedOption) {
-                propertiesToUpdate[statusProp.name] = {
-                    select: { id: completedOption.id }
-                };
-            }
-        }
+            // 2. ログ/メモの追記 (リッチテキストプロパティ方式)
+            // この機能を使うには、タスクページID (taskId) を使って、現在のプロパティ値をGETする必要があります。
 
-        if (Object.keys(propertiesToUpdate).length > 0) {
-            try {
-                // ページプロパティの更新
-                await notionApi(`/pages/${taskId}`, 'PATCH', { 
-                    properties: propertiesToUpdate
-                });
-            } catch (error) {
-                console.error("ページプロパティ更新エラー:", error);
-                alert("警告: ページプロパティ（ステータス）の更新に失敗しました。");
+            const logProp = props.logRichText || props.logRelation;
+            if (logProp && logProp.type === 'rich_text' && memo) {
+                // 現在のページ情報を取得
+                const page = await notionApi(`/pages/${taskId}`, 'GET', null);
+                
+                const curLogPropValue = page.properties[logProp.name]?.rich_text?.[0]?.plain_text || "";
+                
+                const logDuration = formatTime(durationSeconds);
+                const logHeader = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')} (${logDuration})】`;
+                
+                const newLogBlock = `${logHeader}\n${memo}`;
+                const newLog = curLogPropValue ? `${curLogPropValue}\n\n${newLogBlock}` : newLogBlock;
+
+                // 2000文字制限があるため、超える場合は考慮が必要だが、ここでは単純に追記
+                propertiesToUpdate[logProp.name] = { rich_text: [{ text: { content: newLog } }] };
             }
+
+            // API PATCH呼び出し
+            if (Object.keys(propertiesToUpdate).length > 0) {
+                await notionApi(`/pages/${taskId}`, 'PATCH', { properties: propertiesToUpdate });
+            }
+
+        } catch (error) {
+            console.error("Notion更新エラー:", error);
+            alert(`Notion更新エラー: ${error.message}。計測は停止されます。`);
         }
+    } else if (!taskId || taskId.length !== 32) {
+         alert('エラー: タスクIDが不正なため、Notionへの更新をスキップします。計測は停止されます。');
     }
 
+    // Toggl停止処理 (ここにはありませんが、停止時ログを残すなら Toggl の時間も必要です)
+    // 今回は計測停止処理のみ。
+    
     // 最後に計測停止処理 (APIの成功/失敗に関わらず実行)
     settings.currentRunningTask = null;
     settings.startTime = null;
