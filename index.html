@@ -168,20 +168,34 @@
 
     <script src="app.js"></script>
     <!-- 設定モーダル -->
-<div id="settingsModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center;">
-  <div style="background: white; padding: 30px; border-radius: 16px; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-      <h2 style="color: #28a745; margin: 0;">⚙️ Notion設定</h2>
-      <button id="closeSettings" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
+<div id="settingsModal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;">
+  <div style="background:white;padding:20px;border-radius:12px;max-width:90%;max-height:90%;overflow:auto;">
+    <h3>⚙️ Notion設定</h3>
+    
+    <!-- Notionトークン -->
+    <div style="margin:15px 0;">
+      <label>🔑 Notion APIトークン</label>
+      <input id="notionTokenInput" type="password" placeholder="secret_xxxxxxxx" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;">
     </div>
-    <div style="margin-bottom: 20px;">
-      <label style="display: block; font-weight: 600; margin-bottom: 8px;">Notion APIトークン</label>
-      <textarea id="notionTokenInput" style="width: 100%; height: 80px; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 13px; font-family: monospace;" placeholder="secret_xxxxxxxx..."></textarea>
+    
+    <!-- 👇 DB追加フォーム（これが不足） -->
+    <div style="margin:15px 0;border:1px solid #eee;padding:15px;border-radius:8px;">
+      <h4>📊 データベース追加</h4>
+      <input id="dbIdInput" placeholder="DB ID (32文字)" style="width:100%;padding:8px;margin:5px 0;border:1px solid #ddd;border-radius:4px;">
+      <input id="dbNameInput" placeholder="DB名（例：開発）" style="width:100%;padding:8px;margin:5px 0;border:1px solid #ddd;border-radius:4px;">
+      <button id="addDbBtn" style="width:100%;padding:10px;background:#28a745;color:white;border:none;border-radius:6px;">➕ DB追加</button>
     </div>
-    <div style="margin-bottom: 20px;">
-      <label style="display: block; font-weight: 600; margin-bottom: 8px;">データベース</label>
-      <div style="display: flex; gap: 10px; align-items: end; margin-bottom: 10px;">
-        <input id="dbIdInput" style="flex: 1; padding: 10px; border: 2px solid #e1e5e9
+    
+    <!-- DBリスト -->
+    <div id="dbList" style="max-height:200px;overflow:auto;"></div>
+    
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button id="saveSettings" style="flex:1;padding:12px;background:#007bff;color:white;border:none;border-radius:6px;font-size:16px;">💾 保存</button>
+      <button id="closeSettings" style="flex:1;padding:12px;background:#6c757d;color:white;border:none;border-radius:6px;font-size:16px;">✕ 閉じる</button>
+    </div>
+  </div>
+</div>
+
 
 </body>
 </html>
