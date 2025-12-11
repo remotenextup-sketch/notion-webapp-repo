@@ -54,6 +54,11 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
   return text ? JSON.parse(text) : {};
 }
 
+console.log('DEBUG: JS読み込み開始');
+window.addEventListener('load', () => {
+  console.log('DEBUG: DOM完全ロード');
+});
+
 // =========================================================================
 // 初期化と設定のロード
 // =========================================================================
