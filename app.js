@@ -134,63 +134,120 @@ function initMobileTabs() {
 // 設定モーダル（スマホ対応）
 // =========================================================================
 function initSettingsModal() {
+  console.log('🔧 initSettingsModal実行');
+  
   const openBtn = document.getElementById('openSettings');
   const modal = document.getElementById('settingsModal');
+  
+  console.log('openBtn:', openBtn, 'modal:', modal);
+  
+  if (!openBtn) {
+    console.error('❌ openSettingsボタンが見つかりません');
+    return;
+  }
+  if (!modal) {
+    console.error('❌ settingsModalが見つかりません');
+    return;
+  }
+
+  // 👇 即時実行可能にするために window オブジェクトに直接設定
+  window.openSettingsHandler = () => {
+    console.log('🔔 設定ボタンクリック！');
+    const settings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const tokenInput = document.getElementById('notionTokenInput');
+    if (tokenInput) tokenInput.value = settings.notionToken || '';
+    
+    // DBリスト描画
+    const dbs = settings.allDbConfigs || [];
+    const dbListEl = document.getElementById('dbList');
+    if (dbListEl) {
+      dbListEl.innerHTML = dbs.map((db, i) => 
+        `<div style="padding:8px;border:1px solid #eee;margin-bottom:5px;border-radius:4px;">
+          ${db.name} (${db.id.slice(0,8)}...) 
+          <button onclick="removeDb(${i})" style="float:right;background:#dc3545;color:white;border:none;padding:2px 8px;border-radius:3px;font-size:11px;">削除</button>
+        </div>`
+      ).join('');
+    }
+    
+    modal.classList.remove('hidden');
+  };
+
+  // 👇 シンプルに onclick で直接設定（確実に動作）
+  openBtn.onclick = window.openSettingsHandler;
+  openBtn.ontouchstart = window.openSettingsHandler;
+
+  // 閉じる処理
   const closeBtn = document.getElementById('closeSettings');
+  if (closeBtn) {
+    closeBtn.onclick = () => modal.classList.add('hidden');
+    closeBtn.ontouchstart = () => modal.classList.add('hidden');
+  }
+
+  // モーダル外クリックで閉じる
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.classList.add('hidden');
+  };
+
+  // 保存ボタン
   const saveBtn = document.getElementById('saveSettings');
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      const token = document.getElementById('notionTokenInput')?.value.trim();
+      if (!token) return showToast('トークン入力して！', '#ffc107');
+      
+      const settings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      settings.notionToken = token;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      
+      modal.classList.add('hidden');
+      loadSettings();
+      renderFormOptions();
+      renderDbFilterOptions();
+      loadTasksAndKpi();
+      showToast('✅設定保存完了！', '#28a745');
+    };
+  }
+
+  // DB追加ボタン
   const addDbBtn = document.getElementById('addDbBtn');
+  if (addDbBtn) {
+    addDbBtn.onclick = () => {
+      const id = document.getElementById('dbIdInput')?.value;
+      const name = document.getElementById('dbNameInput')?.value || '新DB';
+      if (!id) return showToast('DB IDを入力！', '#ffc107');
+      
+      const settings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const dbs = settings.allDbConfigs || [];
+      dbs.push({ id, name });
+      settings.allDbConfigs = dbs;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      
+      const dbListEl = document.getElementById('dbList');
+      if (dbListEl) {
+        dbListEl.innerHTML = dbs.map((db, i) => 
+          `<div style="padding:8px;border:1px solid #eee;margin-bottom:5px;border-radius:4px;">
+            ${db.name} (${db.id.slice(0,8)}...) 
+            <button onclick="removeDb(${i})" style="float:right;background:#dc3545;color:white;border:none;padding:2px 8px;border-radius:3px;font-size:11px;">削除</button>
+          </div>`
+        ).join('');
+      }
+      
+      document.getElementById('dbIdInput').value = '';
+      document.getElementById('dbNameInput').value = '';
+      showToast('✅DB追加完了！', '#28a745');
+    };
+  }
 
-  if (!modal) return;
-
-  const renderDbList = () => {
-    const dbs = JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}').allDbConfigs || [];
-    document.getElementById('dbList').innerHTML = dbs.map((db,i)=>
-      `<div style="padding:8px;border:1px solid #eee;margin-bottom:5px;border-radius:4px;">
-        ${db.name} (${db.id.slice(0,8)}...) 
-        <button onclick="removeDb(${i})" style="float:right;background:#dc3545;color:white;border:none;padding:2px 8px;border-radius:3px;font-size:11px;">削除</button>
-      </div>`
-    ).join('');
+  window.removeDb = (index) => {
+    const settings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (settings.allDbConfigs) {
+      settings.allDbConfigs.splice(index, 1);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      window.openSettingsHandler(); // 再描画
+    }
   };
 
-  window.removeDb = (index)=>{
-    const settings = JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
-    settings.allDbConfigs.splice(index,1);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    renderDbList();
-  };
-
-  openBtn?.onclick = ()=>{
-    const settings = JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
-    document.getElementById('notionTokenInput').value = settings.notionToken || '';
-    renderDbList(); modal.classList.remove('hidden');
-  };
-
-  closeBtn?.onclick = ()=>modal.classList.add('hidden');
-  modal.onclick = (e)=>{if(e.target===modal) modal.classList.add('hidden');};
-
-  saveBtn?.onclick = ()=>{
-    const token = document.getElementById('notionTokenInput').value.trim();
-    if (!token) return showToast('トークン入力して！', '#ffc107');
-    const settings = JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
-    settings.notionToken = token;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    modal.classList.add('hidden');
-    loadSettings(); renderFormOptions(); renderDbFilterOptions(); loadTasksAndKpi();
-    showToast('✅設定保存！','#28a745');
-  };
-
-  addDbBtn?.onclick = ()=>{
-    const id = document.getElementById('dbIdInput').value;
-    const name = document.getElementById('dbNameInput').value || '新DB';
-    if (!id) return;
-    const settings = JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
-    const dbs = settings.allDbConfigs || []; dbs.push({id,name});
-    settings.allDbConfigs = dbs;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    renderDbList();
-    document.getElementById('dbIdInput').value=''; document.getElementById('dbNameInput').value='';
-    showToast('✅DB追加！','#28a745');
-  };
+  console.log('✅ 設定モーダル完全初期化完了');
 }
 
 // =========================================================================
