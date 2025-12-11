@@ -3,32 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>タスク・トラッカー (モバイル最適化)</title>
+    <title>タスク・トラッカー (スマホ操作性重視)</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⏱️%3C/text%3E%3C/svg%3E">
     <style>
         /* ========================================================= */
-        /* 📱 基本スタイル（スマホ最適化） */
+        /* 📱 基本スタイル（操作性重視） */
         /* ========================================================= */
         :root {
-            --primary-color: #007aff; /* iOS Blue */
-            --success-color: #34c759; /* Green */
-            --warning-color: #ff9500; /* Orange */
-            --danger-color: #ff3b30; /* Red */
-            --background-color: #f7f7f7; /* Light Gray Background */
-            --card-background: #ffffff; /* White Card */
-            --text-color: #1c1c1e; /* Dark Text */
+            --primary-color: #007aff;
+            --success-color: #34c759;
+            --warning-color: #ff9500;
+            --danger-color: #ff3b30;
+            --background-color: #f7f7f7;
+            --card-background: #ffffff;
+            --text-color: #1c1c1e;
             --border-color: #e5e5ea;
             --shadow: 0 1px 3px rgba(0,0,0,0.08);
+            --header-height: 50px;
+            --tab-height: 40px;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
-            padding: 0;
+            padding-top: calc(var(--header-height) + var(--tab-height) + 10px); /* 固定ヘッダー/タブバーの高さ+余白を確保 */
+            padding-bottom: 20px;
             background-color: var(--background-color);
             color: var(--text-color);
             line-height: 1.5;
-            padding-bottom: 80px; /* タブバーのためのスペース */
         }
         
         .container {
@@ -37,30 +39,137 @@
             margin: 0 auto;
         }
 
-        /* ヘッダー */
+        /* 1. 固定ヘッダー */
         .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--header-height);
             background-color: var(--card-background);
-            padding: 15px 0;
             border-bottom: 1px solid var(--border-color);
             box-shadow: var(--shadow);
-            position: sticky;
-            top: 0;
-            z-index: 10;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
         }
 
         .header h1 {
-            font-size: 20px;
+            font-size: 18px;
             margin: 0;
-            display: inline-block;
+            flex-grow: 1;
         }
         
-        .header .container {
+        /* 2. 固定タブバー (ヘッダーの下) */
+        .tab-bar-top {
+            position: fixed;
+            top: var(--header-height);
+            left: 0;
+            right: 0;
+            height: var(--tab-height);
+            background-color: var(--card-background);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            z-index: 90;
+        }
+
+        .tab-item-top {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: #8e8e93;
+            cursor: pointer;
+            transition: border-bottom 0.2s, color 0.2s;
+        }
+        
+        .tab-item-top.tab-active {
+            color: var(--primary-color);
+            border-bottom: 3px solid var(--primary-color);
+            font-weight: 600;
+        }
+
+        /* 3. 実行中タスク（タブバーのすぐ下、コンテンツの上） */
+        .running-task-fixed {
+            position: sticky; /* スクロールしても一時的に固定 */
+            top: calc(var(--header-height) + var(--tab-height));
+            left: 0;
+            right: 0;
+            background-color: #fff7e6;
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--warning-color);
+            z-index: 50;
+            margin-bottom: 10px;
+        }
+        
+        .running-task-fixed h2 {
+            font-size: 14px;
+            margin: 0 0 5px 0;
+            color: var(--warning-color);
+            font-weight: 600;
+        }
+        
+        .timer-display {
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
-        /* ボタン全般 */
+        #runningTaskTitle {
+            font-size: 15px;
+            font-weight: 600;
+            flex-grow: 1;
+            margin-right: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        #runningTimer {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--danger-color);
+        }
+        
+        .running-task-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .running-task-actions .btn {
+            flex: 1;
+            font-size: 13px;
+            padding: 7px;
+        }
+        
+        /* カードとリスト */
+        .card {
+            background-color: var(--card-background);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 15px;
+        }
+        
+        .task-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .task-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+        }
+        
+        /* フォームとボタン (前回の改善案から引き継ぎ) */
         .btn {
             padding: 10px 15px;
             border: none;
@@ -77,115 +186,9 @@
         .btn-primary { background-color: var(--primary-color); color: white; }
         .btn-success { background-color: var(--success-color); color: white; }
         .btn-danger { background-color: var(--danger-color); color: white; }
-        .btn-secondary { background-color: var(--border-color); color: var(--text-color); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background-color: #e5e5ea; color: var(--text-color); }
 
-        /* カードとリスト */
-        .card {
-            background-color: var(--card-background);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: var(--shadow);
-            margin-bottom: 20px;
-        }
-
-        .task-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .task-item {
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 10px;
-            background: var(--card-background);
-            border: 1px solid var(--border-color);
-            transition: box-shadow 0.2s;
-        }
-        
-        .task-item:hover {
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .task-info .task-title {
-            font-weight: 600;
-            font-size: 16px;
-            display: block;
-            margin-bottom: 5px;
-        }
-        
-        .task-info .task-meta {
-            color: #8e8e93; /* Subtle gray */
-            font-size: 12px;
-        }
-        
-        .task-actions {
-            margin-top: 10px;
-            display: flex;
-            gap: 8px;
-        }
-
-        .task-actions .btn {
-            flex: 1;
-            padding: 8px 12px;
-            font-size: 14px;
-        }
-        
-        /* 実行中タスク（固定ヘッダーとして最適化） */
-        .running-task-fixed {
-            position: fixed;
-            top: 60px; /* ヘッダーの下に配置 */
-            left: 0;
-            right: 0;
-            background-color: #fff7e6; /* 薄い黄色で強調 */
-            padding: 10px 15px;
-            border-bottom: 1px solid var(--warning-color);
-            z-index: 9;
-        }
-        
-        .running-task-fixed h2 {
-            font-size: 15px;
-            margin: 0 0 5px 0;
-            color: var(--warning-color);
-        }
-        
-        .timer-display {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        #runningTimer {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--danger-color);
-        }
-        
-        .running-task-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .running-task-actions .btn {
-            flex: 1;
-            font-size: 13px;
-            padding: 8px;
-        }
-        
-        /* フォーム要素 */
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: #555;
-            font-size: 15px;
-        }
+        .form-group { margin-bottom: 15px; }
 
         input[type="text"], textarea, select {
             width: 100%;
@@ -196,8 +199,7 @@
             box-sizing: border-box;
             background-color: #fcfcfc;
         }
-        
-        /* カテゴリ/部門選択（ラジオ/チェックボックス）の改善 */
+
         .select-group {
             display: flex;
             flex-wrap: wrap;
@@ -214,25 +216,16 @@
             text-align: center;
             font-size: 14px;
             cursor: pointer;
-            transition: background-color 0.2s, border-color 0.2s;
             position: relative;
         }
 
-        .select-group input[type="radio"], .select-group input[type="checkbox"] {
-            display: none; /* 元のラジオ/チェックボックスを非表示に */
-        }
-        
-        /* 選択時のスタイル */
-        .select-group input[type="radio"]:checked + span, 
-        .select-group input[type="checkbox"]:checked + span {
+        .select-group input[type="radio"], .select-group input[type="checkbox"] { display: none; }
+        .select-group input:checked + span {
             background: var(--primary-color);
             color: white;
             border-color: var(--primary-color);
         }
-
-        .select-group span {
-            display: block;
-        }
+        .select-group span { display: block; }
 
         /* KPIセクション */
         .kpi-section {
@@ -247,12 +240,10 @@
             border-right: 1px solid var(--border-color);
         }
         
-        .kpi-item:last-child {
-            border-right: none;
-        }
+        .kpi-item:last-child { border-right: none; }
         
         .kpi-value {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
             color: var(--primary-color);
             margin-bottom: 5px;
@@ -263,119 +254,7 @@
             color: #8e8e93;
         }
 
-        /* ========================================================= */
-        /* 📱 モバイルタブメニュー（固定フッター） */
-        /* ========================================================= */
-        .tab-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 60px;
-            background-color: var(--card-background);
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            box-shadow: 0 -1px 5px rgba(0,0,0,0.1);
-            z-index: 100;
-        }
-        
-        .tab-item {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            color: #8e8e93;
-            cursor: pointer;
-            user-select: none;
-            transition: color 0.2s;
-        }
-        
-        .tab-item.tab-active {
-            color: var(--primary-color);
-            font-weight: 600;
-        }
-        
-        .tab-icon {
-            font-size: 24px;
-            margin-bottom: 2px;
-        }
-
-        /* モーダル */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            padding: 20px;
-        }
-        
-        .modal-content {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            max-width: 500px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        
-        .modal-header h2 {
-            margin: 0;
-            font-size: 18px;
-        }
-        
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: #8e8e93;
-        }
-
-        /* ローディング */
-        .loader-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(255, 255, 255, 0.8);
-            z-index: 10001;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-top: 4px solid var(--primary-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
+        /* ユーティリティ */
         .hidden { display: none !important; }
 
     </style>
@@ -388,46 +267,54 @@
     </div>
 
     <header class="header">
-        <div class="container">
-            <h1>⏱️ タスク・トラッカー</h1>
-            <button id="openSettings" class="btn btn-secondary" style="padding: 8px 12px; font-size: 14px;">設定</button>
-        </div>
+        <h1>⏱️ Notion Time Tracker</h1>
+        <button id="openSettings" class="btn btn-secondary" style="padding: 8px 10px; font-size: 18px; line-height: 1;">⚙️</button>
     </header>
 
+    <nav class="tab-bar-top">
+        <div id="tabTasks" class="tab-item-top tab-active">
+            アクティブタスク
+        </div>
+        <div id="tabNew" class="tab-item-top">
+            新規タスク作成
+        </div>
+    </nav>
+    
     <section id="runningTaskContainer" class="running-task-fixed hidden">
-        <h2>実行中タスク</h2>
+        <h2>▶ 実行中</h2>
         <div class="timer-display">
-            <span id="runningTaskTitle" style="font-weight: 600; flex-grow: 1;">---</span>
+            <span id="runningTaskTitle">---</span>
             <span id="runningTimer">00:00:00</span>
         </div>
         
-        <div class="form-group" style="margin-top: 10px;">
-            <textarea id="thinkingLogInput" placeholder="思考ログをここに記録（完了/停止と同時保存）" rows="2" style="font-size: 13px;"></textarea>
+        <div class="form-group" style="margin-top: 8px; margin-bottom: 0;">
+            <textarea id="thinkingLogInput" placeholder="思考ログや進捗メモを記録 (完了/停止と同時保存)" rows="1" style="font-size: 13px;"></textarea>
         </div>
 
         <div class="running-task-actions">
-            <button id="completeRunningTask" class="btn btn-success">✅ 完了 & ログ</button>
-            <button id="stopRunningTask" class="btn btn-warning">⏹️ 停止 & ログ</button>
+            <button id="completeRunningTask" class="btn btn-success">✅ 完了</button>
+            <button id="stopRunningTask" class="btn btn-warning">⏹️ 停止</button>
         </div>
     </section>
 
-    <main class="container" style="padding-top: 20px;">
+    <main class="container">
         
         <section id="sectionTasks">
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h2 style="font-size: 18px; margin: 0;">アクティブタスク一覧</h2>
+            
+            <div class="card" style="padding: 10px 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <select id="taskDbFilter" style="flex-grow: 1; margin-right: 10px; padding: 8px; font-size: 14px;"></select>
                     <button id="reloadTasks" class="btn btn-secondary" style="padding: 8px 12px; font-size: 14px;">🔄 更新</button>
-                </div>
-
-                <div class="form-group">
-                    <label for="taskDbFilter">表示データベース</label>
-                    <select id="taskDbFilter"></select>
                 </div>
             </div>
 
-            <div class="card">
-                <h3 style="font-size: 16px; margin-top: 0;">KPI (今週の活動)</h3>
+            <ul id="taskList" class="task-list">
+                <li><p style="text-align:center; color:#8e8e93;">タスクをロード中...</p></li>
+            </ul>
+
+            <div class="card" style="margin-top: 30px;">
+                <h3 style="font-size: 16px; margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">📊 KPI (おまけ)</h3>
+                
                 <div class="kpi-section">
                     <div class="kpi-item">
                         <div id="kpiWeek" class="kpi-value">--</div>
@@ -439,19 +326,17 @@
                     </div>
                 </div>
                 
-                <h4 style="font-size: 14px; margin-top: 15px; margin-bottom: 5px; border-top: 1px solid var(--border-color); padding-top: 10px;">カテゴリ別 (今週)</h4>
-                <div id="kpiCategoryContainer" style="font-size: 13px;">単一DB選択時のみ表示</div>
+                <div style="font-size: 13px; margin-top: 15px;">
+                    <h4 style="font-size: 14px; margin: 5px 0;">カテゴリ別 (今週)</h4>
+                    <div id="kpiCategoryContainer">単一DB選択時のみ表示</div>
+                </div>
             </div>
-
-            <ul id="taskList" class="task-list">
-                <li><p style="color:#8e8e93;">タスクをロード中...</p></li>
-            </ul>
         </section>
 
         <section id="sectionNew" class="hidden">
             <div class="card">
-                <h2 style="font-size: 18px; margin-top: 0; margin-bottom: 15px;">新規タスク作成</h2>
-                <div id="targetDbDisplay" style="margin-bottom: 15px; font-size: 14px; color: var(--primary-color);"></div>
+                <h2 style="font-size: 18px; margin-top: 0; margin-bottom: 15px;">タスク情報を入力</h2>
+                <div id="targetDbDisplay" style="margin-bottom: 15px; font-size: 14px; color: var(--primary-color); border: 1px dashed var(--primary-color); padding: 8px; border-radius: 6px;"></div>
 
                 <form id="newTaskForm">
                     <div class="form-group">
@@ -468,7 +353,7 @@
                             </div>
                     </div>
 
-                    <button id="startNewTaskButton" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
+                    <button id="startNewTaskButton" class="btn btn-primary" style="width: 100%; margin-top: 20px; padding: 12px;">
                         🚀 作成 & 計測開始
                     </button>
                 </form>
@@ -476,17 +361,6 @@
         </section>
 
     </main>
-
-    <nav class="tab-bar">
-        <div id="tabTasks" class="tab-item tab-active">
-            <span class="tab-icon">📋</span>
-            <span>タスク</span>
-        </div>
-        <div id="tabNew" class="tab-item">
-            <span class="tab-icon">➕</span>
-            <span>新規作成</span>
-        </div>
-    </nav>
     
     <div id="settingsModal" class="modal-overlay hidden">
         <div class="modal-content">
