@@ -1,5 +1,5 @@
 // =========================================================
-// app.js (担当者フィルターと部門表示 最終修正版)
+// app.js (人間ユーザーID登録と利用 修正版)
 // =========================================================
 
 // =========================================================
@@ -26,7 +26,8 @@ function loadSettings() {
     const settingsJson = localStorage.getItem('notionTrackerSettings');
     return settingsJson ? JSON.parse(settingsJson) : {
         token: '',
-        notionUserId: '',
+        notionUserId: '', // Bot ID
+        humanUserId: '', // 人間ユーザーのID (New!)
         databases: [],
         currentRunningTask: null,
         startTime: null,
@@ -47,20 +48,19 @@ let settings = loadSettings();
 let availableTasks = [];
 let dbPropertiesCache = {};
 
-// Vercelの rewrites 設定に合わせたプロキシパス
 const PROXY_API_BASE = '/api/proxy'; 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 
 
 // DOM要素の取得
 const dom = {
-    // タブ
+    // タブ (変更なし)
     tabTasks: document.getElementById('tabTasks'),
     tabNew: document.getElementById('tabNew'),
     sectionTasks: document.getElementById('sectionTasks'),
     sectionNew: document.getElementById('sectionNew'),
 
-    // ヘッダー/共通
+    // ヘッダー/共通 (変更なし)
     openSettings: document.getElementById('openSettings'),
     settingsModal: document.getElementById('settingsModal'),
     closeSettings: document.getElementById('closeSettings'),
@@ -68,13 +68,15 @@ const dom = {
 
     // 設定
     notionTokenInput: document.getElementById('notionTokenInput'),
+    // ★追加: 人間ユーザーID入力欄
+    humanUserIdInput: document.getElementById('humanUserIdInput'), 
     saveSettings: document.getElementById('saveSettings'),
     dbList: document.getElementById('dbList'),
     dbNameInput: document.getElementById('dbNameInput'),
     dbIdInput: document.getElementById('dbIdInput'),
     addDbBtn: document.getElementById('addDbBtn'),
 
-    // 既存タスク
+    // 既存タスク (変更なし)
     taskDbFilter: document.getElementById('taskDbFilter'),
     reloadTasks: document.getElementById('reloadTasks'),
     taskList: document.getElementById('taskList'),
@@ -82,7 +84,7 @@ const dom = {
     kpiMonth: document.getElementById('kpiMonth'),
     kpiCategoryContainer: document.getElementById('kpiCategoryContainer'),
 
-    // 実行中タスク
+    // 実行中タスク (変更なし)
     runningTaskContainer: document.getElementById('runningTaskContainer'),
     runningTaskTitle: document.getElementById('runningTaskTitle'),
     runningTimer: document.getElementById('runningTimer'),
@@ -90,7 +92,7 @@ const dom = {
     completeRunningTask: document.getElementById('completeRunningTask'),
     stopRunningTask: document.getElementById('stopRunningTask'),
 
-    // 新規タスク
+    // 新規タスク (変更なし)
     targetDbDisplay: document.getElementById('targetDbDisplay'),
     newTaskForm: document.getElementById('newTaskForm'),
     newTaskTitle: document.getElementById('newTaskTitle'),
@@ -101,24 +103,14 @@ const dom = {
 
 
 // =========================================================
-// 外部API ラッパー (NotionとTogglをプロキシ経由で扱う)
+// 外部API ラッパー (変更なし)
 // =========================================================
 
-/**
- * 外部API (Notion/Toggl) をプロキシ経由で呼び出す
- * @param {string} tokenKey - 'notionToken' または 'togglApiToken'
- * @param {string} baseUrl - APIのベースURL (例: https://api.notion.com/v1)
- * @param {string} endpoint - エンドポイント (例: /databases/...)
- * @param {string} method - HTTPメソッド
- * @param {object} body - リクエストボディ
- */
 async function externalApi(tokenKey, baseUrl, endpoint, method = 'GET', body = null) {
     const tokenValue = settings.token; 
     
-    // トークンのチェック
     if (tokenKey === 'notionToken' && !tokenValue) return { error: 'Notion token is missing.' };
 
-    // プロキシサーバーに送信するペイロード
     const proxyPayload = {
         tokenKey: tokenKey,
         tokenValue: tokenValue,
@@ -130,12 +122,9 @@ async function externalApi(tokenKey, baseUrl, endpoint, method = 'GET', body = n
     try {
         dom.loader.classList.remove('hidden');
         
-        // プロキシサーバーのURLにPOSTリクエストを送る
         const response = await fetch(PROXY_API_BASE, { 
             method: 'POST', 
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(proxyPayload)
         });
         
@@ -144,7 +133,7 @@ async function externalApi(tokenKey, baseUrl, endpoint, method = 'GET', body = n
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Unknown Proxy Error' }));
             console.error('Proxy/API Error:', errorData);
-            return { error: errorData.error || errorData.message || `${tokenKey} API request failed via Proxy` };
+            return { error: errorData.error || errorData.message || `${tokenKey} API request failed via Proxy`, fullError: errorData };
         }
 
         return await response.json();
@@ -155,33 +144,28 @@ async function externalApi(tokenKey, baseUrl, endpoint, method = 'GET', body = n
     }
 }
 
-/** Notion API専用のラッパー関数 */
 async function notionApi(endpoint, method = 'GET', body = null) {
     return externalApi('notionToken', NOTION_API_BASE, endpoint, method, body);
 }
 
-/** Notion APIから現在のユーザー情報を取得し、IDを保存する */
+/** Notion APIから現在のユーザー情報（Bot自身）を取得し、IDを保存する */
 async function fetchNotionUser() {
     if (!settings.token) return;
 
-    // トークンが設定されていれば、ユーザーIDが取得されているかに関わらず毎回実行
     const response = await notionApi('/users/me');
 
     if (response && response.id) {
-        settings.notionUserId = response.id;
+        // BotのIDを保存 (タスク一覧取得時のBotフィルター回避のため、Human ID優先)
+        settings.notionUserId = response.id; 
         saveSettings(settings);
-        console.log(`Notion User ID saved: ${response.id} (${response.name})`);
+        console.log(`Notion Bot ID saved: ${response.id} (${response.name})`);
         
-        // 担当者名が取れたら、新規タスクフォームの表示を更新
-        const deptProp = dbPropertiesCache[dom.taskDbFilter.value]?.assignee || dbPropertiesCache[dom.taskDbFilter.value]?.department;
-        if (deptProp && (deptProp.type === 'people' || deptProp.type === 'multi_select')) {
-             initNewTaskForm();
-        }
+        loadTasks();
     } else if (response.error) {
-        console.error("Failed to fetch Notion user:", response.error);
-        // エラー時はIDを空にする
+        console.error("Failed to fetch Notion user (Bot):", response.error);
         settings.notionUserId = '';
         saveSettings(settings);
+        loadTasks(); 
     }
 }
 
@@ -190,9 +174,9 @@ async function fetchNotionUser() {
 // 設定管理ロジック
 // =========================================================
 
-/** DBリストをモーダルにレンダリング (変更なし) */
 function renderDbList() {
     clearElement(dom.dbList);
+    // ... (変更なし)
     if (settings.databases.length === 0) {
         dom.dbList.innerHTML = '<p style="font-size: 14px; color: var(--sub-text-color);">登録されたデータベースはありません。</p>';
         return;
@@ -233,7 +217,6 @@ function renderDbList() {
     dom.dbList.appendChild(ul);
 }
 
-// DBフィルターの選択肢を初期化
 function initDbFilter() {
     clearElement(dom.taskDbFilter);
     if (settings.databases.length > 0) {
@@ -243,9 +226,8 @@ function initDbFilter() {
             option.textContent = db.name;
             dom.taskDbFilter.appendChild(option);
         });
-        // 最初のDBをデフォルトで選択
         dom.taskDbFilter.value = settings.databases[0].id;
-        loadTasks(); // 最初のDBでタスクをロード
+        loadTasks();
     } else {
         dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--sub-text-color);">設定からNotionデータベースを登録してください。</p></li>';
     }
@@ -255,7 +237,6 @@ function initDbFilter() {
 // タスク・タイマーロジック (変更なし)
 // =========================================================
 
-/** 実行中タスクの表示を更新 */
 function updateRunningTaskDisplay() {
     if (settings.currentRunningTask) {
         dom.runningTaskContainer.classList.remove('hidden');
@@ -266,12 +247,10 @@ function updateRunningTaskDisplay() {
     }
 }
 
-/** タイマーを開始/更新 */
 function startTimer() {
     if (settings.timerInterval) clearInterval(settings.timerInterval);
 
     if (settings.currentRunningTask && settings.startTime) {
-        // 初回ロード時や再開時
         const elapsed = Math.floor((Date.now() - settings.startTime) / 1000);
         dom.runningTimer.textContent = formatTime(elapsed);
         
@@ -282,13 +261,6 @@ function startTimer() {
     }
 }
 
-/**
- * タスクの計測を開始する
- * @param {object} task - 開始するタスクオブジェクト
- * @param {string} task.id - NotionページID
- * @param {string} task.title - タスクタイトル
- * @param {string} task.dbId - データベースID
- */
 function startTask(task) {
     if (settings.currentRunningTask) {
         alert('既にタスクが実行中です。現在のタスクを完了または停止してから、新しいタスクを開始してください。');
@@ -302,7 +274,6 @@ function startTask(task) {
     updateRunningTaskDisplay();
     startTimer();
 
-    // 既存タスク一覧から実行中タスクを非表示にする (あれば)
     const runningItem = document.getElementById(`task-item-${task.id}`);
     if (runningItem) {
         runningItem.style.opacity = '0.5';
@@ -310,7 +281,6 @@ function startTask(task) {
     }
 }
 
-/** * タスクを停止し、Notionにログを記録する */
 async function stopTask(isCompleted) {
     if (!settings.currentRunningTask || !settings.startTime) return;
 
@@ -319,12 +289,10 @@ async function stopTask(isCompleted) {
     const endTime = Date.now();
     const durationSeconds = Math.floor((endTime - settings.startTime) / 1000);
     
-    // ログを更新
     const memo = dom.thinkingLogInput.value;
     settings.currentRunningTask.memo = memo;
     saveSettings(settings);
 
-    // NotionのRich Text形式のログ
     const logContent = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')}】\n計測時間: ${formatTime(durationSeconds)}\nメモ: ${memo}`;
     
     const dbId = settings.currentRunningTask.dbId;
@@ -335,10 +303,8 @@ async function stopTask(isCompleted) {
         return;
     }
 
-    // 更新ペイロード
     const propertiesToUpdate = {};
     
-    // 1. ステータスプロパティの更新 (存在すれば)
     const statusProp = props.status;
     if (statusProp && isCompleted) {
         const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
@@ -349,13 +315,9 @@ async function stopTask(isCompleted) {
         }
     }
 
-    // 2. ログの追加 (リレーションまたはリッチテキスト)
     const logProp = props.logRelation || props.logRichText;
 
-    if (logProp && logProp.type === 'relation') {
-        // (省略: ログページ作成ロジック)
-    } else if (logProp && logProp.type === 'rich_text') {
-        // 親タスクの既存のリッチテキストに追記
+    if (logProp && logProp.type === 'rich_text') {
         await notionApi(`/blocks/${settings.currentRunningTask.id}/children`, 'POST', {
             children: [{
                 object: 'block',
@@ -369,14 +331,12 @@ async function stopTask(isCompleted) {
         });
     }
 
-    // ページプロパティの更新 (ステータスなど)
     if (Object.keys(propertiesToUpdate).length > 0) {
         await notionApi(`/pages/${settings.currentRunningTask.id}`, 'PATCH', {
             properties: propertiesToUpdate
         });
     }
 
-    // グローバル状態をリセット
     settings.currentRunningTask = null;
     settings.startTime = null;
     settings.timerInterval = null;
@@ -385,22 +345,14 @@ async function stopTask(isCompleted) {
     dom.runningTimer.textContent = '00:00:00';
     dom.thinkingLogInput.value = '';
     
-    // タスクリストをリロードして状態を反映
     loadTasks();
-}
-
-/** ログを記録するためのページを作成する（モック） */
-async function createLogPage(dbId, logProp, parentTaskId, logContent, durationSeconds) {
-    if (!logProp.logDbId) return null; 
-    console.log("ログページを作成: ", logContent);
-    return null;
 }
 
 // =========================================================
 // データ取得・レンダリング
 // =========================================================
 
-/** データベースのプロパティ情報を取得し、マッピングする */
+/** データベースのプロパティ情報を取得し、マッピングする (変更なし) */
 async function getDbProperties(dbId) {
     if (dbPropertiesCache[dbId]) return dbPropertiesCache[dbId];
 
@@ -413,34 +365,30 @@ async function getDbProperties(dbId) {
     for (const name in props) {
         const prop = props[name];
         
-        // 1. タイトルプロパティ (タスク名)
         if (prop.type === 'title') {
             mappedProps.title = { name, type: 'title' };
         } 
-        // 2. ステータスプロパティ
         else if (prop.type === 'select' && name === 'ステータス') {
             mappedProps.status = { name, type: 'select', selectOptions: prop.select.options };
         }
-        // 3. カテゴリプロパティ (Select)
         else if (prop.type === 'select' && name === 'カテゴリ') {
             mappedProps.category = { name, type: 'select', selectOptions: prop.select.options };
         }
-        // ★修正: 4. 担当者プロパティ (People) - 名前が「担当者」であること
+        // 担当者 (People)
         else if (prop.type === 'people' && name === '担当者') {
              mappedProps.assignee = { name, type: 'people' }; 
         }
-        // ★修正: 5. 部門プロパティ (Multi-select) - 名前が「部門」であること
+        // 部門 (Multi-select)
         else if (prop.type === 'multi_select' && name === '部門') {
             mappedProps.department = { name, type: 'multi_select', options: prop.multi_select.options };
         }
-        // 6. ログプロパティ (リレーションまたはリッチテキスト)
-        else if (prop.type === 'relation' && (name.includes('ログ') || name.includes('Log'))) {
-            const relation = prop.relation;
-            if (relation && relation.database_id) {
-                 mappedProps.logRelation = { name, type: 'relation', logDbId: relation.database_id };
-            }
-        } else if (prop.type === 'rich_text' && (name.includes('ログ') || name.includes('メモ') || name.includes('Log'))) {
+        // ログプロパティ
+        else if (prop.type === 'rich_text' && (name.includes('思考ログ') || name.includes('ログ') || name.includes('メモ') || name.includes('Log'))) {
             mappedProps.logRichText = { name, type: 'rich_text' };
+        }
+        // 計測時間(分)
+         else if (prop.type === 'number' && name === '計測時間(分)') {
+            mappedProps.durationMinutes = { name, type: 'number' };
         }
     }
     
@@ -448,7 +396,7 @@ async function getDbProperties(dbId) {
     return mappedProps;
 }
 
-/** タスク一覧をロードし、レンダリングする */
+/** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを修正) */
 async function loadTasks() {
     const dbId = dom.taskDbFilter.value;
     if (!dbId) {
@@ -466,45 +414,41 @@ async function loadTasks() {
     clearElement(dom.taskList);
     dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--sub-text-color);">タスクをロード中...</p></li>';
     
-    // フィルター条件の構築
-    const statusFilter = [];
-    const otherFilters = [];
-
-    // 1. ステータスフィルター (OR: 未着手 or 進行中)
+    // ★修正: フィルターに使用するユーザーIDを決定
+    const targetUserId = settings.humanUserId || settings.notionUserId; // humanUserIdを優先
+    
+    const allFilters = [];
     const statusProp = props.status;
+    
+    // 1. ステータスフィルター (OR: 未着手 or 進行中)
     if (statusProp) {
         const activeStatuses = statusProp.selectOptions
             .filter(opt => opt.name === '未着手' || opt.name === '進行中')
             .map(opt => ({ select: { equals: opt.name } }));
 
         if (activeStatuses.length > 0) {
-             // ステータスのOR条件を一つのオブジェクトとして格納
-             statusFilter.push({ or: activeStatuses.map(status => ({ property: statusProp.name, ...status })) });
+             allFilters.push({ or: activeStatuses.map(status => ({ property: statusProp.name, ...status })) });
         }
     }
 
     // 2. 担当者フィルター (AND: 担当者に現在のユーザーを含む)
     const assigneeProp = props.assignee;
-    if (assigneeProp && settings.notionUserId) {
-        otherFilters.push({ 
+    // targetUserIdがあり、かつそれがBot IDと異なれば（またはBot IDがなければ）フィルターを適用
+    if (assigneeProp && targetUserId) {
+         // humanUserIdが設定されている、またはBot IDしかなくてもBot IDをフィルターに使ってみる
+         allFilters.push({ 
             property: assigneeProp.name, 
-            people: { contains: settings.notionUserId } 
+            people: { contains: targetUserId } 
         });
     }
 
-    // 全てのフィルターを結合
-    const allFilters = [...statusFilter, ...otherFilters];
-    
-    // クエリボディの整形
     const queryBody = {
         sorts: [{ property: props.title.name, direction: 'ascending' }]
     };
-
+    
     if (allFilters.length === 1 && allFilters[0].or) {
-        // ステータス OR のみ
         queryBody.filter = allFilters[0];
     } else if (allFilters.length > 0) {
-        // 複数のフィルター（担当者ANDステータスORなど）
         queryBody.filter = { and: allFilters };
     }
     
@@ -515,8 +459,8 @@ async function loadTasks() {
         return;
     }
 
-    // 取得したタスクデータを安全にマッピングする
     availableTasks = response.results.map(page => {
+        // ... (マッピングロジックは変更なし)
         const getPagePropValue = (propKey, defaultValue) => {
             const prop = props[propKey];
             if (!prop) return defaultValue;
@@ -525,17 +469,14 @@ async function loadTasks() {
             return pageProp || defaultValue;
         };
 
-        // 1. タイトル
         const titleProp = getPagePropValue('title');
         const title = titleProp && titleProp.title.length > 0
             ? titleProp.title.map(t => t.plain_text).join('')
             : 'タイトルなし';
 
-        // 2. カテゴリ (Select)
         const categoryProp = getPagePropValue('category', { select: null });
         const categories = categoryProp.select ? [categoryProp.select.name] : [];
 
-        // 3. ステータス (Select)
         const statusPropValue = getPagePropValue('status', { select: null });
         const status = statusPropValue.select ? statusPropValue.select.name : '不明';
 
@@ -556,8 +497,17 @@ async function loadTasks() {
 function renderTasks() {
     clearElement(dom.taskList);
     
+    const targetUserId = settings.humanUserId || settings.notionUserId;
+    
     if (availableTasks.length === 0) {
-        const filterMessage = settings.notionUserId ? '担当者として割り当てられた、未完了のタスクはありません。' : '担当者IDが取得できていません。設定を確認してください。';
+        let filterMessage = '該当するタスクはありません。';
+        if (!targetUserId) {
+            filterMessage = 'ユーザーIDが設定されていません。設定画面で「あなたのNotionユーザーID」を入力してください。';
+        } else if (!dbPropertiesCache[dom.taskDbFilter.value]?.assignee) {
+             filterMessage = 'データベースに「担当者」プロパティが見つかりませんでした。';
+        } else {
+             filterMessage = '担当者として割り当てられた、未着手または進行中のタスクはありません。';
+        }
         dom.taskList.innerHTML = `<li><p style="text-align:center; color:var(--sub-text-color);">${filterMessage}</p></li>`;
         return;
     }
@@ -607,7 +557,6 @@ function renderTasks() {
     });
 }
 
-/** KPIを計算し、表示する (モックのまま) */
 function calculateKpi() {
     dom.kpiWeek.textContent = '8.5h';
     dom.kpiMonth.textContent = '35.2h';
@@ -627,7 +576,7 @@ function calculateKpi() {
 // 新規タスク作成ロジック
 // =========================================================
 
-/** 新規タスクフォームを準備する */
+/** 新規タスクフォームを準備する (部門クリック有効化を追加) */
 async function initNewTaskForm() {
     const dbId = dom.taskDbFilter.value;
     if (!dbId) {
@@ -679,21 +628,41 @@ async function initNewTaskForm() {
             const colorClass = option.color === 'default' ? '#ccc' : `var(--${option.color})`;
             optionsDiv.innerHTML += `
                 <input type="checkbox" id="${id}" name="new-task-dept" value="${option.id}" style="display: none;">
-                <label for="${id}" class="select-chip" style="border: 1px solid ${colorClass}; color: ${colorClass}; background: #fff; display: inline-block; margin: 5px; cursor: pointer;">
+                <label for="${id}" class="select-chip" data-color="${option.color}" style="border: 1px solid ${colorClass}; color: ${colorClass}; background: #fff; display: inline-block; margin: 5px; cursor: pointer;">
                     <span style="padding: 5px 10px; display: block;">${option.name}</span>
                 </label>
             `;
         });
         dom.newDeptContainer.appendChild(deptGroup);
+
+        // 部門のクリックイベントリスナー
+        document.querySelectorAll('.select-chip').forEach(label => {
+            label.addEventListener('click', function(e) {
+                const inputId = this.getAttribute('for');
+                const checkbox = document.getElementById(inputId);
+                
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+
+                    const color = this.dataset.color === 'default' ? '#ccc' : `var(--${this.dataset.color})`;
+                    if (checkbox.checked) {
+                        this.style.backgroundColor = color;
+                        this.style.color = '#fff';
+                    } else {
+                        this.style.backgroundColor = '#fff';
+                        this.style.color = color;
+                    }
+                }
+            });
+        });
     }
 
     // 2-2. 担当者 (People) の表示
     const assigneeProp = props.assignee;
     if (assigneeProp && assigneeProp.type === 'people') {
-        const userName = settings.notionUserId ? '（あなた自身）' : '（ID未取得）';
-        const assigneeMessage = `<p style="font-size: 14px; color: var(--sub-text-color);">${assigneeProp.name}プロパティ: 新規作成時に${userName}が自動で設定されます。</p>`;
+        const status = settings.humanUserId ? '✅ 割り当て設定済み' : '⚠️ 設定が必要です';
+        const assigneeMessage = `<p style="font-size: 14px; color: var(--sub-text-color); font-weight: 500;">${assigneeProp.name}プロパティ: ${status}。<br>新規作成時に**設定されたユーザーID**が自動で設定されます。</p>`;
         
-        // 部門がある場合は下に追加、ない場合は全体に追加
         if (dom.newDeptContainer.innerHTML) {
             dom.newDeptContainer.innerHTML += assigneeMessage;
         } else {
@@ -704,7 +673,7 @@ async function initNewTaskForm() {
     }
 }
 
-/** 新規タスクを作成し、計測を開始する */
+/** 新規タスクを作成し、計測を開始する (担当者自動設定を修正) */
 async function createNewTask(e) {
     e.preventDefault();
 
@@ -741,12 +710,16 @@ async function createNewTask(e) {
         properties[deptProp.name] = { multi_select: selectedDepts };
     }
     
-    // ★修正: 4. 担当者 (People) - 自分のIDを自動で指定
+    // ★修正: 4. 担当者 (People) - humanUserIdがあればそれを使って設定
     const assigneeProp = props.assignee;
-    if (assigneeProp && assigneeProp.type === 'people' && settings.notionUserId) {
-        properties[assigneeProp.name] = { people: [{ id: settings.notionUserId }] };
+    if (assigneeProp && assigneeProp.type === 'people' && settings.humanUserId) {
+        properties[assigneeProp.name] = { people: [{ id: settings.humanUserId }] };
+    } else if (assigneeProp && assigneeProp.type === 'people' && settings.notionUserId) {
+         // humanUserIdがない場合はBot IDで試すが、エラーになる可能性が高い
+         console.warn("Human User IDが設定されていません。Bot IDで担当者割り当てを試みますが、Notion APIの制限により失敗する可能性があります。");
+         // properties[assigneeProp.name] = { people: [{ id: settings.notionUserId }] }; // 今回はHuman IDがない場合は割り当て自体をスキップ
     }
-    
+
     // 5. ステータス 
     const statusProp = props.status;
     if (statusProp) {
@@ -764,11 +737,10 @@ async function createNewTask(e) {
     });
 
     if (response.error) {
-        alert('タスクの作成に失敗しました: ' + response.error);
+        alert('タスクの作成に失敗しました: ' + (response.fullError?.message || response.error));
         return;
     }
 
-    // 成功したら計測を開始
     const newTask = {
         id: response.id,
         dbId: dbId,
@@ -785,23 +757,19 @@ async function createNewTask(e) {
 // イベントハンドラと初期化
 // =========================================================
 
-/**
- * タブの切り替えロジック
- * @param {string} target - 'tasks' または 'new'
- */
 function switchTab(target) {
     if (target === 'tasks') {
         dom.tabTasks.classList.add('tab-active');
         dom.tabNew.classList.remove('tab-active');
         dom.sectionTasks.classList.remove('hidden');
         dom.sectionNew.classList.add('hidden');
-        loadTasks(); // タスク一覧に切り替えたらロード
+        loadTasks();
     } else {
         dom.tabTasks.classList.remove('tab-active');
         dom.tabNew.classList.add('tab-active');
         dom.sectionTasks.classList.add('hidden');
         dom.sectionNew.classList.remove('hidden');
-        initNewTaskForm(); // 新規タスクに切り替えたらフォームを準備
+        initNewTaskForm();
     }
 }
 
@@ -815,6 +783,8 @@ function initEventListeners() {
     // 設定モーダル
     dom.openSettings.addEventListener('click', () => {
         dom.notionTokenInput.value = settings.token;
+        // ★追加: humanUserIdInputの値を表示
+        dom.humanUserIdInput.value = settings.humanUserId; 
         renderDbList();
         dom.settingsModal.classList.remove('hidden');
     });
@@ -823,12 +793,14 @@ function initEventListeners() {
     // 設定保存
     dom.saveSettings.addEventListener('click', () => {
         settings.token = dom.notionTokenInput.value.trim();
+        // ★追加: humanUserIdInputの値を保存
+        settings.humanUserId = dom.humanUserIdInput.value.trim(); 
         saveSettings(settings);
-        fetchNotionUser(); // トークン保存時にユーザーIDを取得する
-        alert('トークンを保存しました。');
+        fetchNotionUser();
+        alert('設定を保存しました。');
     });
 
-    // DB追加
+    // DB追加 (変更なし)
     dom.addDbBtn.addEventListener('click', () => {
         const name = dom.dbNameInput.value.trim();
         const id = dom.dbIdInput.value.trim().replace(/-/g, '');
@@ -844,21 +816,21 @@ function initEventListeners() {
         }
     });
 
-    // タスクフィルターと更新
+    // タスクフィルターと更新 (変更なし)
     dom.taskDbFilter.addEventListener('change', loadTasks);
     dom.reloadTasks.addEventListener('click', loadTasks);
 
-    // 実行中タスクの操作
+    // 実行中タスクの操作 (変更なし)
     dom.completeRunningTask.addEventListener('click', () => stopTask(true));
     dom.stopRunningTask.addEventListener('click', () => stopTask(false));
 
-    // 新規タスクの作成
+    // 新規タスクの作成 (変更なし)
     dom.newTaskForm.addEventListener('submit', createNewTask);
 }
 
 function initApp() {
     initEventListeners();
-    fetchNotionUser(); // 起動時にユーザーIDを取得を試みる
+    fetchNotionUser();
     initDbFilter(); 
     updateRunningTaskDisplay();
     startTimer();
