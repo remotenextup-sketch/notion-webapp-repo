@@ -111,7 +111,79 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('設定例:', `localStorage.setItem('taskTrackerSettings', JSON.stringify({notionToken: 'secret_xxxx', allDbConfigs: [{id: 'DB_ID', name: 'メイン'}], currentViewId: 'all'})); location.reload();`);
       });
     }
-    
+    const openSettingsBtn = document.getElementById('openSettings');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettingsBtn = document.getElementById('closeSettings');
+const saveSettingsBtn = document.getElementById('saveSettings');
+const resetSettingsBtn = document.getElementById('resetSettings');
+const addDbBtn = document.getElementById('addDbBtn');
+
+if (openSettingsBtn) openSettingsBtn.onclick = () => settingsModal.classList.remove('hidden');
+if (closeSettingsBtn) closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
+if (settingsModal) settingsModal.onclick = (e) => { if (e.target === settingsModal) settingsModal.classList.add('hidden'); };
+
+if (saveSettingsBtn) {
+  saveSettingsBtn.onclick = () => {
+    const token = document.getElementById('notionTokenInput').value;
+    const dbs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').allDbConfigs || [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      notionToken: token,
+      allDbConfigs: dbs,
+      currentViewId: 'all'
+    }));
+    settingsModal.classList.add('hidden');
+    loadSettings();
+    renderFormOptions();
+    renderDbFilterOptions();
+    loadTasksAndKpi();
+    showToast('✅ 設定保存！', '#28a745');
+  };
+}
+
+if (addDbBtn) {
+  addDbBtn.onclick = () => {
+    const id = document.getElementById('dbIdInput').value;
+    const name = document.getElementById('dbNameInput').value || '新DB';
+    if (id) {
+      const dbs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').allDbConfigs || [];
+      dbs.push({id, name});
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        notionToken: NOTION_TOKEN,
+        allDbConfigs: dbs,
+        currentViewId: 'all'
+      }));
+      renderDbList();
+      document.getElementById('dbIdInput').value = '';
+      document.getElementById('dbNameInput').value = '';
+      showToast('✅ DB追加！', '#28a745');
+    }
+  };
+}
+
+function renderDbList() {
+  const dbs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').allDbConfigs || [];
+  document.getElementById('dbList').innerHTML = dbs.map((db, i) => 
+    `<div style="padding: 8px; border: 1px solid #eee; margin-bottom: 5px; border-radius: 4px;">${db.name} (${db.id.slice(0,8)}...) <button onclick="removeDb(${i})" style="float:right; background:#dc3545;color:white;border:none;padding:2px 8px;border-radius:3px;font-size:11px;">削除</button></div>`
+  ).join('');
+}
+
+window.removeDb = (index) => {
+  const settings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  settings.allDbConfigs.splice(index, 1);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  renderDbList();
+};
+
+// モーダル開く時に現在の設定読み込み
+if (openSettingsBtn) {
+  openSettingsBtn.addEventListener('click', () => {
+    const settings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    document.getElementById('notionTokenInput').value = settings.notionToken || '';
+    renderDbList();
+  });
+}
+
+console.log('✅ 初期化完了（UI設定画面付き）');
     console.log('✅ 初期化完了（設定ボタン付き）');
 });
 
