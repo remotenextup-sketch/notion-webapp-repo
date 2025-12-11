@@ -3,39 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notion Task Tracker</title>
+    <title>Notion Toggl タイマー</title>
     <style>
         :root {
-            --main-bg-color: #f7f7f7;
-            --card-bg-color: #ffffff;
+            --primary-color: #3f51b5; /* Indigo */
+            --primary-hover-color: #303f9f;
             --text-color: #333;
             --sub-text-color: #666;
+            --background-color: #f4f4f9;
+            --card-background: #ffffff;
             --border-color: #ddd;
-            --success-color: #4CAF50;
+            --success-color: #4caf50;
             --danger-color: #f44336;
-            --warning-color: #ff9800;
-            --primary-color: #007bff;
-            --focus-color: #0056b3;
-
-            /* Notion Select Colors (一部抜粋) */
-            --default: #ccc; /* 濃いめに設定 */
-            --gray: #ccc;
-            --brown: #9b746c;
-            --orange: #f59639;
-            --yellow: #f8cc3c;
-            --green: #48a77a;
-            --blue: #2c99b8;
-            --purple: #8e68b3;
-            --pink: #e0729c;
-            --red: #dd5e58;
         }
 
         body {
-            font-family: 'Arial', sans-serif;
-            background-color: var(--main-bg-color);
-            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
             display: flex;
             justify-content: center;
             align-items: flex-start;
@@ -46,11 +33,11 @@
         .container {
             width: 100%;
             max-width: 600px;
-            background: var(--card-bg-color);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            background-color: var(--card-background);
             border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             overflow: hidden;
-            margin-bottom: 20px;
         }
 
         header {
@@ -64,387 +51,321 @@
 
         header h1 {
             margin: 0;
-            font-size: 20px;
-        }
-
-        .settings-button, .reload-button {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 5px;
-        }
-
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .tab {
-            flex-grow: 1;
-            text-align: center;
-            padding: 12px 0;
-            cursor: pointer;
-            font-weight: 600;
-            color: var(--sub-text-color);
-            transition: background-color 0.2s, color 0.2s;
-        }
-
-        .tab:hover {
-            background-color: #eee;
-        }
-
-        .tab-active {
-            color: var(--primary-color);
-            border-bottom: 3px solid var(--primary-color);
+            font-size: 1.5em;
         }
 
         .content {
             padding: 20px;
         }
 
-        .hidden {
-            display: none !important;
-        }
-
-        /* Running Task Section */
-        #runningTaskContainer {
-            background-color: #eaf6ff;
-            border: 1px solid #cce0ff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        #runningTaskTitle {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--primary-color);
-            margin-bottom: 5px;
-        }
-
-        #runningTimer {
-            font-size: 32px;
-            font-weight: bold;
-            color: var(--primary-color);
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        .running-actions button {
-            width: 49%;
-        }
-
-        #thinkingLogInput {
-            width: 100%;
-            min-height: 80px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 8px;
-            box-sizing: border-box;
-            margin-top: 10px;
-        }
-        
-        /* Task List */
-        .task-list {
-            list-style: none;
-            padding: 0;
-            margin-top: 15px;
-        }
-
-        .task-item {
-            display: flex;
-            flex-direction: column;
-            padding: 15px 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .task-item:last-child {
-            border-bottom: none;
-        }
-
-        .task-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .task-meta {
-            font-size: 12px;
-            color: var(--sub-text-color);
-            margin-bottom: 10px;
-        }
-
-        .task-actions {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        /* KPI Section */
-        .kpi-section {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            /* margin-bottom: 20px; */ /* タスクリストの下に移動したため調整 */
-            padding-top: 20px; /* タスクリストとの区切り */
-            border-top: 1px solid var(--border-color);
-        }
-
-        .kpi-card {
-            background: #f0f0f0;
-            padding: 10px;
-            border-radius: 6px;
-            text-align: center;
-        }
-
-        .kpi-card h3 {
-            margin: 0 0 5px 0;
-            font-size: 14px;
-            color: var(--sub-text-color);
-        }
-
-        .kpi-card p {
-            margin: 0;
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--text-color);
-        }
-
-        .kpi-category-list {
-            grid-column: 1 / 3;
-            background: #f0f0f0;
-            padding: 10px;
-            border-radius: 6px;
-        }
-
-        /* Buttons */
+        /* --- ボタン --- */
         .btn {
             padding: 10px 15px;
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            font-weight: 600;
+            font-size: 1em;
             transition: background-color 0.2s;
-            text-decoration: none;
+            margin: 5px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
         }
 
-        .btn-primary { background-color: var(--primary-color); color: white; }
-        .btn-primary:hover { background-color: var(--focus-color); }
-        .btn-success { background-color: var(--success-color); color: white; }
-        .btn-success:hover { background-color: #45a049; }
-        .btn-danger { background-color: var(--danger-color); color: white; }
-        .btn-danger:hover { background-color: #d32f2f; }
-        .btn-secondary { background-color: #ccc; color: var(--text-color); }
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover { background-color: var(--primary-hover-color); }
+
+        .btn-green {
+            background-color: var(--success-color);
+            color: white;
+        }
+        .btn-green:hover { background-color: #388e3c; }
+
+        .btn-red {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        .btn-red:hover { background-color: #d32f2f; }
+        
+        .btn-secondary {
+            background-color: #ccc;
+            color: var(--text-color);
+        }
         .btn-secondary:hover { background-color: #bbb; }
 
-        /* Forms */
+
+        /* --- 実行中タスク --- */
+        #runningTaskContainer {
+            background-color: #e8eaf6; /* Light Indigo */
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #runningTaskTitle {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: var(--primary-hover-color);
+            margin-bottom: 10px;
+        }
+
+        #runningTimer {
+            font-size: 3em;
+            font-family: 'Roboto Mono', monospace;
+            color: var(--primary-color);
+            font-weight: 700;
+            margin: 10px 0;
+        }
+
+        #runningTaskActions {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        /* --- 思考ログ --- */
+        #thinkingLogSection {
+            margin-top: 20px;
+            text-align: left;
+        }
+        #thinkingLogSection label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        #thinkingLogInput {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        /* --- タスク選択 --- */
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+        }
+        .tab-button {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            font-size: 1em;
+            color: var(--sub-text-color);
+            border-bottom: 3px solid transparent;
+            transition: color 0.2s, border-bottom-color 0.2s;
+            margin-bottom: -2px; /* 境界線の重なりを調整 */
+        }
+        .tab-button.active {
+            color: var(--primary-color);
+            font-weight: 600;
+            border-bottom-color: var(--primary-color);
+        }
+
+        /* --- 既存タスク一覧 --- */
+        #existingTaskSection {
+            padding: 10px 0;
+        }
+        .task-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        .task-list li {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--card-background);
+        }
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+        .task-list li span {
+            flex-grow: 1;
+            font-size: 0.95em;
+        }
+        .task-list li .assignee {
+            color: var(--sub-text-color);
+            font-size: 0.85em;
+            margin-right: 10px;
+        }
+
+        #dbFilterSection {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        /* --- 新規タスクフォーム --- */
+        #newTaskSection {
+            padding: 10px 0;
+        }
         .form-group {
             margin-bottom: 15px;
         }
-
-        label {
+        .form-group label {
             display: block;
             margin-bottom: 5px;
             font-weight: 600;
+            font-size: 0.9em;
         }
-
         .input-field {
-            width: calc(100% - 16px);
-            padding: 8px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 14px;
-        }
-        
-        .input-field:focus {
-            border-color: var(--primary-color);
-            outline: none;
-        }
-
-        /* Modal */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
             width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1em;
         }
-
-        .modal-content {
-            background-color: white;
-            padding: 25px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            position: relative;
-        }
-
-        .close-button {
-            position: absolute;
-            top: 10px;
-            right: 15px;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--sub-text-color);
-        }
-
-        /* New Task Specific */
         #targetDbDisplay {
-            font-size: 14px;
-            color: var(--sub-text-color);
-            margin-bottom: 15px;
-            font-weight: 600;
+            font-size: 0.85em;
+            color: var(--primary-color);
+            font-weight: 500;
+            margin-bottom: 10px;
         }
 
-        .select-chip {
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            transition: background-color 0.1s, color 0.1s;
+
+        /* --- 設定画面 --- */
+        #settingsView {
+            padding: 20px;
         }
-        
-        /* 部門選択時のスタイル（app.jsで制御） */
-        /* .select-chip:has(+ input:checked) {
-            color: white !important;
-            background-color: currentColor !important;
-        } */
+        #settingsView h2 {
+            margin-top: 0;
+            color: var(--primary-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        #settingsView label {
+            display: block;
+            font-weight: 600;
+            margin-top: 10px;
+            margin-bottom: 5px;
+        }
+        .settings-actions {
+            margin-top: 30px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* --- ユーティリティ --- */
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Notion Tracker</h1>
-            <button id="openSettings" class="settings-button">⚙️</button>
-        </header>
 
-        <div class="tabs">
-            <div id="tabTasks" class="tab tab-active">タスク一覧</div>
-            <div id="tabNew" class="tab">新規タスク作成</div>
+<div class="container">
+    <header>
+        <h1>Notion Toggl Timer</h1>
+        <button id="toggleSettings" class="btn btn-secondary">設定</button>
+    </header>
+
+    <div id="mainView" class="content">
+
+        <div id="runningTaskContainer" class="hidden">
+            <p id="runningTaskTitle">タスク名</p>
+            <div id="runningTimer">00:00:00</div>
+            
+            <div id="thinkingLogSection">
+                <label for="thinkingLogInput">💭 停止/完了時の思考ログ・メモ</label>
+                <textarea id="thinkingLogInput" rows="3" placeholder="タスク終了時にNotionに追記されます"></textarea>
+            </div>
+
+            <div id="runningTaskActions">
+                <button id="stopTaskButton" class="btn btn-secondary">一時停止</button>
+                <button id="completeTaskButton" class="btn btn-red">完了</button>
+            </div>
         </div>
 
-        <div class="content">
-            <div id="loader" class="hidden" style="text-align: center; color: var(--primary-color); font-weight: bold; margin-bottom: 15px;">
-                ロード中...
+        <div id="taskSelectionSection">
+            
+            <div class="tabs">
+                <button class="tab-button active" id="startExistingTask" data-target="existing">既存タスクから選択</button>
+                <button class="tab-button" id="startNewTask" data-target="new">新規タスク作成</button>
             </div>
 
-            <div id="runningTaskContainer" class="hidden">
-                <p style="font-size: 12px; color: var(--sub-text-color); text-align: center; margin-bottom: 5px;">実行中タスク</p>
-                <div id="runningTimer">00:00:00</div>
-                <div id="runningTaskTitle"></div>
-                <textarea id="thinkingLogInput" placeholder="思考ログや作業内容を記録してください..."></textarea>
-                <div class="running-actions" style="display: flex; justify-content: space-between; margin-top: 10px;">
-                    <button id="completeRunningTask" class="btn btn-success">✅ 完了 (記録)</button>
-                    <button id="stopRunningTask" class="btn btn-danger">⏸️ 停止 (記録)</button>
+            <div id="existingTaskTab">
+                <div id="dbFilterSection">
+                    <label for="taskDbFilter" style="font-weight: 600;">対象DB:</label>
+                    <select id="taskDbFilter" class="input-field" style="flex-grow: 1;"></select>
+                    <button id="reloadTasks" class="btn btn-secondary">更新</button>
+                </div>
+                <div id="taskListContainer">
+                    <p>設定をロード中...</p>
                 </div>
             </div>
 
-            <section id="sectionTasks">
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <select id="taskDbFilter" class="input-field" style="width: 75%; margin-right: 10px;">
-                        </select>
-                    <button id="reloadTasks" class="btn btn-primary" style="width: 25%;">🔄 更新</button>
-                </div>
-                
-                <ul id="taskList" class="task-list">
-                    <li><p style="text-align:center; color:var(--sub-text-color);">タスクをロードしてください。</p></li>
-                </ul>
-
-                <div class="kpi-section" style="margin-top: 20px;">
-                    <div class="kpi-card">
-                        <h3>週間合計 (Mock)</h3>
-                        <p id="kpiWeek">0.0h</p>
-                    </div>
-                    <div class="kpi-card">
-                        <h3>月間合計 (Mock)</h3>
-                        <p id="kpiMonth">0.0h</p>
-                    </div>
-                    <div class="kpi-category-list">
-                        <h3 style="text-align: left; margin-top: 0;">カテゴリ別時間 (Mock)</h3>
-                        <div id="kpiCategoryContainer">
-                            </div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="sectionNew" class="hidden">
-                <div id="targetDbDisplay"></div>
-                
-                <form id="newTaskForm">
+            <div id="newTaskTab" class="hidden">
+                <p id="targetDbDisplay"></p>
+                <div id="newTaskForm">
                     <div class="form-group">
-                        <label for="newTaskTitle">タスク名</label>
-                        <input type="text" id="newTaskTitle" class="input-field" required placeholder="例: Webサイトのトップページ改修">
+                        <label for="newTaskTitle">タスク名:</label>
+                        <input type="text" id="newTaskTitle" class="input-field" placeholder="新規タスクのタイトル">
                     </div>
+
+                    <div id="newCatContainer">
+                        </div>
                     
-                    <div id="newCatContainer"></div>
+                    <div id="newDeptContainer">
+                        </div>
 
-                    <div id="newDeptContainer"></div>
+                    <div class="form-group" style="text-align: right; margin-top: 20px;">
+                        <button id="startNewTaskButton" class="btn btn-primary">作成して開始</button>
+                    </div>
+                </div>
+            </div>
 
-                    <button id="startNewTaskButton" type="submit" class="btn btn-success" style="width: 100%; margin-top: 20px;">
-                        作成して計測開始
-                    </button>
-                </form>
-            </section>
         </div>
     </div>
 
-    <div id="settingsModal" class="modal hidden">
-        <div class="modal-content">
-            <span id="closeSettings" class="close-button">&times;</span>
-            <h2>⚙️ 設定</h2>
-            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+    <div id="settingsView" class="hidden">
+        <h2>Notion 連携設定</h2>
 
-            <h3 style="font-size: 16px; margin-top: 0;">Notion接続設定</h3>
-            <div class="form-group">
-                <label for="notionTokenInput">Notion APIトークン (Integration Secret)</label>
-                <input type="password" id="notionTokenInput" class="input-field" placeholder="secret_..." style="width: 100%;">
-            </div>
-            
-            <div class="form-group">
-                <label for="humanUserIdInput">
-                    あなたのNotionユーザーID (手動設定)
-                    <span style="display: block; font-size: 12px; color: var(--warning-color); font-weight: 500;">
-                        タスクへの自動割り当てと一覧表示に使用します。
-                    </span>
-                </label>
-                <input type="text" id="humanUserIdInput" class="input-field" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width: 100%;">
-            </div>
+        <label for="confNotionToken">Notion インテグレーションSecret:</label>
+        <input type="password" id="confNotionToken" class="input-field" placeholder="secret_...">
 
-            <button id="saveSettings" class="btn btn-primary" style="width: 100%; margin-bottom: 20px;">設定を保存</button>
+        <label for="confNotionDbId">Notion データベースID:</label>
+        <input type="text" id="confNotionDbId" class="input-field" placeholder="データベースID (32桁+ハイフン)">
 
-            <h3 style="font-size: 16px;">対象データベース管理</h3>
-            <div id="dbList" style="max-height: 150px; overflow-y: auto; padding: 5px 0;">
-                </div>
-            
-            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
-            
-            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <div style="flex: 1;">
-                    <label for="dbNameInput" style="font-size: 12px;">DB名</label>
-                    <input type="text" id="dbNameInput" class="input-field" placeholder="タスクDB" style="font-size: 12px;">
-                </div>
-                <div style="flex: 2;">
-                    <label for="dbIdInput" style="font-size: 12px;">DB ID (32桁)</label>
-                    <input type="text" id="dbIdInput" class="input-field" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="font-size: 12px;">
-                </div>
-                <button id="addDbBtn" class="btn btn-secondary" style="align-self: flex-end; padding: 5px 10px; font-size: 12px; height: 32px;">追加</button>
-            </div>
+        <label for="confNotionUserId">Notion 担当者ID (任意):</label>
+        <input type="text" id="confNotionUserId" class="input-field" placeholder="ユーザーID (32桁+ハイフン)">
+        
+        <hr style="margin-top: 20px; margin-bottom: 20px;">
+        
+        <h2>Toggl Track 設定</h2>
+
+        <label for="confTogglToken">Toggl APIトークン:</label>
+        <input type="password" id="confTogglToken" class="input-field" placeholder="Toggl API Token (Profile Settings)">
+
+        <label for="confTogglWid">Toggl ワークスペースID:</label>
+        <input type="text" id="confTogglWid" class="input-field" placeholder="Workspace ID (数値)">
+        
+        <div class="settings-actions">
+            <button id="cancelConfig" class="btn btn-secondary">キャンセル</button>
+            <button id="saveConfig" class="btn btn-primary">保存</button>
         </div>
     </div>
 
-    <script src="app.js"></script>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
