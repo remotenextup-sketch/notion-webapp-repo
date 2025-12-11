@@ -209,12 +209,15 @@ function hideSettings() {
 // ==========================================
 
 /** 外部APIへのリクエストをプロキシ経由で送信する */
-async function externalApi(targetUrl, method, headers, body) {
-    const proxyPayload = {
+const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
-        headers: headers,
-        body: body
+        // ★★★ 修正: authDetails の内容をペイロードに展開 ★★★
+        tokenKey: authDetails.tokenKey, 
+        tokenValue: authDetails.tokenValue,
+        notionVersion: authDetails.notionVersion, // Notionバージョン用 (Togglでは無視される)
+        // ★★★ 修正ここまで ★★★
+        body: body // NotionやToggl APIへの実際のペイロード
     };
 
     const res = await fetch(PROXY_URL, {
