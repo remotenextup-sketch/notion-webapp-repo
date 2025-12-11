@@ -94,19 +94,19 @@
             <select id="taskDbFilter" style="padding: 8px 12px; border-radius: 6px;"></select>
         </div>
 
-        <!-- タスク一覧 -->
+        <!-- 📋 未完了タスク一覧（1番目！） -->
         <div class="section">
             <h3>📋 未完了タスク（<span id="taskCount">0</span>件）</h3>
             <ul id="taskList"></ul>
         </div>
 
-        <!-- 新規タスク作成 -->
+        <!-- ➕ 新規タスク作成（2番目！） -->
         <div class="section">
             <h3>➕ 新規タスク作成</h3>
             <div id="targetDbDisplay" style="font-weight: bold; color: #666; margin-bottom: 15px; font-size: 15px; padding: 10px; background: #f0f8ff; border-radius: 8px; border-left: 4px solid #28a745;"></div>
             <form id="newTaskForm" onsubmit="return false;">
                 <div style="display: grid; grid-template-columns: 1fr auto; gap: 15px; align-items: end; margin-bottom: 15px;">
-                    <input type="text" id="newTaskTitle" placeholder="タスク名を入力（例：楽天商品登録）">
+                    <input type="text" id="newTaskTitle" name="newTaskTitle" placeholder="タスク名を入力（例：楽天商品登録）">
                     <button type="button" id="startNewTaskButton" class="btn btn-green" disabled>🚀 作成＆開始</button>
                 </div>
                 <div id="newCatContainer" style="margin-bottom: 15px;"></div>
@@ -114,7 +114,7 @@
             </form>
         </div>
 
-        <!-- KPI（一番下） -->
+        <!-- 📊 KPI（一番下！完璧UI） -->
         <div class="section">
             <h3>📊 KPI（今週）</h3>
             <div class="kpi-grid">
@@ -140,7 +140,10 @@
             <span id="runningStartTime">開始時刻</span>
         </div>
         <div class="thinking-log-section">
-            <label style="display: block; font-weight: 500; margin-bottom: 6px; font-size: 14px; color: #555;">💭 思考ログ（任意）</label>
+            <!-- ✅ label修正 -->
+            <label for="thinkingLogInput" style="display: block; font-weight: 500; margin-bottom: 6px; font-size: 14px; color: #555;">
+                💭 思考ログ（任意）
+            </label>
             <textarea id="thinkingLogInput" placeholder="作業中に気づいたこと、反省点、次回の改善案などを記入..." rows="4"></textarea>
         </div>
         <div class="running-timer">
