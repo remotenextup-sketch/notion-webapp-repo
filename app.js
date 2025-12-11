@@ -574,6 +574,7 @@ function calculateKpi() {
 // =========================================================
 
 /** 新規タスクフォームを準備する */
+/** 新規タスクフォームを準備する */
 async function initNewTaskForm() {
     const dbId = dom.taskDbFilter.value;
     if (!dbId) {
@@ -590,7 +591,7 @@ async function initNewTaskForm() {
         return;
     }
 
-    // 1. カテゴリ (Select) のレンダリング (変更なし)
+    // 1. カテゴリ (Select) のレンダリング
     clearElement(dom.newCatContainer);
     if (props.category && props.category.selectOptions) {
         const catGroup = document.createElement('div');
@@ -632,7 +633,7 @@ async function initNewTaskForm() {
         });
         dom.newDeptContainer.appendChild(deptGroup);
 
-        // ★修正: 部門のクリックイベントリスナー - e.preventDefault()を追加し、トグルの確実性を上げる
+        // ★修正: 部門のクリックイベントリスナー - スタイル操作を明示的に行う
         document.querySelectorAll('.select-chip').forEach(label => {
             label.addEventListener('click', function(e) {
                 e.preventDefault(); // デフォルト動作を防止
@@ -643,7 +644,10 @@ async function initNewTaskForm() {
                 if (checkbox) {
                     checkbox.checked = !checkbox.checked;
 
-                    const color = this.dataset.color === 'default' ? '#ccc' : `var(--${this.dataset.color})`;
+                    // CSS変数から色を取得
+                    const colorName = this.dataset.color;
+                    // getComputedStyleでルート要素からCSS変数の値を取得
+                    const color = colorName === 'default' ? '#ccc' : getComputedStyle(document.documentElement).getPropertyValue(`--${colorName}`).trim();
                     
                     // 視覚的な状態を更新
                     if (checkbox.checked) {
@@ -660,7 +664,7 @@ async function initNewTaskForm() {
         });
     }
 
-    // 2-2. 担当者 (People) の表示 (変更なし)
+    // 2-2. 担当者 (People) の表示
     const assigneeProp = props.assignee;
     if (assigneeProp && assigneeProp.type === 'people') {
         const status = settings.humanUserId ? '✅ 割り当て設定済み' : '⚠️ 設定が必要です';
