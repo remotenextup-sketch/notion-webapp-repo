@@ -444,21 +444,25 @@ function addDbEntry() {
 
 // ✅ 修正版（行850付近）
 async function startTogglTracking(taskTitle, pageId) {
-  localRunningTask = { title: taskTitle, pageId, startTime: Date.now() };
+  // ★Toggl proxy完全削除→ローカルタイマーのみ★
+  localRunningTask = { 
+    title: taskTitle, 
+    pageId: pageId, 
+    startTime: Date.now() 
+  };
   localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
   
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(updateTimerDisplay, 1000);
   updateTimerDisplay();
   
-  // ★追加★ UI即時更新
+  // UI即時更新
   document.getElementById('runningTaskTitle').textContent = taskTitle;
   document.getElementById('runningStartTime').textContent = 
     new Date(localRunningTask.startTime).toLocaleTimeString();
   $runningTaskContainer.classList.remove('hidden');
   
   alert(`✅ 計測開始: ${taskTitle}`);
-  checkRunningState();
 }
 
 async function createNotionTask(e) {
