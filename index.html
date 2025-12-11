@@ -11,7 +11,11 @@
             font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; 
             max-width: 1200px; margin: 0 auto; padding: 20px; background: #f8f9fa; 
         }
-        .container { background: white; border-radius: 16px; padding: 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+        .container { 
+            background: white; border-radius: 16px; padding: 30px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+            display: flex; flex-direction: column; gap: 30px; /* 👈追加 */
+        }
         h1 { text-align: center; color: #28a745; margin-bottom: 30px; font-size: 28px; }
         h3 { color: #333; margin-bottom: 15px; font-size: 18px; }
         .btn { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; }
@@ -46,6 +50,7 @@
     </style>
 </head>
 <body>
+    <!-- 以下、あなたのHTMLそのまま（変更なし） -->
     <div class="container">
         <h1>🚀 Notion Toggl Timer</h1>
         
