@@ -445,28 +445,38 @@ function addDbEntry() {
 async function startTogglTracking(taskTitle, pageId) {
   console.log('🎯 LOCAL TIMER START:', taskTitle);
   
-  // ★Toggl完全削除→ローカルタイマーのみ★
-  localRunningTask = { 
-    title: taskTitle, 
-    pageId: pageId, 
-    startTime: Date.now() 
-  };
+  localRunningTask = { title: taskTitle, pageId: pageId, startTime: Date.now() };
   localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
+  
+  // 強制UI更新
+  const titleEl = document.getElementById('runningTaskTitle');
+  const timeEl = document.getElementById('runningStartTime');
+  const timerEl = document.getElementById('runningTimer');
+  const container = document.querySelector('#runningTaskContainer, .running-task-container');
+  
+  if (titleEl) titleEl.textContent = taskTitle;
+  if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
+  if (timerEl) timerEl.textContent = '00:00:00';
+  if (container) {
+    container.style.display = 'block';
+    container.classList.remove('hidden');
+  }
   
   // タイマー開始
   if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(updateTimerDisplay, 1000);
-  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    if (timerEl && localRunningTask) {
+      const elapsed = Math.floor((Date.now() - localRunningTask.startTime) / 1000);
+      const h = Math.floor(elapsed / 3600);
+      const m = Math.floor((elapsed % 3600) / 60000);
+      const s = elapsed % 60;
+      timerEl.textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    }
+  }, 1000);
   
-  // UI更新
-  document.getElementById('runningTaskTitle').textContent = taskTitle;
-  document.getElementById('runningStartTime').textContent = new Date().toLocaleTimeString();
-  $runningTaskContainer.classList.remove('hidden');
-  
-  console.log('✅ LOCAL MEASUREMENT STARTED');
-  alert(`✅ 計測開始: ${taskTitle}`);
+  alert(`✅ 計測開始: ${taskTitle} (ローカルタイマー)`);
+  console.log('✅ TIMER STARTED');
 }
-
 
 async function createNotionTask(e) {
     e.preventDefault();
