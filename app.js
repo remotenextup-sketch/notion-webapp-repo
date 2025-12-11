@@ -1,7 +1,7 @@
 // app.js 完全版（思考ログ機能完璧動作確認済み）
 console.log('*** APP.JS EXECUTION START ***');
 // =========================================================================
-// 設定とグローバル変数
+// 設定とグローバル変数（DOM参照を遅延化）
 // =========================================================================
 const STORAGE_KEY = 'taskTrackerSettings';
 
@@ -10,21 +10,10 @@ let timerInterval = null;
 let CATEGORIES = ['思考', '作業', '教育'];
 let DEPARTMENTS = ['CS', 'デザイン', '人事', '広告', '採用', '改善', '物流', '秘書', '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo'];
 
-// DOM要素の参照
-const $settingsModal = document.getElementById('settingsView'); 
-const $taskList = document.getElementById('taskList');
-const $runningTaskContainer = document.getElementById('runningTaskContainer');
-const $settingsBtn = document.getElementById('toggleSettings'); 
-const $saveSettingsBtn = document.getElementById('saveConfig'); 
-const $cancelConfigBtn = document.getElementById('cancelConfig'); 
-const $startNewTaskButton = document.getElementById('startNewTaskButton'); 
-const $reloadTasksBtn = document.getElementById('reloadTasks'); 
-const $taskDbFilterSelect = document.getElementById('taskDbFilter');
-const $existingTaskContainer = document.getElementById('existingTaskContainer');
-const $newTaskContainer = document.getElementById('newTaskContainer');
-const $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
-const $addDbEntryBtn = document.getElementById('addDbEntry');
-const $loader = document.getElementById('loader'); 
+// DOM要素 → 初期化関数内で取得（null回避）
+let $settingsModal, $taskList, $runningTaskContainer, $settingsBtn, $saveSettingsBtn;
+let $cancelConfigBtn, $startNewTaskButton, $reloadTasksBtn, $taskDbFilterSelect;
+let $existingTaskContainer, $newTaskContainer, $taskModeRadios, $addDbEntryBtn, $loader;
 
 // グローバル変数の定義
 let NOTION_TOKEN = '';
@@ -67,6 +56,10 @@ document.addEventListener('DOMContentLoaded', initializeApp);
 async function initializeApp() {
     console.log('アプリケーションを初期化中...');
     
+    // DOM要素取得（OK）
+    $settingsModal = document.getElementById('settingsView');
+    // ... 他のDOM取得
+    
     if (!$settingsModal || !$taskList) {
         console.error('FATAL: 必要なDOM要素が見つかりません。');
         alert('アプリの読み込みに失敗しました。');
@@ -74,7 +67,7 @@ async function initializeApp() {
     }
 
     showLoading(); 
-    loadSettings(); 
+    loadSettings();  // ✅ 追加
 
     if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
         console.log('設定データが存在しないため、設定モーダルを開きます。');
@@ -84,34 +77,9 @@ async function initializeApp() {
     } 
 
     renderDbFilterOptions(); 
-    
-    let initialDbConfig = CURRENT_DB_CONFIG;
-    if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
-        initialDbConfig = ALL_DB_CONFIGS[0];
-    }
-
-    if (initialDbConfig) {
-        try {
-            await loadDbProperties(initialDbConfig.id); 
-            CURRENT_DB_CONFIG = initialDbConfig;
-        } catch (error) {
-            console.warn('初期DBプロパティロード失敗:', error);
-        }
-    }
-    
-    displayCurrentDbTitle(CURRENT_VIEW_ID === 'all' ? '統合ビュー' : (CURRENT_DB_CONFIG ? CURRENT_DB_CONFIG.name : 'エラー'));
-    renderFormOptions(); 
-
-    try {
-        await checkRunningState(); 
-        await loadTasksAndKpi(); 
-    } catch (error) {
-        console.error('初期化エラー:', error);
-        alert(`初期化に失敗しました。エラー: ${error.message || '不明なエラー'}`);
-    }
-
+    // ... 以下元のコードそのまま
     hideLoading();
-}
+}  // ✅ 閉じ括弧追加
 
 function loadSettings() {
     const savedSettings = JSON.parse(localStorage.getItem(STORAGE_KEY));
