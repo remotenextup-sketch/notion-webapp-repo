@@ -9,7 +9,7 @@ const settings = {
     notionDatabaseId: '',
     humanUserId: '', // Notionの担当者として割り当てるユーザーID
     
-    // ★★★ Toggl設定の追加 ★★★
+    // ★★★ Toggl設定 ★★★
     togglApiToken: '',
     togglWorkspaceId: '', 
     
@@ -278,8 +278,6 @@ async function stopToggl(entryId) {
 // 4. Notionデータ取得
 // ==========================================
 
-// ... (fetchDatabaseList, getDbProperties, loadTasks, renderTaskList は変更なし) ...
-
 /** データベース一覧を取得し、フィルターをレンダリングする */
 async function fetchDatabaseList() {
     try {
@@ -437,7 +435,6 @@ function renderTaskList(tasks, dbId, props) {
 // ==========================================
 
 function switchTab(event) {
-    // ... (既存のタブ切り替えロジック) ...
     const target = event.currentTarget.getAttribute('data-target');
     
     document.getElementById('existingTaskTab').classList.remove('active');
@@ -477,7 +474,7 @@ async function initNewTaskForm() {
         return;
     }
 
-    // 1. カテゴリ (Select) のレンダリング (今回はシンプルにSelect要素を使用)
+    // 1. カテゴリ (Select) のレンダリング
     clearElement(dom.newCatContainer);
     if (props.category && props.category.selectOptions) {
         const catGroup = document.createElement('div');
@@ -603,7 +600,7 @@ async function checkRunningState() {
     // 既存のローカルストレージからの復元ロジック
     // ... (startTime, currentRunningTask の復元)
 
-    // ★ Togglの状態確認 (省略) - 既存アプリはTogglから復元しているが、ここではローカルストレージを優先する
+    // ★ Togglの状態確認 (省略) - ローカルストレージを優先する
 
     updateRunningTaskDisplay();
 }
@@ -645,6 +642,7 @@ async function startTask(task) {
             const inProgressOption = statusProp.selectOptions.find(opt => opt.name === '進行中');
             if (inProgressOption) {
                 propertiesToUpdate[statusProp.name] = { select: { id: inProgressOption.id } };
+                // Notion IDはハイフン除去して使用
                 await notionApi(`/pages/${task.id.replace(/-/g, '').trim()}`, 'PATCH', { properties: propertiesToUpdate });
             }
         }
