@@ -530,23 +530,32 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 // Toggl 連携（完全版）
 // =========================================================================
+// この関数全体を検索 → 完全置換（Ctrl+H）
 async function checkRunningState() {
-  const stored = localStorage.getItem('runningTask');
-  if (stored) {
-    localRunningTask = JSON.parse(stored);
-    document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
-    document.getElementById('runningStartTime').textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
-    
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(updateTimerDisplay, 1000);
-    updateTimerDisplay();
-    
-    $runningTaskContainer.classList.remove('hidden');
-    console.log('✅ 実行中状態復元完了');
-  } else {
-    localRunningTask = null;
-    if (timerInterval) clearInterval(timerInterval);
-    $runningTaskContainer.classList.add('hidden');
+  try {
+    const stored = localStorage.getItem('runningTask');
+    if (stored) {
+      localRunningTask = JSON.parse(stored);
+      const titleEl = document.getElementById('runningTaskTitle');
+      const timeEl = document.getElementById('runningStartTime');
+      if (titleEl) titleEl.textContent = localRunningTask.title;
+      if (timeEl) timeEl.textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
+      
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimerDisplay, 1000);
+      updateTimerDisplay();
+      
+      const container = document.getElementById('runningTaskContainer');
+      if (container) container.classList.remove('hidden');
+      console.log('✅ 実行中状態復元完了');
+    } else {
+      localRunningTask = null;
+      if (timerInterval) clearInterval(timerInterval);
+      const container = document.getElementById('runningTaskContainer');
+      if (container) container.classList.add('hidden');
+    }
+  } catch (e) {
+    console.error('checkRunningStateエラー:', e);
   }
 }
 
