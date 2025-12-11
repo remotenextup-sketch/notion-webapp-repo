@@ -342,8 +342,10 @@
         <label for="confNotionToken">Notion インテグレーションSecret:</label>
         <input type="password" id="confNotionToken" class="input-field" placeholder="secret_...">
 
-        <label for="confNotionDbId">Notion データベースID (複数可):</label>
-        <input type="text" id="confNotionDbId" class="input-field" placeholder="DBID1, DBID2, ... (カンマ区切り)">
+        <label for="confNotionDbConfig">Notion データベース設定 (JSON配列):</label>
+        <textarea id="confNotionDbConfig" class="input-field" rows="5" 
+            placeholder='[{"name": "タスク管理", "id": "DBID1"}, {"name": "プロジェクト", "id": "DBID2"}]' 
+            style="resize: vertical;"></textarea>
         <label for="confNotionUserId">Notion 担当者ID (任意):</label>
         <input type="text" id="confNotionUserId" class="input-field" placeholder="ユーザーID (32桁+ハイフン)">
         
