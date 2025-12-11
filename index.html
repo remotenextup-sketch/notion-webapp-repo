@@ -21,6 +21,7 @@
         .btn { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; }
         .btn-green { background: #28a745; color: white; }
         .btn-green:hover { background: #218838; transform: translateY(-1px); }
+        .btn:hover { transform: translateY(-1px); }
         .section { margin-bottom: 30px; padding: 20px; border: 1px solid #e9ecef; border-radius: 12px; }
         .hidden { display: none !important; }
         #taskList { list-style: none; }
@@ -46,7 +47,12 @@
         .btn-stop:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,193,7,0.5); }
         #loader { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9999; background: rgba(255,255,255,0.95); padding: 30px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); text-align: center; }
         
-        /* 👇 部門グリッド + カテゴリラジオ復活！ */
+        /* タブ切り替え */
+        .tab-buttons { display: flex; gap: 8px; margin-bottom: 20px; }
+        .tab-active { background: #28a745 !important; color: white !important; }
+        .tab-inactive { background: #e9ecef !important; color: #333 !important; }
+        
+        /* 部門グリッド */
         .dept-grid {
             display: grid !important;
             grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)) !important;
@@ -62,33 +68,11 @@
         .department-label input {
             margin-right: 6px !important;
         }
-        .category-radio-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin-bottom: 15px;
-        }
-        .category-radio-group {
-            display: flex;
-            align-items: center;
-            font-size: 14px;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 6px;
-            transition: background 0.2s;
-        }
-        .category-radio-group:hover {
-            background: #f0f8ff;
-        }
-        .category-radio-group input {
-            margin-right: 8px;
-        }
         
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @media (max-width: 768px) { 
             #runningTaskContainer { right: 10px; left: 10px; width: auto; } 
             body { padding: 10px; }
-            .category-radio-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -107,14 +91,20 @@
             <select id="taskDbFilter" style="padding: 8px 12px; border-radius: 6px;"></select>
         </div>
 
-        <!-- 📋 未完了タスク一覧（1番目！） -->
-        <div class="section">
+        <!-- 👇 タブ切り替えボタン -->
+        <div class="tab-buttons">
+            <button type="button" id="tabTasks" class="btn btn-green tab-active">📋 タスク一覧</button>
+            <button type="button" id="tabNew" class="btn tab-inactive">➕ 新規タスク</button>
+        </div>
+
+        <!-- 📋 未完了タスク一覧（タブ1） -->
+        <div class="section" id="sectionTasks">
             <h3>📋 未完了タスク（<span id="taskCount">0</span>件）</h3>
             <ul id="taskList"></ul>
         </div>
 
-        <!-- ➕ 新規タスク作成（2番目！） -->
-        <div class="section">
+        <!-- ➕ 新規タスク作成（タブ2） -->
+        <div class="section" id="sectionNew" style="display: none;">
             <h3>➕ 新規タスク作成</h3>
             <div id="targetDbDisplay" style="font-weight: bold; color: #666; margin-bottom: 15px; font-size: 15px; padding: 10px; background: #f0f8ff; border-radius: 8px; border-left: 4px solid #28a745;"></div>
             <form id="newTaskForm" onsubmit="return false;">
@@ -122,15 +112,12 @@
                     <input type="text" id="newTaskTitle" name="newTaskTitle" placeholder="タスク名を入力（例：楽天商品登録）">
                     <button type="button" id="startNewTaskButton" class="btn btn-green" disabled>🚀 作成＆開始</button>
                 </div>
-                
-                <!-- 👇 カテゴリ：ラジオボタンに変更！ -->
-                <div class="category-radio-grid" id="newCatContainer"></div>
-                
+                <div id="newCatContainer" style="margin-bottom: 15px;"></div>
                 <div id="newDeptContainer" style="max-height: 150px; overflow-y: auto;"></div>
             </form>
         </div>
 
-        <!-- 📊 KPI（3番目！一番下！） -->
+        <!-- 📊 KPI（一番下！） -->
         <div class="section">
             <h3>📊 KPI（今週）</h3>
             <div class="kpi-grid">
