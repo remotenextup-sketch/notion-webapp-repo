@@ -576,30 +576,100 @@ async function checkRunningState() {
     document.getElementById('runningStartTime').textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
     
     // ★完了ボタン強制設定★
-    const completeBtn = document.getElementById('completeRunningTask');
-    if (completeBtn) {
-      completeBtn.textContent = '✅ 完了にして停止';
-      completeBtn.style.display = 'inline-block';
-      
-      // イベントリスナー削除→再設定（重複防止）
-      completeBtn.replaceWith(completeBtn.cloneNode(true));
-      const newCompleteBtn = document.getElementById('completeRunningTask');
-      
-      newCompleteBtn.onclick = async () => {
-        console.log('🛑 完了ボタンクリック');
-        if (localRunningTask?.pageId) {
-          await markTaskCompleted(localRunningTask.pageId);
-        }
-        localRunningTask = null;
-        localStorage.removeItem('runningTask');
-        if (timerInterval) clearInterval(timerInterval);
-        $runningTaskContainer.classList.add('hidden');
-        console.log('✅ タスク完了処理完了');
-        alert('✅ タスク完了');
-        loadTasksAndKpi();
-      };
+    // ★思考ログ付き停止/完了ボタン（最終版）★
+const completeBtn = document.getElementById('completeRunningTask');
+if (completeBtn) {
+  completeBtn.addEventListener('click', async () => {
+    console.log('🛑 完了ボタンクリック！');
+    
+    // ★思考ログ入力（任意）★
+    const thinkingNote = prompt('思考ログを残しますか？（任意・空でスキップ）:');
+    const logEntry = thinkingNote ? 
+      `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
+    
+    if (localRunningTask?.pageId && logEntry) {
+      await appendThinkingLog(localRunningTask.pageId, logEntry);
     }
     
+    // Notionステータス更新
+    if (localRunningTask?.pageId) {
+      await markTaskCompleted(localRunningTask.pageId);
+    }
+    
+    // タイマー完全停止
+    localRunningTask = null;
+    localStorage.removeItem('runningTask');
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    
+    $runningTaskContainer.classList.add('hidden');
+    console.log('✅ 思考ログ保存完了');
+    alert('✅ タスク完了！' + (logEntry ? '思考ログ保存済み' : ''));
+    loadTasksAndKpi();
+  });
+}
+
+// ★停止ボタン（思考ログ付き）★
+const stopBtn = document.getElementById('stopRunningTask');
+if (stopBtn) {
+  stopBtn.addEventListener('click', async () => {
+    console.log('⏹️ 停止ボタンクリック');
+    
+    const thinkingNote = prompt('思考ログを残しますか？（任意・空でスキップ）:');
+    const logEntry = thinkingNote ? 
+      `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
+    
+    if (localRunningTask?.pageId && logEntry) {
+      await appendThinkingLog(localRunningTask.pageId, logEntry);
+    }
+    
+    localRunningTask = null;
+    localStorage.removeItem('runningTask');
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    $runningTaskContainer.classList.add('hidden');
+    console.log('✅ 停止＋思考ログ完了');
+    alert('計測を停止しました' + (logEntry ? '（思考ログ保存済み）' : ''));
+  });
+}
+
+// ★思考ログ追記関数★
+async function appendThinkingLog(pageId, newLog) {
+  try {
+    console.log('📝 思考ログ追記開始:', pageId);
+    const targetUrl = `https://api.notion.com/v1/blocks/${pageId}/children`;
+    const response = await apiFetch(targetUrl, 'GET', null, 'notionToken', NOTION_TOKEN);
+    
+    // 既存思考ログ取得
+    let currentLog = '';
+    response.results.forEach(block => {
+      if (block.type === 'rich_text' && block.rich_text.rich_text[0]?.plain_text?.includes('[20')) {
+        currentLog = block.rich_text.rich_text.map(t => t.plain_text).join('\n');
+      }
+    });
+    
+    const fullLog = currentLog + newLog;
+    const updateUrl = `https://api.notion.com/v1/pages/${pageId}`;
+    const properties = {
+      '思考ログ': {
+        rich_text: [{
+          type: 'text',
+          text: { content: fullLog }
+        }]
+      }
+    };
+    
+    await apiFetch(updateUrl, 'PATCH', { properties }, 'notionToken', NOTION_TOKEN);
+    console.log('✅ 思考ログ追記完了');
+  } catch (e) {
+    console.error('思考ログ保存エラー:', e);
+  }
+}
+
     // タイマー再開
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(updateTimerDisplay, 1000);
