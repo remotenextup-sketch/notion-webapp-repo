@@ -543,12 +543,13 @@ async function checkRunningState() {
     
     $runningTaskContainer.classList.remove('hidden');
     console.log('✅ 実行中状態復元完了');
-    return;
+    return true;  // ✅ 関数内で正常
   }
   
   localRunningTask = null;
   if (timerInterval) clearInterval(timerInterval);
   $runningTaskContainer.classList.add('hidden');
+  return false;
 }
 
 // ★思考ログ追記関数（Page API版）★
