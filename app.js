@@ -758,6 +758,10 @@ if ($addDbEntryBtn) {
 }
 
 // ★思考ログ付き停止/完了ボタン（最終版・UIイベントリスナー）★
+// =========================================================================
+// Toggl 連携（クリーン版）
+// =========================================================================
+
 async function checkRunningState() {
   const stored = localStorage.getItem('runningTask');
   if (stored) {
@@ -773,12 +777,48 @@ async function checkRunningState() {
     console.log('✅ 実行中状態復元完了');
     return;
   }
+  
+  localRunningTask = null;
+  if (timerInterval) clearInterval(timerInterval);
+  $runningTaskContainer.classList.add('hidden');
+}
+// ★思考ログ機能付き最終版ボタン（UIイベントリスナー）★
+const completeBtn = document.getElementById('completeRunningTask');
+if (completeBtn) {
+  completeBtn.addEventListener('click', async () => {
+    console.log('🛑 完了ボタンクリック！');
+    
+    const thinkingNote = prompt('思考ログ（任意）:');
+    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
+    
+    if (localRunningTask?.pageId && logEntry) {
+      await appendThinkingLog(localRunningTask.pageId, logEntry);
+    }
+    
+    if (localRunningTask?.pageId) {
+      await markTaskCompleted(localRunningTask.pageId);
+    }
+    
+    localRunningTask = null;
+    localStorage.removeItem('runningTask');
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    $runningTaskContainer.classList.add('hidden');
+    
+    console.log('✅ 完了処理完了');
+    alert('✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : ''));
+    loadTasksAndKpi();
+  });
+}
 
-  const stopBtn = document.getElementById('stopRunningTask');
+const stopBtn = document.getElementById('stopRunningTask');
 if (stopBtn) {
   stopBtn.addEventListener('click', async () => {
-    console.log('⏹️ 停止ボタンクリック');  
-    const thinkingNote = prompt('思考ログを残しますか？（任意・空でスキップ）:');
+    console.log('⏹️ 停止ボタンクリック');
+    
+    const thinkingNote = prompt('思考ログ（任意）:');
     const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
     
     if (localRunningTask?.pageId && logEntry) {
@@ -792,31 +832,36 @@ if (stopBtn) {
       timerInterval = null;
     }
     $runningTaskContainer.classList.add('hidden');
+    
     console.log('✅ 停止＋思考ログ完了');
     alert('計測を停止しました' + (logEntry ? '（思考ログ保存済み）' : ''));
   });
 }
 
+
 // ★思考ログ追記関数★
+// ★思考ログ追記関数（Page API版）★
 async function appendThinkingLog(pageId, newLog) {
   try {
     console.log('📝 思考ログ追記開始:', pageId);
     
-    // 既存ログ取得
+    // Page取得で既存ログ確認
     const pageUrl = `https://api.notion.com/v1/pages/${pageId}`;
     const pageResponse = await apiFetch(pageUrl, 'GET', null, 'notionToken', NOTION_TOKEN);
     
-    let currentLog = pageResponse.properties['思考ログ']?.rich_text?.map(t => t.text.content).join('\n') || '';
+    let currentLog = '';
+    if (pageResponse.properties['思考ログ']?.rich_text) {
+      currentLog = pageResponse.properties['思考ログ'].rich_text
+        .map(t => t.text?.content || '').join('\n');
+    }
+    
     const fullLog = currentLog + newLog;
     
     // 更新
     const updateUrl = `https://api.notion.com/v1/pages/${pageId}`;
     const properties = {
       '思考ログ': {
-        rich_text: [{
-          type: 'text',
-          text: { content: fullLog }
-        }]
+        rich_text: [{ type: 'text', text: { content: fullLog } }]
       }
     };
     
@@ -826,6 +871,7 @@ async function appendThinkingLog(pageId, newLog) {
     console.error('思考ログ保存エラー:', e);
   }
 }
+
 
 // =========================================================================
 // 設定モーダル関数
