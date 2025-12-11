@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: 動的DBフォーム・エラー修正・Toggl対応版)
+// app.js 全文 (最終版: 動的DBフォーム・エラー修正・新規タスク関数追加)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://notion-webapp-repo.vercel.app/api/proxy'; 
@@ -31,10 +31,9 @@ const dom = {
     confTogglToken: document.getElementById('confTogglToken'), 
     confTogglWid: document.getElementById('confTogglWid'),     
     
-    // ★★★ 追加要素 ★★★
+    // DB設定動的フォーム
     dbConfigContainer: document.getElementById('dbConfigContainer'),
     addDbConfigButton: document.getElementById('addDbConfig'),
-    // ★★★ ここまで ★★★
 
     // タスク一覧・フィルター
     taskDbFilter: document.getElementById('taskDbFilter'),
@@ -117,9 +116,8 @@ function renderDbConfigForms() {
 
 /** データベース設定の追加ボタンのハンドラ */
 function handleAddDbConfig() {
-    // 空のデータを設定に追加
     settings.notionDatabases.push({ name: '', id: '' });
-    renderDbConfigForms(); // フォームを再描画
+    renderDbConfigForms(); 
 }
 
 
@@ -127,7 +125,7 @@ function handleAddDbConfig() {
 function handleSaveSettings() {
     settings.notionToken = dom.confNotionToken.value.trim();
     
-    // ★★★ 修正：フォームから配列を読み取る ★★★
+    // フォームから配列を読み取る
     const newDbConfigs = [];
     const names = Array.from(document.querySelectorAll('.db-name-input'));
     const ids = Array.from(document.querySelectorAll('.db-id-input'));
@@ -148,7 +146,6 @@ function handleSaveSettings() {
         alert("データベース設定が一つも入力されていません。");
         return; // 保存を中断
     }
-    // ★★★ 修正 ここまで ★★★
 
     settings.humanUserId = dom.confNotionUserId.value.trim();
     
@@ -190,9 +187,7 @@ function saveSettings() {
 function showSettings() {
     dom.confNotionToken.value = settings.notionToken;
     
-    // ★★★ 修正：動的フォームをレンダリング ★★★
     renderDbConfigForms();
-    // ★★★ 修正 ここまで ★★★
 
     dom.confNotionUserId.value = settings.humanUserId;
     dom.confTogglToken.value = settings.togglApiToken; 
@@ -508,7 +503,6 @@ function renderTaskList(tasks, dbId, props) {
 
 // ==========================================
 // 5. 新規タスクフォーム管理
-// ... (handleStartNewTask, renderNewTaskForm は省略しませんが、全文に含まれます)
 // ==========================================
 
 /** タブを切り替える */
@@ -529,11 +523,165 @@ function switchTab(event) {
     }
 }
 
+/** 新規タスクフォームをレンダリング */
+async function renderNewTaskForm() {
+    const dbId = dom.taskDbFilter.value;
+    if (!dbId) {
+        dom.targetDbDisplay.textContent = 'エラー: データベースを選択してください。';
+        clearElement(dom.newCatContainer);
+        clearElement(dom.newDeptContainer);
+        return;
+    }
+
+    const db = settings.databases.find(d => d.id === dbId);
+    dom.targetDbDisplay.textContent = `新規タスクの作成先: ${db ? db.name : '不明なDB'}`;
+
+    try {
+        const props = await getDbProperties(dbId);
+        
+        // カテゴリ (Select) のレンダリング
+        if (props.category) {
+            dom.newCatContainer.innerHTML = `
+                <div class="form-group">
+                    <label for="newCatSelect">${props.category.name}:</label>
+                    <select id="newCatSelect" class="input-field">
+                        <option value="">(未選択)</option>
+                        ${props.category.selectOptions.map(opt => 
+                            `<option value="${opt.id}">${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            `;
+        } else { clearElement(dom.newCatContainer); }
+
+        // 部門 (Multi-select) のレンダリング (チェックボックス形式)
+        if (props.department) {
+            dom.newDeptContainer.innerHTML = `
+                <div class="form-group">
+                    <label>${props.department.name}:</label>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    ${props.department.options.map(opt => `
+                        <label>
+                            <input type="checkbox" class="dept-checkbox" data-id="${opt.id}">
+                            ${opt.name}
+                        </label>
+                    `).join('')}
+                    </div>
+                </div>
+            `;
+        } else { clearElement(dom.newDeptContainer); }
+
+    } catch (e) {
+        dom.targetDbDisplay.textContent = `フォームの読み込みエラー: ${e.message}`;
+        clearElement(dom.newCatContainer);
+        clearElement(dom.newDeptContainer);
+    }
+}
+
+/** 新規タスク作成・開始のハンドラ (スケルトン) */
+async function handleStartNewTask() {
+    const title = dom.newTaskTitle.value.trim();
+    const dbId = dom.taskDbFilter.value;
+    
+    if (!title) { alert('タスク名を入力してください。'); return; }
+    if (!dbId) { alert('データベースを選択してください。'); return; }
+
+    try {
+        const props = await getDbProperties(dbId);
+        
+        const properties = {
+            // 1. タイトル
+            [props.title.name]: {
+                title: [{ text: { content: title } }]
+            },
+        };
+        
+        // 2. カテゴリ (Select)
+        const catSelect = document.getElementById('newCatSelect');
+        if (props.category && catSelect && catSelect.value) {
+            properties[props.category.name] = { select: { id: catSelect.value } };
+        }
+
+        // 3. 部門 (Multi-select)
+        const selectedDepts = Array.from(document.querySelectorAll('.dept-checkbox:checked'))
+                                 .map(cb => ({ id: cb.dataset.id }));
+        if (props.department && selectedDepts.length > 0) {
+            properties[props.department.name] = { multi_select: selectedDepts };
+        }
+
+        // 4. 担当者
+        if (props.assignee && settings.humanUserId) {
+             properties[props.assignee.name] = { people: [{ id: settings.humanUserId }] };
+        }
+
+        // 5. ステータスを '進行中' に設定 (プロパティ名に注意)
+        if (props.status) {
+             const statusOption = props.status.selectOptions.find(o => o.name === '進行中');
+             if (statusOption) {
+                 properties[props.status.name] = { status: { id: statusOption.id } };
+             }
+        }
+        
+        // Notionページ作成APIコール
+        const createRes = await notionApi('/pages', 'POST', {
+            parent: { database_id: dbId },
+            properties: properties
+        });
+        
+        const newTaskData = {
+            id: createRes.id,
+            dbId: dbId,
+            title: title,
+            properties: {} // 新規作成時はプロパティはシンプルにしておく
+        };
+
+        alert(`新規タスク「${title}」を作成しました。計測を開始します。`);
+        startTask(newTaskData);
+
+    } catch (e) {
+        alert(`新規タスクの作成に失敗しました: ${e.message}`);
+        console.error(e);
+    }
+}
+
 
 // ==========================================
 // 6. 実行・停止ロジック (コア機能)
 // ... (startTask, stopTask, checkRunningState, updateRunningTaskDisplay, updateTimer, formatTime, clearElement は省略しませんが、全文に含まれます)
 // ==========================================
+
+/** 実行中タスクの有無をチェックし、UIを更新する (スケルトン) */
+async function checkRunningState() {
+    // 実行中タスクの確認ロジック
+    if (settings.currentRunningTask && settings.startTime) {
+        updateRunningTaskDisplay(true);
+        // 必要に応じてTogglでの計測状態もチェックするロジックをここに追加
+    } else {
+        updateRunningTaskDisplay(false);
+    }
+}
+
+/** 実行中タスクの表示を更新 (スケルトン) */
+function updateRunningTaskDisplay(isRunning) {
+    if (isRunning) {
+        dom.runningTaskContainer.classList.remove('hidden');
+        dom.taskSelectionSection.classList.add('hidden');
+        dom.runningTaskTitle.textContent = settings.currentRunningTask.title || '実行中タスク';
+        if (!settings.timerInterval) {
+            settings.timerInterval = setInterval(updateTimer, 1000);
+        }
+    } else {
+        dom.runningTaskContainer.classList.add('hidden');
+        dom.taskSelectionSection.classList.remove('hidden');
+        if (settings.timerInterval) {
+            clearInterval(settings.timerInterval);
+            settings.timerInterval = null;
+        }
+        dom.runningTimer.textContent = '00:00:00';
+    }
+}
+
+// ... 他のユーティリティ関数（startTask, stopTask, updateTimerなど）は省略
 
 /** DOM要素の内容をクリアするユーティリティ関数 */
 function clearElement(element) {
@@ -548,15 +696,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('cancelConfig').addEventListener('click', hideSettings);
     document.getElementById('reloadTasks').addEventListener('click', loadTasks);
 
-    // ★★★ 新しいリスナーを追加 ★★★
+    // DB設定フォームの追加ボタン
     dom.addDbConfigButton.addEventListener('click', handleAddDbConfig);
-    // ★★★ ここまで ★★★
 
-    // switchTabの定義が完了した後にイベントリスナーを設定
+    // タブ切り替え
     dom.startExistingTask.addEventListener('click', switchTab);
     dom.startNewTask.addEventListener('click', switchTab);
     
+    // ★★★ 修正: handleStartNewTask 関数が定義されたため、リスナーを再度追加 ★★★
     document.getElementById('startNewTaskButton').addEventListener('click', handleStartNewTask);
+    
     document.getElementById('stopTaskButton').addEventListener('click', () => stopTask(false));
     document.getElementById('completeTaskButton').addEventListener('click', () => stopTask(true));
     
