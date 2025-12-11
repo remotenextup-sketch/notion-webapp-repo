@@ -43,22 +43,29 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
   return text ? JSON.parse(text) : {};
 }
 
-console.log('DEBUG: JS読み込み開始');
-window.addEventListener('load', () => {
-  console.log('DEBUG: DOM完全ロード');
-});
-
 // =========================================================================
-// 初期化と設定のロード
+// 初期化と設定のロード（完全版）
 // =========================================================================
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 async function initializeApp() {
     console.log('アプリケーションを初期化中...');
     
-    // DOM要素取得（OK）
+    // ✅ 全DOM要素取得（これがないと$taskListがundefined）
     $settingsModal = document.getElementById('settingsView');
-    // ... 他のDOM取得
+    $taskList = document.getElementById('taskList');
+    $runningTaskContainer = document.getElementById('runningTaskContainer');
+    $settingsBtn = document.getElementById('toggleSettings');
+    $saveSettingsBtn = document.getElementById('saveConfig');
+    $cancelConfigBtn = document.getElementById('cancelConfig');
+    $startNewTaskButton = document.getElementById('startNewTaskButton');
+    $reloadTasksBtn = document.getElementById('reloadTasks');
+    $taskDbFilterSelect = document.getElementById('taskDbFilter');
+    $existingTaskContainer = document.getElementById('existingTaskContainer');
+    $newTaskContainer = document.getElementById('newTaskContainer');
+    $taskModeRadios = document.querySelectorAll('input[name="taskMode"]');
+    $addDbEntryBtn = document.getElementById('addDbEntry');
+    $loader = document.getElementById('loader');
     
     if (!$settingsModal || !$taskList) {
         console.error('FATAL: 必要なDOM要素が見つかりません。');
@@ -67,7 +74,7 @@ async function initializeApp() {
     }
 
     showLoading(); 
-    loadSettings();  // ✅ 追加
+    loadSettings(); 
 
     if (!NOTION_TOKEN || ALL_DB_CONFIGS.length === 0) {
         console.log('設定データが存在しないため、設定モーダルを開きます。');
@@ -77,9 +84,34 @@ async function initializeApp() {
     } 
 
     renderDbFilterOptions(); 
-    // ... 以下元のコードそのまま
+    
+    let initialDbConfig = CURRENT_DB_CONFIG;
+    if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
+        initialDbConfig = ALL_DB_CONFIGS[0];
+    }
+
+    if (initialDbConfig) {
+        try {
+            await loadDbProperties(initialDbConfig.id); 
+            CURRENT_DB_CONFIG = initialDbConfig;
+        } catch (error) {
+            console.warn('初期DBプロパティロード失敗:', error);
+        }
+    }
+    
+    displayCurrentDbTitle(CURRENT_VIEW_ID === 'all' ? '統合ビュー' : (CURRENT_DB_CONFIG ? CURRENT_DB_CONFIG.name : 'エラー'));
+    renderFormOptions(); 
+
+    try {
+        await checkRunningState(); 
+        await loadTasksAndKpi(); 
+    } catch (error) {
+        console.error('初期化エラー:', error);
+        alert(`初期化に失敗しました。エラー: ${error.message || '不明なエラー'}`);
+    }
+
     hideLoading();
-}  // ✅ 閉じ括弧追加
+}
 
 function loadSettings() {
     const savedSettings = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -94,7 +126,7 @@ function loadSettings() {
 }
 
 // =========================================================================
-// DBプロパティロード
+// DBプロパティロード & UIレンダリング
 // =========================================================================
 async function loadDbProperties(dbId) {
     console.log(`✅ DB ${dbId} 設定完了（固定値使用）`);
@@ -102,9 +134,6 @@ async function loadDbProperties(dbId) {
     renderFormOptions();
 }
 
-// =========================================================================
-// UIレンダリング
-// =========================================================================
 function displayCurrentDbTitle(dbName) {
     const titleElement = document.querySelector('h2');
     if (titleElement) {
@@ -422,8 +451,6 @@ async function startTogglTracking(taskTitle, pageId) {
   console.log('✅ TIMER STARTED');
 }
 
-// createNotionTask以降（完全版）
-
 async function createNotionTask(e) {
     e.preventDefault();
     
@@ -503,7 +530,6 @@ async function markTaskCompleted(pageId) {
 // =========================================================================
 // Toggl 連携（完全版）
 // =========================================================================
-// この関数全体を検索 → 完全置換（Ctrl+H）
 async function checkRunningState() {
   try {
     const stored = localStorage.getItem('runningTask');
@@ -532,9 +558,6 @@ async function checkRunningState() {
   }
 }
 
-
-
-// ★思考ログ追記関数（Page API版）★
 async function appendThinkingLog(pageId, newLog) {
   try {
     console.log('📝 思考ログ追記開始:', pageId);
@@ -554,26 +577,6 @@ async function appendThinkingLog(pageId, newLog) {
   } catch (e) { 
     console.error('思考ログエラー:', e); 
   }
-}
-
-async function getTogglRunningEntry() {
-  return await apiFetch('https://api.track.toggl.com/api/v9/me/time_entries/current', 'GET', null, 'togglApiToken', TOGGL_API_TOKEN);
-}
-
-async function stopTogglTracking(entryId) {
-    if (!entryId) return;
-    try {
-        showLoading();
-        const stopEntryUrl = `https://api.track.toggl.com/api/v9/time_entries/${entryId}/stop`;
-        await apiFetch(stopEntryUrl, 'PATCH', null, 'togglApiToken', TOGGL_API_TOKEN);
-        alert('タスクの計測を停止しました。');
-    } catch (e) {
-        alert(`タスク停止に失敗しました。\nエラー: ${e.message}`);
-        console.error('タスク停止エラー:', e);
-        throw e;
-    } finally {
-        hideLoading();
-    }
 }
 
 // =========================================================================
@@ -736,3 +739,4 @@ function hideLoading() {
     if (loader) loader.classList.add('hidden');
 }
 
+console.log('*** APP.JS LOADED COMPLETELY ***');
