@@ -603,15 +603,64 @@ function calculateKpi() {
 // 新規タスク作成ロジック
 // =========================================================
 
-// app.js (修正箇所: initNewTaskForm 関数内, 660行目付近)
+// app.js (initNewTaskForm 関数)
 
-    // ... (中略) ...
+/** 新規タスクフォームを準備する */
+async function initNewTaskForm() {
+    const dbId = dom.taskDbFilter.value;
+    if (!dbId) {
+        dom.targetDbDisplay.textContent = 'データベースが選択されていません。';
+        return;
+    }
 
-    // 2-1. 部門 (Multi-select) のレンダリング
-    const deptProp = props.department;
+    const dbInfo = settings.databases.find(db => db.id === dbId);
+    dom.targetDbDisplay.textContent = `登録先DB: ${dbInfo ? dbInfo.name : '不明'}`;
+    
+    // 変数を事前に宣言
+    let props = null;
+
+    try {
+        props = await getDbProperties(dbId);
+    } catch (e) {
+        console.error("Failed to get DB properties:", e);
+        dom.targetDbDisplay.textContent += ' (プロパティ情報取得中にエラー)';
+        return;
+    }
+
+    // ★安全チェック: propsが有効でない場合はここでリターン
+    if (!props || !props.title) {
+        dom.targetDbDisplay.textContent += ' (プロパティ情報が見つからないか、タイトルプロパティが設定されていません)';
+        return;
+    }
+
+    // 1. カテゴリ (Select) のレンダリング
+    clearElement(dom.newCatContainer);
+    if (props.category && props.category.selectOptions) {
+        const catGroup = document.createElement('div');
+        catGroup.className = 'form-group';
+        catGroup.innerHTML = '<label for="newCatSelect" style="font-size: 14px; font-weight: 500;">カテゴリ</label><select id="newCatSelect" class="input-field" style="width: 100%;"></select>';
+        
+        const selectElement = catGroup.querySelector('#newCatSelect');
+        selectElement.innerHTML = '<option value="">--- 選択してください ---</option>';
+
+        props.category.selectOptions.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option.id;
+            optionElement.textContent = option.name;
+            selectElement.appendChild(optionElement);
+        });
+        dom.newCatContainer.appendChild(catGroup);
+    }
+
+    // 2. 部門 (Multi-select) と 担当者 (People) の表示
+    clearElement(dom.newDeptContainer);
+    
+    // 2-1. 部門 (Multi-select) のレンダリング (横並び)
+    const deptProp = props.department; 
     if (deptProp && deptProp.type === 'multi_select' && deptProp.options) {
         const deptGroup = document.createElement('div');
         deptGroup.className = 'form-group';
+        // ★修正: 横並びスタイルを適用
         deptGroup.innerHTML = `<label style="font-size: 14px; font-weight: 500;">${deptProp.name}</label><div id="newDeptOptions" style="display: flex; flex-wrap: wrap;"></div>`;
         
         const optionsDiv = deptGroup.querySelector('#newDeptOptions');
@@ -619,7 +668,7 @@ function calculateKpi() {
             const id = `new-dept-${option.id}`;
             
             const div = document.createElement('div');
-            // ★修正: 横並びと隙間を作るためにスタイルを調整
+            // ★修正: 横並びと隙間を作るためのスタイル
             div.style.marginRight = '15px'; 
             div.style.marginBottom = '10px';
             
@@ -631,6 +680,22 @@ function calculateKpi() {
         });
         dom.newDeptContainer.appendChild(deptGroup);
     }
+
+    // 2-2. 担当者 (People) の表示
+    const assigneeProp = props.assignee;
+    if (assigneeProp && assigneeProp.type === 'people') {
+        const status = settings.humanUserId ? '✅ 割り当て設定済み' : '⚠️ 設定が必要です';
+        const assigneeMessage = `<p style="font-size: 14px; color: var(--sub-text-color); font-weight: 500;">${assigneeProp.name}プロパティ: ${status}。<br>新規作成時に**設定されたユーザーID**が自動で設定されます。</p>`;
+        
+        if (dom.newDeptContainer.innerHTML) {
+            dom.newDeptContainer.innerHTML += assigneeMessage;
+        } else {
+            dom.newDeptContainer.innerHTML = assigneeMessage;
+        }
+    } else if (!deptProp && !assigneeProp) {
+         dom.newDeptContainer.innerHTML = '<p style="font-size: 14px; color: var(--sub-text-color);">部門/担当者プロパティが見つかりませんでした。</p>';
+    }
+}
     
 /** 新規タスクを作成し、計測を開始する (担当者自動設定を修正) */
 async function createNewTask(e) {
