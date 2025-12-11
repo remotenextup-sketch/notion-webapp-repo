@@ -1,4 +1,4 @@
-console.log('*** APP.JS (設定モーダル削除・思考ログ完璧版) START ***');
+console.log('*** APP.JS (カテゴリラジオボタン完璧版) START ***');
 
 // =========================================================================
 // グローバル変数
@@ -39,7 +39,7 @@ async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
 }
 
 // =========================================================================
-// 初期化（設定モーダル不要）
+// 初期化
 // =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 アプリ初期化開始');
@@ -94,11 +94,11 @@ function renderFormOptions() {
         if ($startNewTaskButton) $startNewTaskButton.disabled = false;
     } else {
         if (targetDisplay) targetDisplay.textContent = '設定必要（F12→Console）';
-        if ($startNewTaskButton) $startNewButton.disabled = true;
+        if ($startNewTaskButton) $startNewTaskButton.disabled = true;
         return;
     }
     
-    // ✅ カテゴリ：ラジオボタンに変更！
+    // ✅ カテゴリ：ラジオボタン！
     if (catContainer) {
         catContainer.innerHTML = `
             <div style="margin-bottom: 15px;">
@@ -115,7 +115,7 @@ function renderFormOptions() {
         `;
     }
     
-    // 部門（そのまま）
+    // 部門
     if (deptContainer) {
         deptContainer.innerHTML = '';
         deptContainer.className = 'dept-grid';
@@ -143,18 +143,9 @@ function renderDbFilterOptions() {
 }
 
 async function loadTasksAndKpi() {
-    // ❌ 従来：KPI→タスク（上に来る）
-    // await loadTaskList();
-    // await loadKpi();
-    
-    // ✅ 修正：タスク→KPI（下に来る）
     await loadTaskList();
-    // KPIは最後に描画（DOM最後尾に確定）
-    setTimeout(async () => {
-        await loadKpi();
-    }, 100); // タスク描画完了後
+    await loadKpi();
 }
-
 
 function updateTimerDisplay() {
   if (!localRunningTask) return;
@@ -167,7 +158,7 @@ function updateTimerDisplay() {
 }
 
 // =========================================================================
-// タスクロード（あなたのコードそのまま）
+// タスクロード
 // =========================================================================
 async function loadTasksFromSingleDb(dbConfig) {
     const dataSourceId = dbConfig.id;
@@ -306,20 +297,8 @@ async function loadKpi() {
 }
 
 // =========================================================================
-// 必須関数群
+// ✅ createNotionTask（カテゴリラジオボタン対応！）
 // =========================================================================
-async function startTogglTracking(taskTitle, pageId) {
-    localRunningTask = { title: taskTitle, pageId, startTime: Date.now() };
-    localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
-    // alert削除 → 即タイマー開始
-    document.getElementById('runningTaskTitle').textContent = taskTitle;
-    document.getElementById('runningStartTime').textContent = new Date().toLocaleTimeString();
-    document.getElementById('runningTimer').textContent = '00:00:00';
-    document.getElementById('runningTaskContainer').classList.remove('hidden');
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(updateTimerDisplay, 1000);
-}
-
 async function createNotionTask(e) {
     e.preventDefault();
     
@@ -384,10 +363,28 @@ async function createNotionTask(e) {
     }
 }
 
+// =========================================================================
+// 必須関数群
+// =========================================================================
+async function startTogglTracking(taskTitle, pageId) {
+    localRunningTask = { title: taskTitle, pageId, startTime: Date.now() };
+    localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
+    
+    document.getElementById('runningTaskTitle').textContent = taskTitle;
+    document.getElementById('runningStartTime').textContent = new Date().toLocaleTimeString();
+    document.getElementById('runningTimer').textContent = '00:00:00';
+    document.getElementById('runningTaskContainer').classList.remove('hidden');
+    
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimerDisplay, 1000);
+}
+
 async function markTaskCompleted(pageId) {
-    // ✅ confirm削除 → 即完了
     try {
-        await apiFetch(/* ... */);
+        const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
+        await apiFetch(targetUrl, 'PATCH', {
+            properties: { 'ステータス': { status: { name: '完了' } } }
+        }, 'notionToken', NOTION_TOKEN);
         await loadTasksAndKpi();
     } catch (e) {
         console.error('完了エラー:', e);
@@ -525,4 +522,4 @@ function hideLoading() {
     if ($loader) $loader.classList.add('hidden');
 }
 
-console.log('✅ APP.JS LOADED COMPLETELY (設定モーダル不要版)');
+console.log('✅ APP.JS LOADED COMPLETELY (カテゴリラジオボタン版)');
