@@ -566,30 +566,6 @@ async function markTaskCompleted(pageId) {
 // Toggl 連携
 // =========================================================================
 
-async function checkRunningState() {
-  const stored = localStorage.getItem('runningTask');
-  if (stored) {
-    localRunningTask = JSON.parse(stored);
-    
-    // UI更新
-    document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
-    document.getElementById('runningStartTime').textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
-    
-    // タイマー再開
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(updateTimerDisplay, 1000);
-    updateTimerDisplay();
-    
-    $runningTaskContainer.classList.remove('hidden');
-    console.log('✅ 実行中状態復元完了');
-    return;
-  }
-  
-  localRunningTask = null;
-  if (timerInterval) clearInterval(timerInterval);
-  $runningTaskContainer.classList.add('hidden');
-}
-
 // ★停止ボタン（思考ログ付き）★
 const stopBtn = document.getElementById('stopRunningTask');
 if (stopBtn) {
@@ -782,40 +758,26 @@ if ($addDbEntryBtn) {
 }
 
 // ★思考ログ付き停止/完了ボタン（最終版・UIイベントリスナー）★
-const completeBtn = document.getElementById('completeRunningTask');
-if (completeBtn) {
-  completeBtn.addEventListener('click', async () => {
-    console.log('🛑 完了ボタンクリック！');
+async function checkRunningState() {
+  const stored = localStorage.getItem('runningTask');
+  if (stored) {
+    localRunningTask = JSON.parse(stored);
+    document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
+    document.getElementById('runningStartTime').textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
     
-    const thinkingNote = prompt('思考ログを残しますか？（任意・空でスキップ）:');
-    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimerDisplay, 1000);
+    updateTimerDisplay();
     
-    if (localRunningTask?.pageId && logEntry) {
-      await appendThinkingLog(localRunningTask.pageId, logEntry);
-    }
-    
-    if (localRunningTask?.pageId) {
-      await markTaskCompleted(localRunningTask.pageId);
-    }
-    
-    localRunningTask = null;
-    localStorage.removeItem('runningTask');
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
-    }
-    $runningTaskContainer.classList.add('hidden');
-    console.log('✅ 思考ログ保存完了');
-    alert('✅ タスク完了！' + (logEntry ? '思考ログ保存済み' : ''));
-    loadTasksAndKpi();
-  });
-}
+    $runningTaskContainer.classList.remove('hidden');
+    console.log('✅ 実行中状態復元完了');
+    return;
+  }
 
-const stopBtn = document.getElementById('stopRunningTask');
+  const stopBtn = document.getElementById('stopRunningTask');
 if (stopBtn) {
   stopBtn.addEventListener('click', async () => {
-    console.log('⏹️ 停止ボタンクリック');
-    
+    console.log('⏹️ 停止ボタンクリック');  
     const thinkingNote = prompt('思考ログを残しますか？（任意・空でスキップ）:');
     const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
     
