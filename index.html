@@ -85,12 +85,14 @@
             <button id="reloadTasks" class="btn btn-green">🔄 更新</button>
         </div>
 
-        <!-- DBフィルター -->
-        <div style="margin-bottom: 20px;">
-            <label for="taskDbFilter" style="font-weight: 600; margin-right: 10px;">表示: </label>
-            <select id="taskDbFilter" style="padding: 8px 12px; border-radius: 6px;"></select>
-        </div>
-
+       <!-- DBフィルター + 設定ボタン -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+  <div>
+    <label for="taskDbFilter" style="font-weight: 600; margin-right: 10px;">表示: </label>
+    <select id="taskDbFilter" style="padding: 8px 12px; border-radius: 6px;"></select>
+  </div>
+  <button id="openSettings" class="btn" style="background: #007bff; color: white; padding: 8px 16px; font-size: 13px;">⚙️ 設定</button>
+</div>
         <!-- 👇 タブ切り替えボタン -->
         <div class="tab-buttons">
             <button type="button" id="tabTasks" class="btn btn-green tab-active">📋 タスク一覧</button>
