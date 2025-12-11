@@ -281,9 +281,8 @@ function startTask(task) {
     }
 }
 
-// app.js (修正箇所: stopTask 関数内, 298行目付近)
-
 // app.js (修正箇所: stopTask 関数, 303行目付近)
+
 async function stopTask(isCompleted) {
     if (!settings.currentRunningTask || !settings.startTime) return;
 
@@ -295,9 +294,9 @@ async function stopTask(isCompleted) {
     const memo = dom.thinkingLogInput.value;
     settings.currentRunningTask.memo = memo;
     saveSettings(settings);
-    
-    // ★★★ 修正箇所: ページIDをクリーンアップし、変数に格納 ★★★
-    const taskId = settings.currentRunningTask.id.replace(/-/g, ''); // ハイフンを除去
+
+    // ★★★ 修正箇所: ページIDを最優先でクリーンアップし、変数に格納 ★★★
+    const taskId = settings.currentRunningTask.id.replace(/-/g, ''); 
     
     const logContent = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')}】\n計測時間: ${formatTime(durationSeconds)}\nメモ: ${memo}`;
     
@@ -604,95 +603,35 @@ function calculateKpi() {
 // 新規タスク作成ロジック
 // =========================================================
 
-// app.js (修正箇所: initNewTaskForm 関数, 582行目付近)
+// app.js (修正箇所: initNewTaskForm 関数内, 660行目付近)
 
-/** 新規タスクフォームを準備する */
-async function initNewTaskForm() {
-    const dbId = dom.taskDbFilter.value;
-    if (!dbId) {
-        dom.targetDbDisplay.textContent = 'データベースが選択されていません。';
-        return;
-    }
+    // ... (中略) ...
 
-    const dbInfo = settings.databases.find(db => db.id === dbId);
-    dom.targetDbDisplay.textContent = `登録先DB: ${dbInfo ? dbInfo.name : '不明'}`;
-    
-    // ★修正: 変数を事前に宣言
-    let props = null;
-
-    try {
-        props = await getDbProperties(dbId);
-    } catch (e) {
-        console.error("Failed to get DB properties:", e);
-        dom.targetDbDisplay.textContent += ' (プロパティ情報取得中にエラー)';
-        return;
-    }
-
-    if (!props || !props.title) {
-        dom.targetDbDisplay.textContent += ' (プロパティ情報が見つからないか、タイトルプロパティが設定されていません)';
-        return;
-    }
-
-    // 1. カテゴリ (Select) のレンダリング
-    clearElement(dom.newCatContainer);
-    if (props.category && props.category.selectOptions) {
-        const catGroup = document.createElement('div');
-        catGroup.className = 'form-group';
-        catGroup.innerHTML = '<label for="newCatSelect" style="font-size: 14px; font-weight: 500;">カテゴリ</label><select id="newCatSelect" class="input-field" style="width: 100%;"></select>';
-        
-        const selectElement = catGroup.querySelector('#newCatSelect');
-        selectElement.innerHTML = '<option value="">--- 選択してください ---</option>';
-
-        props.category.selectOptions.forEach(option => {
-            const optionElement = document.createElement('option');
-            optionElement.value = option.id;
-            optionElement.textContent = option.name;
-            selectElement.appendChild(optionElement);
-        });
-        dom.newCatContainer.appendChild(catGroup);
-    }
-
-    // 2. 部門 (Multi-select) と 担当者 (People) の表示
-    clearElement(dom.newDeptContainer);
-    
     // 2-1. 部門 (Multi-select) のレンダリング
-    const deptProp = props.department; // ★ここで安全に props を参照
+    const deptProp = props.department;
     if (deptProp && deptProp.type === 'multi_select' && deptProp.options) {
         const deptGroup = document.createElement('div');
         deptGroup.className = 'form-group';
-        deptGroup.innerHTML = `<label style="font-size: 14px; font-weight: 500;">${deptProp.name}</label><div id="newDeptOptions"></div>`;
+        deptGroup.innerHTML = `<label style="font-size: 14px; font-weight: 500;">${deptProp.name}</label><div id="newDeptOptions" style="display: flex; flex-wrap: wrap;"></div>`;
         
         const optionsDiv = deptGroup.querySelector('#newDeptOptions');
         deptProp.options.forEach(option => {
             const id = `new-dept-${option.id}`;
             
             const div = document.createElement('div');
-            div.style.marginBottom = '5px';
+            // ★修正: 横並びと隙間を作るためにスタイルを調整
+            div.style.marginRight = '15px'; 
+            div.style.marginBottom = '10px';
+            
             div.innerHTML = `
-                <input type="checkbox" id="${id}" name="new-task-dept" value="${option.id}" style="margin-right: 8px;">
+                <input type="checkbox" id="${id}" name="new-task-dept" value="${option.id}" style="margin-right: 5px;">
                 <label for="${id}" style="display: inline; font-weight: normal; color: var(--text-color); font-size: 14px;">${option.name}</label>
             `;
             optionsDiv.appendChild(div);
         });
         dom.newDeptContainer.appendChild(deptGroup);
     }
-
-    // 2-2. 担当者 (People) の表示
-    const assigneeProp = props.assignee;
-    if (assigneeProp && assigneeProp.type === 'people') {
-        const status = settings.humanUserId ? '✅ 割り当て設定済み' : '⚠️ 設定が必要です';
-        const assigneeMessage = `<p style="font-size: 14px; color: var(--sub-text-color); font-weight: 500;">${assigneeProp.name}プロパティ: ${status}。<br>新規作成時に**設定されたユーザーID**が自動で設定されます。</p>`;
-        
-        if (dom.newDeptContainer.innerHTML) {
-            dom.newDeptContainer.innerHTML += assigneeMessage;
-        } else {
-            dom.newDeptContainer.innerHTML = assigneeMessage;
-        }
-    } else if (!deptProp && !assigneeProp) {
-         dom.newDeptContainer.innerHTML = '<p style="font-size: 14px; color: var(--sub-text-color);">部門/担当者プロパティが見つかりませんでした。</p>';
-    }
-}
-
+    
 /** 新規タスクを作成し、計測を開始する (担当者自動設定を修正) */
 async function createNewTask(e) {
     e.preventDefault();
