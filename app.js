@@ -397,6 +397,7 @@ async function getDbProperties(dbId) {
 }
 
 /** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを修正) */
+/** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを修正) */
 async function loadTasks() {
     const dbId = dom.taskDbFilter.value;
     if (!dbId) {
@@ -414,9 +415,17 @@ async function loadTasks() {
     clearElement(dom.taskList);
     dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--sub-text-color);">タスクをロード中...</p></li>';
     
-    // ★修正: フィルターに使用するユーザーIDを決定
-    const targetUserId = settings.humanUserId || settings.notionUserId; // humanUserIdを優先
-    
+    // ★修正: フィルターに使用するユーザーIDを決定 (安全な取得ロジック)
+    let targetUserId = '';
+    // 1. humanUserIdが有効であれば、それを優先して使用 (ハイフンを除去)
+    if (settings.humanUserId && settings.humanUserId.length >= 32) {
+        targetUserId = settings.humanUserId.replace(/-/g, '');
+    } 
+    // 2. humanUserIdがなければ、Bot IDを試す (ただし割り当て済みのタスク取得にのみ有効)
+    else if (settings.notionUserId) {
+        targetUserId = settings.notionUserId.replace(/-/g, '');
+    }
+
     const allFilters = [];
     const statusProp = props.status;
     
@@ -433,9 +442,8 @@ async function loadTasks() {
 
     // 2. 担当者フィルター (AND: 担当者に現在のユーザーを含む)
     const assigneeProp = props.assignee;
-    // targetUserIdがあり、かつそれがBot IDと異なれば（またはBot IDがなければ）フィルターを適用
-    if (assigneeProp && targetUserId) {
-         // humanUserIdが設定されている、またはBot IDしかなくてもBot IDをフィルターに使ってみる
+    // targetUserIdが32文字以上の有効なID文字列である場合にのみフィルターを適用
+    if (assigneeProp && targetUserId && targetUserId.length >= 32) { 
          allFilters.push({ 
             property: assigneeProp.name, 
             people: { contains: targetUserId } 
@@ -447,10 +455,14 @@ async function loadTasks() {
     };
     
     if (allFilters.length === 1 && allFilters[0].or) {
+        // ステータス OR のみ
         queryBody.filter = allFilters[0];
     } else if (allFilters.length > 0) {
+        // 複数のフィルター（担当者ANDステータスORなど）
         queryBody.filter = { and: allFilters };
     }
+    
+    // フィルターがない場合は queryBody.filter は設定しない (全件取得になる)
     
     const response = await notionApi(`/databases/${dbId}/query`, 'POST', queryBody);
 
@@ -459,8 +471,8 @@ async function loadTasks() {
         return;
     }
 
+    // 取得したタスクデータを安全にマッピングする (変更なし)
     availableTasks = response.results.map(page => {
-        // ... (マッピングロジックは変更なし)
         const getPagePropValue = (propKey, defaultValue) => {
             const prop = props[propKey];
             if (!prop) return defaultValue;
