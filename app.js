@@ -94,23 +94,28 @@ function renderFormOptions() {
         if ($startNewTaskButton) $startNewTaskButton.disabled = false;
     } else {
         if (targetDisplay) targetDisplay.textContent = '設定必要（F12→Console）';
-        if ($startNewTaskButton) $startNewTaskButton.disabled = true;
+        if ($startNewTaskButton) $startNewButton.disabled = true;
         return;
     }
     
-    // カテゴリ
+    // ✅ カテゴリ：ラジオボタンに変更！
     if (catContainer) {
-        catContainer.innerHTML = '<select id="taskCategory"><option value="">カテゴリ選択</option></select>';
-        const select = document.getElementById('taskCategory');
-        CATEGORIES.forEach(cat => {
-            const opt = document.createElement('option');
-            opt.value = cat;
-            opt.textContent = cat;
-            select.appendChild(opt);
-        });
+        catContainer.innerHTML = `
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #555;">カテゴリ選択</label>
+                <div class="category-radio-grid">
+                    ${CATEGORIES.map(cat => `
+                        <label class="category-radio-group">
+                            <input type="radio" name="taskCategory" value="${cat}">
+                            ${cat}
+                        </label>
+                    `).join('')}
+                </div>
+            </div>
+        `;
     }
     
-    // 部門
+    // 部門（そのまま）
     if (deptContainer) {
         deptContainer.innerHTML = '';
         deptContainer.className = 'dept-grid';
@@ -317,17 +322,63 @@ async function startTogglTracking(taskTitle, pageId) {
 
 async function createNotionTask(e) {
     e.preventDefault();
-    // ... 既存コード ...
+    
     try {
         showLoading();
-        const pageResponse = await apiFetch(/* ... */);
-        // ✅ alert削除 → 即開始
-        await startTogglTracking(title, pageResponse.id); 
-        // フォームクリアのみ
-        // ... フォームクリア ...
+        
+        // ✅ カテゴリ：ラジオボタンから取得
+        const categoryRadios = document.querySelector('input[name="taskCategory"]:checked');
+        const category = categoryRadios ? categoryRadios.value : '';
+        
+        // 部門：チェックボックスから取得
+        const departmentCheckboxes = document.querySelectorAll('input[name="taskDepartment"]:checked');
+        const departments = Array.from(departmentCheckboxes).map(cb => cb.value);
+        
+        const title = document.getElementById('newTaskTitle').value.trim();
+        
+        if (!title) {
+            showToast('タスク名を入力してください', '#ffc107');
+            return;
+        }
+        if (!category) {
+            showToast('カテゴリを選択してください', '#ffc107');
+            return;
+        }
+        
+        const targetDbId = CURRENT_DB_CONFIG?.id;
+        if (!targetDbId) {
+            showToast('登録先DBが設定されていません', '#dc3545');
+            return;
+        }
+        
+        const targetUrl = `https://api.notion.com/v1/pages`;
+        const body = {
+            parent: { database_id: targetDbId },
+            properties: {
+                'タスク名': { title: [{ text: { content: title } }] },
+                'カテゴリ': { select: { name: category } },
+                '部門': { multi_select: departments.map(d => ({ name: d })) },
+                'ステータス': { status: { name: '進行中' } },
+                '開始時刻': { date: { start: new Date().toISOString() } }
+            }
+        };
+        
+        const pageResponse = await apiFetch(targetUrl, 'POST', body, 'notionToken', NOTION_TOKEN);
+        
+        // 即開始
+        await startTogglTracking(title, pageResponse.id);
+        
+        // フォームクリア
+        document.getElementById('newTaskTitle').value = '';
+        document.querySelectorAll('input[name="taskCategory"]').forEach(r => r.checked = false);
+        document.querySelectorAll('input[name="taskDepartment"]').forEach(cb => cb.checked = false);
+        
+        showToast('✅ タスク作成＆計測開始！', '#28a745');
         await loadTasksAndKpi();
+        
     } catch (e) {
-        console.error('作成エラー:', e); // alert → consoleのみ
+        console.error('作成エラー:', e);
+        showToast('作成エラー: ' + e.message, '#dc3545');
     } finally {
         hideLoading();
     }
