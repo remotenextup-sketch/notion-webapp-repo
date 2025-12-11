@@ -565,6 +565,7 @@ async function checkRunningState() {
 }
 
 
+
 // ★思考ログ追記関数（Page API版）★
 async function appendThinkingLog(pageId, newLog) {
   try {
