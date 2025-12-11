@@ -1,56 +1,81 @@
-console.log('*** APP.JS (重複整理版) START ***');
+console.log('*** APP.JS (完全動作版) START ***');
 
+// =========================================================================
+// グローバル変数（変更なし）
+// =========================================================================
 const STORAGE_KEY = 'taskTrackerSettings';
 let localRunningTask = null;
 let timerInterval = null;
 let CATEGORIES = ['思考', '作業', '教育'];
-let DEPARTMENTS = ['CS','デザイン','人事','広告','採用','改善','物流','秘書','経営計画','経理','開発','AI','楽天','Amazon','Yahoo'];
+let DEPARTMENTS = ['CS', 'デザイン', '人事', '広告', '採用', '改善', '物流', '秘書', '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo'];
 
 let $taskList, $runningTaskContainer, $startNewTaskButton, $reloadTasksBtn, $taskDbFilterSelect, $loader;
 let $tabTasks, $tabNew, $sectionTasks, $sectionNew;
-
 let NOTION_TOKEN = '';
 let ALL_DB_CONFIGS = [];
 let CURRENT_VIEW_ID = 'all';
 let CURRENT_DB_CONFIG = null;
 
-// ================================================================
-// API通信
-// ================================================================
-async function apiFetch(targetUrl, method, body, tokenKey, tokenValue) {
-  const response = await fetch('/api/proxy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUrl, method: method || 'GET', body, tokenKey, tokenValue })
-  });
-  if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
-  const text = await response.text();
-  return text ? JSON.parse(text) : {};
+// =========================================================================
+// 👇 全関数をここに復元（削除してたものを追加）
+// =========================================================================
+function renderFormOptions() {
+    const catContainer = document.getElementById('newCatContainer');
+    const deptContainer = document.getElementById('newDeptContainer');
+    const targetDisplay = document.getElementById('targetDbDisplay');
+    
+    const targetDb = CURRENT_DB_CONFIG || ALL_DB_CONFIGS[0];
+    
+    if (targetDb) {
+        if (targetDisplay) targetDisplay.textContent = `登録先: ${targetDb.name}`;
+        if ($startNewTaskButton) $startNewTaskButton.disabled = false;
+    } else {
+        if (targetDisplay) targetDisplay.textContent = '設定必要（F12→Console）';
+        if ($startNewTaskButton) $startNewTaskButton.disabled = true;
+        return;
+    }
+    
+    if (catContainer) {
+        catContainer.innerHTML = `
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #555;">カテゴリ選択</label>
+                <div class="category-radio-grid">
+                    ${CATEGORIES.map(cat => `
+                        <label class="category-radio-group">
+                            <input type="radio" name="taskCategory" value="${cat}">
+                            ${cat}
+                        </label>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    if (deptContainer) {
+        deptContainer.innerHTML = '';
+        deptContainer.className = 'dept-grid';
+        DEPARTMENTS.forEach(dept => {
+            const label = document.createElement('label');
+            label.className = 'department-label';
+            label.innerHTML = `<input type="checkbox" name="taskDepartment" value="${dept}"> ${dept}`;
+            deptContainer.appendChild(label);
+        });
+    }
 }
 
-// ================================================================
-// タブ切り替え
-// ================================================================
-function initTabs() {
-  $tabTasks = document.getElementById('tabTasks');
-  $tabNew = document.getElementById('tabNew');
-  $sectionTasks = document.getElementById('sectionTasks');
-  $sectionNew = document.getElementById('sectionNew');
-  if (!$tabTasks || !$tabNew) return;
-
-  const switchTab = (showTasks) => {
-    $sectionTasks.style.display = showTasks ? '' : 'none';
-    $sectionNew.style.display = showTasks ? 'none' : '';
-    $tabTasks.classList.toggle('tab-active', showTasks);
-    $tabNew.classList.toggle('tab-active', !showTasks);
-    if (!showTasks) renderFormOptions();
-  };
-
-  switchTab(true); // 初期：タスクタブ
-  $tabTasks.addEventListener('click', () => switchTab(true));
-  $tabNew.addEventListener('click', () => switchTab(false));
+function renderDbFilterOptions() {
+    const select = document.getElementById('taskDbFilter');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="all">全てのタスク</option>';
+    ALL_DB_CONFIGS.forEach(db => {
+        const opt = document.createElement('option');
+        opt.value = db.id;
+        opt.textContent = `${db.name} (${db.id.slice(0,8)}...)`;
+        select.appendChild(opt);
+    });
+    select.value = CURRENT_VIEW_ID;
 }
-
 // ================================================================
 // 設定ロード
 // ================================================================
