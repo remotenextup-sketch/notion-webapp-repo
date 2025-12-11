@@ -398,6 +398,7 @@ async function getDbProperties(dbId) {
 
 /** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを修正) */
 /** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを修正) */
+/** タスク一覧をロードし、レンダリングする (フィルターのユーザーID取得ロジックを最終修正) */
 async function loadTasks() {
     const dbId = dom.taskDbFilter.value;
     if (!dbId) {
@@ -415,16 +416,19 @@ async function loadTasks() {
     clearElement(dom.taskList);
     dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--sub-text-color);">タスクをロード中...</p></li>';
     
-    // ★修正: フィルターに使用するユーザーIDを決定 (安全な取得ロジック)
+    // ----------------------------------------------------------------
+    // ★修正: フィルターに使用するユーザーIDを決定 (厳密なチェック)
     let targetUserId = '';
-    // 1. humanUserIdが有効であれば、それを優先して使用 (ハイフンを除去)
+
+    // humanUserId (手動設定した人間ID) を優先
     if (settings.humanUserId && settings.humanUserId.length >= 32) {
         targetUserId = settings.humanUserId.replace(/-/g, '');
-    } 
-    // 2. humanUserIdがなければ、Bot IDを試す (ただし割り当て済みのタスク取得にのみ有効)
-    else if (settings.notionUserId) {
+    }
+    // humanUserIdがなければ、Bot IDを使用（Bot IDも空でなければ）
+    else if (settings.notionUserId && settings.notionUserId.length >= 32) {
         targetUserId = settings.notionUserId.replace(/-/g, '');
     }
+    // ----------------------------------------------------------------
 
     const allFilters = [];
     const statusProp = props.status;
@@ -442,8 +446,8 @@ async function loadTasks() {
 
     // 2. 担当者フィルター (AND: 担当者に現在のユーザーを含む)
     const assigneeProp = props.assignee;
-    // targetUserIdが32文字以上の有効なID文字列である場合にのみフィルターを適用
-    if (assigneeProp && targetUserId && targetUserId.length >= 32) { 
+    // 厳密にチェック: 担当者プロパティが存在し、かつ targetUserIdが有効な32文字以上のIDである場合のみ適用
+    if (assigneeProp && targetUserId && targetUserId.length === 32) { 
          allFilters.push({ 
             property: assigneeProp.name, 
             people: { contains: targetUserId } 
@@ -458,11 +462,9 @@ async function loadTasks() {
         // ステータス OR のみ
         queryBody.filter = allFilters[0];
     } else if (allFilters.length > 0) {
-        // 複数のフィルター（担当者ANDステータスORなど）
+        // 複数のフィルター
         queryBody.filter = { and: allFilters };
     }
-    
-    // フィルターがない場合は queryBody.filter は設定しない (全件取得になる)
     
     const response = await notionApi(`/databases/${dbId}/query`, 'POST', queryBody);
 
@@ -471,7 +473,7 @@ async function loadTasks() {
         return;
     }
 
-    // 取得したタスクデータを安全にマッピングする (変更なし)
+    // 取得したタスクデータを安全にマッピングする (以降、変更なし)
     availableTasks = response.results.map(page => {
         const getPagePropValue = (propKey, defaultValue) => {
             const prop = props[propKey];
@@ -504,7 +506,6 @@ async function loadTasks() {
     renderTasks();
     calculateKpi();
 }
-
 /** タスクをHTMLにレンダリングする (変更なし) */
 function renderTasks() {
     clearElement(dom.taskList);
