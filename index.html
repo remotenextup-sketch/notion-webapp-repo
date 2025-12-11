@@ -41,7 +41,7 @@
             margin: 0 auto;
         }
         
-        /* 1. 固定ヘッダー (タイトル中央配置に変更) */
+        /* 1. 固定ヘッダー (タイトル中央配置) */
         .header {
             position: fixed;
             top: 0;
@@ -55,17 +55,16 @@
             display: flex;
             align-items: center;
             padding: 0 16px;
-            justify-content: space-between; /* 要素を両端に寄せる */
+            justify-content: space-between;
         }
 
         .header h1 {
             font-size: 18px;
             font-weight: 600;
             margin: 0;
-            position: absolute; /* 絶対位置指定で中央に寄せる */
+            position: absolute;
             left: 50%;
             transform: translateX(-50%);
-            /* 右上のボタン領域がタイトルを隠さないよう調整 */
             max-width: calc(100% - 100px); 
             white-space: nowrap;
             overflow: hidden;
@@ -73,7 +72,6 @@
         }
         
         .header-spacer {
-             /* 右上のボタンの位置を固定するため、左側にスペース確保 */
              width: 40px; 
              visibility: hidden; 
         }
@@ -86,10 +84,10 @@
             color: var(--primary-color);
             padding: 8px;
             cursor: pointer;
-            z-index: 101; /* タイトルより前面に */
+            z-index: 101;
         }
         
-        /* 2. 固定タブバー (セグメントコントロールデザイン - 変更なし) */
+        /* 2. 固定タブバー (セグメントコントロールデザイン) */
         .tab-bar-top-wrapper {
             position: fixed;
             top: var(--header-height);
@@ -138,7 +136,7 @@
             box-shadow: var(--shadow); 
         }
 
-        /* 3. 実行中タスク (変更なし) */
+        /* 3. 実行中タスク */
         .running-task-fixed {
             position: sticky;
             top: calc(var(--header-height) + var(--tab-height));
@@ -153,13 +151,54 @@
             margin: 0 16px 15px 16px;
         }
         
+        .running-task-fixed h2 {
+            font-size: 14px;
+            margin: 0 0 8px 0;
+            color: var(--warning-color);
+            font-weight: 700;
+        }
+        
+        .timer-display {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        #runningTaskTitle {
+            font-size: 16px;
+            font-weight: 600;
+            flex-grow: 1;
+            margin-right: 15px;
+            color: var(--text-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        #runningTimer {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--danger-color);
+            min-width: 90px;
+            text-align: right;
+        }
+        
+        /* 思考ログ入力欄 */
+        #thinkingLogInput {
+            font-size: 14px;
+            padding: 10px;
+            background-color: #fff;
+            border-color: #e5e5ea;
+        }
+
         .running-task-actions {
             display: flex;
             gap: 10px;
             margin-top: 10px;
         }
 
-        /* 4. ボタン (変更なし) */
+        /* 4. ボタン */
         .btn {
             padding: 12px 15px;
             border: none;
@@ -174,7 +213,19 @@
             font-size: 14px;
         }
         
-        /* 5. カードとリスト (行間を狭める調整) */
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-success { background-color: var(--success-color); color: white; }
+        .btn-danger { background-color: var(--danger-color); color: white; }
+        .btn-secondary { background-color: #e5e5ea; color: var(--text-color); }
+        .btn:active { opacity: 0.8; }
+        
+        .running-task-actions .btn {
+            flex: 1;
+            font-size: 14px;
+            padding: 10px;
+        }
+
+        /* 5. カードとリスト (行間を狭める調整済み) */
         .card {
             background-color: var(--card-background);
             padding: 16px;
@@ -190,10 +241,9 @@
         }
         
         .task-item {
-            /* ここを調整: 上下paddingを15px -> 12pxに減らす */
-            padding: 12px; 
-            margin-bottom: 8px; /* 下の余白を減らす */
-            border-radius: 10px; /* 角を少しだけ丸くする */
+            padding: 12px; /* 調整箇所 */
+            margin-bottom: 8px; /* 調整箇所 */
+            border-radius: 10px;
             background: var(--card-background);
             border: 1px solid #f0f0f5; 
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
@@ -203,16 +253,14 @@
             font-size: 15px;
             font-weight: 600;
             display: block;
-            /* タイトル下の余白を減らす */
-            margin-bottom: 3px; 
+            margin-bottom: 3px; /* 調整箇所 */
         }
 
         .task-meta {
             font-size: 12px;
             color: var(--sub-text-color);
             display: block;
-            /* メタ情報下の余白を減らす */
-            margin-bottom: 8px; 
+            margin-bottom: 8px; /* 調整箇所 */
         }
 
         .task-actions {
@@ -226,14 +274,105 @@
             font-size: 13px;
         }
         
-        /* 6. KPIセクション (変更なし) */
-        .kpi-section { /* ... */ }
+        /* 6. KPIセクション */
+        .kpi-section {
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+        }
+        
+        .kpi-item {
+            flex: 1;
+            padding: 10px 0;
+            border-right: 1px solid #f0f0f5;
+        }
+        
+        .kpi-item:last-child { border-right: none; }
+        
+        .kpi-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 3px;
+        }
+        
+        .kpi-label {
+            font-size: 12px;
+            color: var(--sub-text-color);
+        }
 
-        /* 7. フォーム要素 (変更なし) */
-        input[type="text"], textarea, select { /* ... */ }
+        /* 7. フォーム要素 */
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background-color: #fcfcfc;
+        }
+        
+        .select-group label {
+            min-width: 90px; 
+            padding: 10px;
+            border-radius: 8px;
+            border-width: 1px;
+            font-size: 14px;
+        }
 
+        .select-group input:checked + span {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        /* ユーティリティ */
         .hidden { display: none !important; }
 
+        /* モーダルスタイル（省略） */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal-content {
+            background-color: var(--card-background);
+            padding: 20px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--sub-text-color);
+            cursor: pointer;
+            padding: 5px;
+        }
+        
     </style>
     <script src="app.js" defer></script>
 </head>
@@ -244,7 +383,8 @@
     </div>
 
     <header class="header">
-        <div class="header-spacer"></div> <h1>⏱️ Notion Time Tracker</h1>
+        <div class="header-spacer"></div>
+        <h1>⏱️ Notion Time Tracker</h1>
         <button id="openSettings" class="settings-btn">⚙️</button>
     </header>
 
@@ -342,7 +482,37 @@
     </main>
     
     <div id="settingsModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ 設定</h2>
+                <button id="closeSettings" class="modal-close">×</button>
+            </div>
+            
+            <div class="form-group">
+                <label for="notionTokenInput">Notion Integration Token</label>
+                <input type="text" id="notionTokenInput" placeholder="secret_..." style="font-size: 14px;">
+                <button id="saveSettings" class="btn btn-primary" style="margin-top: 10px; width: 100%;">トークン保存</button>
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
+            
+            <h3>Notion データベース設定</h3>
+            <div id="dbList" style="margin-bottom: 15px;">
+                </div>
+            
+            <div class="form-group" style="display: flex; gap: 10px;">
+                <div style="flex: 2;">
+                    <label for="dbNameInput">DB名 (表示用)</label>
+                    <input type="text" id="dbNameInput" placeholder="例: 開発タスク" style="font-size: 14px;">
+                </div>
+                <div style="flex: 3;">
+                    <label for="dbIdInput">DB ID (32桁)</label>
+                    <input type="text" id="dbIdInput" placeholder="xxxx...xxxx" style="font-size: 14px;">
+                </div>
+            </div>
+            <button id="addDbBtn" class="btn btn-success" style="width: 100%; margin-top: 10px;">+ DB 追加</button>
         </div>
+    </div>
 
 </body>
 </html>
