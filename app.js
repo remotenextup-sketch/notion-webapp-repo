@@ -283,15 +283,23 @@ function startTask(task) {
 
 // app.js (修正箇所: stopTask 関数内, 298行目付近)
 
+// app.js (修正箇所: stopTask 関数, 303行目付近)
 async function stopTask(isCompleted) {
     if (!settings.currentRunningTask || !settings.startTime) return;
 
     if (settings.timerInterval) clearInterval(settings.timerInterval);
 
-    // ... (中略: 時間計算とメモ保存) ...
+    const endTime = Date.now();
+    const durationSeconds = Math.floor((endTime - settings.startTime) / 1000);
     
-    // ★修正箇所: ページIDをクリーンアップ
+    const memo = dom.thinkingLogInput.value;
+    settings.currentRunningTask.memo = memo;
+    saveSettings(settings);
+    
+    // ★★★ 修正箇所: ページIDをクリーンアップし、変数に格納 ★★★
     const taskId = settings.currentRunningTask.id.replace(/-/g, ''); // ハイフンを除去
+    
+    const logContent = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')}】\n計測時間: ${formatTime(durationSeconds)}\nメモ: ${memo}`;
     
     const dbId = settings.currentRunningTask.dbId;
     const props = dbPropertiesCache[dbId];
@@ -303,28 +311,51 @@ async function stopTask(isCompleted) {
 
     const propertiesToUpdate = {};
     
-    // ... (中略: ステータス更新ロジック) ...
+    const statusProp = props.status;
+    if (statusProp && isCompleted) {
+        const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
+        if (completedOption) {
+            propertiesToUpdate[statusProp.name] = {
+                select: { id: completedOption.id }
+            };
+        }
+    }
 
     const logProp = props.logRichText || props.logRelation;
 
     if (logProp && logProp.type === 'rich_text') {
-        // ★修正箇所: URLにクリーンアップしたIDを使用
+        // ★★★ 修正箇所: クリーンアップしたIDを使用 (/blocks/...) ★★★
         await notionApi(`/blocks/${taskId}/children`, 'POST', {
             children: [{
-                // ... (ログの内容) ...
+                object: 'block',
+                type: 'paragraph',
+                paragraph: {
+                    rich_text: [
+                        { type: 'text', text: { content: logContent } }
+                    ]
+                }
             }]
         });
     }
 
     if (Object.keys(propertiesToUpdate).length > 0) {
-        // ★修正箇所: URLにクリーンアップしたIDを使用
+        // ★★★ 修正箇所: クリーンアップしたIDを使用 (/pages/...) ★★★
         await notionApi(`/pages/${taskId}`, 'PATCH', {
             properties: propertiesToUpdate
         });
     }
 
-    // ... (後略: 状態リセット) ...
+    settings.currentRunningTask = null;
+    settings.startTime = null;
+    settings.timerInterval = null;
+    saveSettings(settings);
+    updateRunningTaskDisplay();
+    dom.runningTimer.textContent = '00:00:00';
+    dom.thinkingLogInput.value = '';
+    
+    loadTasks();
 }
+
 // =========================================================
 // データ取得・レンダリング
 // =========================================================
