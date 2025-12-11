@@ -14,7 +14,7 @@
         .container { 
             background: white; border-radius: 16px; padding: 30px; 
             box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
-            display: flex; flex-direction: column; gap: 30px; /* 👈追加 */
+            display: flex; flex-direction: column; gap: 30px;
         }
         h1 { text-align: center; color: #28a745; margin-bottom: 30px; font-size: 28px; }
         h3 { color: #333; margin-bottom: 15px; font-size: 18px; }
@@ -45,12 +45,32 @@
         .btn-stop { background: linear-gradient(135deg, #ffc107, #fd7e14); color: #333; }
         .btn-stop:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,193,7,0.5); }
         #loader { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9999; background: rgba(255,255,255,0.95); padding: 30px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); text-align: center; }
+        
+        /* 👇 部門グリッド復活！ */
+        .dept-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)) !important;
+            gap: 8px !important;
+            margin-top: 10px !important;
+        }
+        .department-label {
+            display: flex !important;
+            align-items: center !important;
+            font-size: 14px !important;
+            cursor: pointer !important;
+        }
+        .department-label input {
+            margin-right: 6px !important;
+        }
+        
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @media (max-width: 768px) { #runningTaskContainer { right: 10px; left: 10px; width: auto; } body { padding: 10px; } }
+        @media (max-width: 768px) { 
+            #runningTaskContainer { right: 10px; left: 10px; width: auto; } 
+            body { padding: 10px; }
+        }
     </style>
 </head>
 <body>
-    <!-- 以下、あなたのHTMLそのまま（変更なし） -->
     <div class="container">
         <h1>🚀 Notion Toggl Timer</h1>
         
