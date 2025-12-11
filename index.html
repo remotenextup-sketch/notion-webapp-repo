@@ -2,140 +2,236 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Notion Toggl Timer (統合版)</title>
-    <link rel="manifest" href="manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notion Toggl Timer</title>
     <style>
-        /* 基本スタイル */
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f4f4; color: #333; }
-        h2 { text-align: center; margin-top: 0; font-size: 1.2rem; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 10px; touch-action: manipulation; }
-        .btn-green { background-color: #27ae60; color: white; }
-        .btn-orange { background-color: #f39c12; color: white; }
-        .btn-gray { background-color: #95a5a6; color: white; }
-        .btn-blue { background-color: #3498db; color: white; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; 
+            max-width: 1200px; margin: 0 auto; padding: 20px; background: #f8f9fa; 
+        }
+        .container { background: white; border-radius: 16px; padding: 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #28a745; margin-bottom: 30px; font-size: 28px; }
+        h2 { color: #333; margin-bottom: 20px; }
+        .btn { 
+            padding: 12px 24px; border: none; border-radius: 8px; 
+            cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s;
+        }
+        .btn-green { background: #28a745; color: white; }
+        .btn-green:hover { background: #218838; transform: translateY(-1px); }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-orange { background: #fd7e14; color: white; }
+        .btn-gray { background: #6c757d; color: white; }
+        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #e9ecef; border-radius: 12px; }
         .hidden { display: none !important; }
-        .panel { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
-        #runningTaskContainer { background-color: #e8f6ff; border: 2px solid #3498db; }
-        .status-line { margin-bottom: 8px; font-size: 14px; }
-        #runningTimer { font-size: 24px; font-weight: bold; color: #3498db; text-align: center; margin: 10px 0; }
-        ul { list-style: none; padding: 0; margin: 0; }
-        /* DB名を表示するため、タスク一覧のスペースを調整 */
-        li { padding: 12px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; align-items: flex-start; }
-        li:last-child { border-bottom: none; }
-        .task-actions { margin-top: 8px; align-self: flex-end; }
-        .task-meta { font-size: 12px; color: #666; display: block; margin-top: 4px; }
-        .task-title { font-weight: bold; }
-        
-        input[type="text"], input[type="password"], select, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
-        .dept-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .dept-grid label { font-size: 12px; display: block; background: #eee; padding: 8px; text-align: center; border-radius: 4px; }
-        #toggleSettings { position: fixed; top: 10px; right: 10px; background: none; border: none; color: #666; font-size: 24px; width: auto; padding: 0; }
-        
-        /* KPIスタイル */
-        #kpiContainer { display: flex; justify-content: space-around; text-align: center; margin-bottom: 15px; }
-        .kpi-item { flex: 1; padding: 5px 0; border-right: 1px solid #eee; }
-        .kpi-item:last-child { border-right: none; }
-        .kpi-label { font-size: 12px; color: #666; }
-        .kpi-value { font-size: 16px; font-weight: bold; color: #2c3e50; }
-        
+        #taskList { list-style: none; }
+        .task-item { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 16px; margin-bottom: 12px; background: #f8f9ff; 
+            border-radius: 10px; border-left: 4px solid #007bff;
+        }
+        .task-title { font-weight: 600; font-size: 16px; color: #333; }
+        .task-meta { font-size: 12px; color: #666; margin-top: 4px; }
+        .dept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-top: 10px; }
+        .department-label { display: flex; align-items: center; font-size: 14px; cursor: pointer; }
+        .department-label input { margin-right: 6px; }
+        select, input[type="text"] { padding: 10px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 14px; }
+        #settingsView { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;
+        }
+        .modal-content { 
+            background: white; padding: 30px; border-radius: 16px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        #loader { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9999; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-top: 20px; }
+        .kpi-card { text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px; }
+        /* ★計測中コンテナ（完全版）★ */
+        #runningTaskContainer { 
+            position: fixed; top: 20px; right: 20px; width: 380px; max-width: 90vw;
+            background: white; border: 2px solid #28a745; border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3); z-index: 10000; padding: 20px;
+            font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+        }
+        .running-task-header { margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #f0f0f0; }
+        #runningTaskTitle { margin: 0 0 5px 0; font-size: 18px; color: #333; font-weight: 600; }
+        .thinking-log-section { margin-bottom: 15px; }
+        .running-timer { 
+            text-align: center; margin: 20px 0; padding: 20px; 
+            background: linear-gradient(135deg, #f8f9ff 0%, #e8f0ff 100%);
+            border-radius: 16px; border: 3px solid #28a745;
+        }
+        #runningTimer { font-size: 36px; font-weight: 700; color: #28a745; letter-spacing: 2px; margin-bottom: 5px; }
+        .task-controls { display: flex; gap: 12px; justify-content: center; }
+        .btn-complete, .btn-stop { 
+            flex: 1; padding: 14px 20px; font-size: 16px; font-weight: 600;
+            border: none; border-radius: 10px; cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .btn-complete { 
+            background: linear-gradient(135deg, #28a745, #20c997); color: white; 
+        }
+        .btn-complete:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(40,167,69,0.5); }
+        .btn-stop { 
+            background: linear-gradient(135deg, #ffc107, #fd7e14); color: #333; 
+        }
+        .btn-stop:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,193,7,0.5); }
+        @media (max-width: 768px) { #runningTaskContainer { right: 10px; left: 10px; width: auto; } }
     </style>
 </head>
 <body>
-
-    <h2>Notion Toggl Timer (統合版)</h2>
-    <button id="toggleSettings">⚙️</button>
-
-    <div id="mainView">
+    <div class="container">
+        <h1>🚀 Notion Toggl Timer</h1>
         
-        <div id="runningTaskContainer" class="panel hidden">
-            <div class="status-line">計測中: <strong id="runningTaskTitle"></strong></div>
-            <div class="status-line">開始: <span id="runningStartTime"></span></div>
-            <div id="runningTimer">00:00:00</div>
-            
-            <div style="display: flex; gap: 10px;">
-                <button id="stopRunningTask" class="btn-orange">⏹ 停止</button> 
-                <button id="completeRunningTask" class="btn-green">✅ 完了にして停止</button> 
-            </div>
-            </div>
-
-        <div id="taskSelectionSection" class="panel">
-            <div style="text-align: center; margin-bottom: 15px;">
-                <label style="margin-right: 15px;"><input type="radio" name="taskMode" value="existing" checked> 既存タスク</label>
-                <label><input type="radio" name="taskMode" value="new"> 新規タスク</label>
-            </div>
-
-            <div id="existingTaskContainer">
-                <div style="margin-bottom: 10px;">
-                    <label style="font-size: 12px; display: block;">タスクの表示DB:</label>
-                    <select id="taskDbFilter">
-                        <option value="all">全てのタスク</option>
-                    </select>
-                </div>
-                
-                <button id="reloadTasks" class="btn-blue" style="font-size: 14px; padding: 8px;">🔄 タスク更新</button>
-                <ul id="taskList"><li>読み込み中...</li></ul>
-            </div>
-
-            <div id="newTaskContainer" class="hidden">
-                <input type="text" id="newTaskTitle" placeholder="タスク名 *必須"> 
-                
-                <p id="targetDbDisplay" style="font-size: 12px; color: #666; margin-bottom: 15px; border: 1px solid #ddd; padding: 8px; border-radius: 5px;">
-                    登録先: **既存タスクビューで選択中のDB**
-                </p>
-
-                <h4>カテゴリ</h4>
-                <div id="newCatContainer" style="margin: 10px 0;">
-                    </div>
-
-                <h4>部門</h4>
-                <div class="dept-grid" id="newDeptContainer">
-                    </div>
-
-                <button id="startNewTaskButton" class="btn-green">▶ 作成＆開始</button>
+        <!-- ヘッダー -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+            <h2 id="dbTitle">Notion Toggl Timer</h2>
+            <div>
+                <button id="toggleSettings" class="btn btn-blue">⚙️ 設定</button>
+                <button id="reloadTasks" class="btn btn-green">🔄 更新</button>
             </div>
         </div>
 
-        <div id="kpiPanel" class="panel">
-            <h4>📈 今週/今月</h4>
-            <div id="kpiContainer">
-                <div class="kpi-item"><div class="kpi-label">今週</div><div class="kpi-value" id="kpiWeek">--</div></div>
-                <div class="kpi-item"><div class="kpi-label">今月</div><div class="kpi-value" id="kpiMonth">--</div></div>
+        <!-- KPI -->
+        <div class="section">
+            <h3>📊 KPI（今週）</h3>
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div id="kpiWeek">--</div>
+                    <div>今週累計</div>
+                </div>
+                <div class="kpi-card">
+                    <div id="kpiMonth">--</div>
+                    <div>今月累計</div>
+                </div>
+                <div class="kpi-card">
+                    <div id="kpiCategoryContainer">単一DB選択時のみ表示</div>
+                </div>
             </div>
-            <div id="kpiCategoryContainer" style="font-size: 12px; text-align: center; color: #7f8c8d;">
-            </div>
+        </div>
+
+        <!-- DBフィルター -->
+        <div style="margin-bottom: 20px;">
+            <label>表示: </label>
+            <select id="taskDbFilter" style="padding: 8px 12px; border-radius: 6px;"></select>
+        </div>
+
+        <!-- タスク一覧 -->
+        <div class="section">
+            <h3>📋 未完了タスク（<span id="taskCount">0</span>件）</h3>
+            <ul id="taskList"></ul>
+        </div>
+
+        <!-- 新規タスク作成 -->
+        <div class="section">
+            <h3>➕ 新規タスク作成</h3>
+            <div id="targetDbDisplay" style="font-weight: bold; color: #666; margin-bottom: 15px;"></div>
+            <form id="newTaskForm">
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 15px; align-items: end;">
+                    <input type="text" id="newTaskTitle" placeholder="タスク名を入力" style="font-size: 16px;">
+                    <button id="startNewTaskButton" class="btn btn-green" disabled>🚀 作成＆開始</button>
+                </div>
+                <div id="newCatContainer" style="margin-top: 15px;"></div>
+                <div id="newDeptContainer"></div>
+            </form>
         </div>
     </div>
 
-    <div id="settingsView" class="hidden">
-        <div class="panel">
-            <h3>⚙️ 設定</h3>
-            <label>Notion Token</label>
-            <input type="password" id="confNotionToken">
-            
-            <h3>Notion 接続データベース (複数登録可能)</h3>
-            <div id="dbListContainer">
-                </div>
-            
-            <button id="addDbEntry" class="btn-blue" style="width: auto; padding: 5px 10px; font-size: 14px; margin-bottom: 10px;">
-                + データベースを追加
+    <!-- ★計測中コンテナ（完全版・思考ログフォーム内蔵）★ -->
+    <div id="runningTaskContainer" class="running-task-container hidden" style="
+        position: fixed; top: 20px; right: 20px; width: 380px; max-width: 90vw;
+        background: white; border: 2px solid #28a745; border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3); z-index: 10000; padding: 20px;
+        font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    ">
+        <div class="running-task-header" style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #f0f0f0;">
+            <h3 id="runningTaskTitle" style="margin: 0 0 5px 0; font-size: 18px; color: #333; font-weight: 600;">タスク名</h3>
+            <span id="runningStartTime" style="font-size: 14px; color: #666;">開始時刻</span>
+        </div>
+        
+        <div class="thinking-log-section" style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px; font-size: 14px; color: #555;">
+                💭 思考ログ（任意）
+            </label>
+            <textarea id="thinkingLogInput" placeholder="作業中に気づいたこと、反省点、次回の改善案などを記入..." 
+                      rows="4" style="
+                width: 100%; box-sizing: border-box; 
+                padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px;
+                font-size: 14px; font-family: inherit; resize: vertical;
+                transition: border-color 0.2s; font-weight: 400;
+            " onfocus="this.style.borderColor='#28a745'" onblur="this.style.borderColor='#e1e5e9'"></textarea>
+        </div>
+        
+        <div class="running-timer" style="
+            text-align: center; margin: 20px 0; padding: 20px; 
+            background: linear-gradient(135deg, #f8f9ff 0%, #e8f0ff 100%);
+            border-radius: 16px; border: 3px solid #28a745;
+        ">
+            <div style="font-size: 36px; font-weight: 700; color: #28a745; letter-spacing: 2px; margin-bottom: 5px;">
+                <span id="runningTimer">00:00:00</span>
+            </div>
+            <div style="font-size: 14px; color: #666; font-weight: 500;">経過時間</div>
+        </div>
+        
+        <div class="task-controls" style="display: flex; gap: 12px; justify-content: center;">
+            <button id="completeRunningTask" class="btn btn-complete" style="
+                flex: 1; padding: 14px 20px; font-size: 16px; font-weight: 600;
+                background: linear-gradient(135deg, #28a745, #20c997); 
+                color: white; border: none; border-radius: 10px;
+                cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(40,167,69,0.4);
+            " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(40,167,69,0.5)'"
+               onmouseout="this.style.transform=''; this.style.boxShadow='0 4px 15px rgba(40,167,69,0.4)'">
+                ✅ 完了する
             </button>
-            <p style="font-size: 12px; color: #777;">DB名とIDを正しく入力してください。</p>
-            <label>Toggl API Token</label>
-            <input type="password" id="confTogglToken">
-            
-            <label>Toggl Workspace ID (任意)</label>
-            <input type="text" id="confTogglWid">
-            
-            <button id="saveConfig" class="btn-green">保存して戻る</button>
-            <button id="cancelConfig" class="btn-gray">キャンセル</button>
+            <button id="stopRunningTask" class="btn btn-stop" style="
+                flex: 1; padding: 14px 20px; font-size: 16px; font-weight: 600;
+                background: linear-gradient(135deg, #ffc107, #fd7e14); 
+                color: #333; border: none; border-radius: 10px;
+                cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(255,193,7,0.4);
+            " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(255,193,7,0.5)'"
+               onmouseout="this.style.transform=''; this.style.boxShadow='0 4px 15px rgba(255,193,7,0.4)'">
+                ⏹️ 停止
+            </button>
         </div>
     </div>
 
-    <div id="loader" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 9999; display: flex; justify-content: center; align-items: center; font-size: 24px;">
-        <p>Loading...</p>
+    <!-- 設定モーダル -->
+    <div id="settingsView" class="hidden">
+        <div class="modal-content">
+            <h3>⚙️ 設定</h3>
+            <div style="margin-bottom: 20px;">
+                <label>Notion Token:</label><br>
+                <input type="password" id="confNotionToken" style="width: 100%; margin-top: 5px;">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label>Toggl API Token:</label><br>
+                <input type="password" id="confTogglToken" style="width: 100%; margin-top: 5px;">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label>Toggl Workspace ID:</label><br>
+                <input type="text" id="confTogglWid" style="width: 100%; margin-top: 5px;">
+            </div>
+            <div id="dbListContainer" style="margin-bottom: 20px;"></div>
+            <button id="addDbEntry" class="btn btn-blue" style="margin-bottom: 20px;">➕ DB追加</button>
+            <div style="display: flex; gap: 12px;">
+                <button id="saveConfig" class="btn btn-green">💾 保存</button>
+                <button id="cancelConfig" class="btn btn-gray">❌ キャンセル</button>
+            </div>
+        </div>
     </div>
 
+    <!-- ローディング -->
+    <div id="loader" class="hidden">
+        <div style="
+            border: 4px solid #f3f3f3; border-top: 4px solid #28a745; 
+            border-radius: 50%; width: 40px; height: 40px; 
+            animation: spin 1s linear infinite; margin: 0 auto;
+        "></div>
+        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+    </div>
+
+    <!-- app.js -->
     <script src="app.js"></script>
 </body>
 </html>
