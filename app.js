@@ -635,25 +635,106 @@ if ($taskModeRadios) {
 
 if ($addDbEntryBtn) $addDbEntryBtn.addEventListener('click', addDbEntry);
 
-// ★思考ログ機能 最終版ボタン★
+// ★思考ログ機能 フォーム常駐版（prompt/alert廃止）★
 const completeBtn = document.getElementById('completeRunningTask');
 if (completeBtn) {
   completeBtn.addEventListener('click', async () => {
     console.log('🛑 完了ボタンクリック！');
-    const thinkingNote = prompt('思考ログ（任意）:');
+    
+    // ★フォームから思考ログ取得★
+    const thinkingLogInput = document.getElementById('thinkingLogInput');
+    const thinkingNote = thinkingLogInput?.value.trim();
     const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
     
-    if (localRunningTask?.pageId && logEntry) await appendThinkingLog(localRunningTask.pageId, logEntry);
-    if (localRunningTask?.pageId) await markTaskCompleted(localRunningTask.pageId);
+    // 思考ログ保存
+    if (localRunningTask?.pageId && logEntry) {
+      await appendThinkingLog(localRunningTask.pageId, logEntry);
+    }
     
-    localRunningTask = null; localStorage.removeItem('runningTask');
-    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    // タスク完了処理
+    if (localRunningTask?.pageId) {
+      await markTaskCompleted(localRunningTask.pageId);
+    }
+    
+    // タイマー停止・クリーンアップ
+    localRunningTask = null;
+    localStorage.removeItem('runningTask');
+    if (timerInterval) { 
+      clearInterval(timerInterval); 
+      timerInterval = null; 
+    }
     $runningTaskContainer.classList.add('hidden');
     
-    alert('✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : ''));
+    // ★フォームクリア★
+    if (thinkingLogInput) thinkingLogInput.value = '';
+    
+    // ★トーストメッセージ（alertじゃない）★
+    const messageEl = document.createElement('div');
+    messageEl.textContent = '✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : '');
+    messageEl.style.cssText = `
+      position: fixed; top: 20px; right: 20px; 
+      background: #28a745; color: white; padding: 15px 20px;
+      border-radius: 8px; z-index: 9999; font-weight: bold;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 14px;
+    `;
+    document.body.appendChild(messageEl);
+    
+    setTimeout(() => {
+      if (document.body.contains(messageEl)) {
+        document.body.removeChild(messageEl);
+      }
+    }, 3000);
+    
     loadTasksAndKpi();
   });
 }
+
+const stopBtn = document.getElementById('stopRunningTask');
+if (stopBtn) {
+  stopBtn.addEventListener('click', async () => {
+    console.log('⏹️ 停止ボタンクリック');
+    
+    // ★フォームから思考ログ取得★
+    const thinkingLogInput = document.getElementById('thinkingLogInput');
+    const thinkingNote = thinkingLogInput?.value.trim();
+    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
+    
+    // 思考ログ保存
+    if (localRunningTask?.pageId && logEntry) {
+      await appendThinkingLog(localRunningTask.pageId, logEntry);
+    }
+    
+    // タイマー停止・クリーンアップ
+    localRunningTask = null;
+    localStorage.removeItem('runningTask');
+    if (timerInterval) { 
+      clearInterval(timerInterval); 
+      timerInterval = null; 
+    }
+    $runningTaskContainer.classList.add('hidden');
+    
+    // ★フォームクリア★
+    if (thinkingLogInput) thinkingLogInput.value = '';
+    
+    // ★トーストメッセージ★
+    const messageEl = document.createElement('div');
+    messageEl.textContent = '⏹️ 計測停止' + (logEntry ? '（思考ログ保存）' : '');
+    messageEl.style.cssText = `
+      position: fixed; top: 20px; right: 20px; 
+      background: #ffc107; color: #333; padding: 15px 20px;
+      border-radius: 8px; z-index: 9999; font-weight: bold;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 14px;
+    `;
+    document.body.appendChild(messageEl);
+    
+    setTimeout(() => {
+      if (document.body.contains(messageEl)) {
+        document.body.removeChild(messageEl);
+      }
+    }, 3000);
+  });
+}
+
 
 const stopBtn = document.getElementById('stopRunningTask');
 if (stopBtn) {
