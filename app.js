@@ -1,5 +1,5 @@
 // =========================================================
-// app.js (プロキシ・タブ切り替え対応 最終完全版)
+// app.js (Notion クエリ 修正済み最終完全版)
 // =========================================================
 
 // =========================================================
@@ -46,7 +46,7 @@ let settings = loadSettings();
 let availableTasks = [];
 let dbPropertiesCache = {};
 
-// ★ Vercelの rewrites 設定に合わせたプロキシパス
+// Vercelの rewrites 設定に合わせたプロキシパス
 const PROXY_API_BASE = '/api/proxy'; 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 
@@ -449,7 +449,7 @@ async function loadTasks() {
     
     // Notionでタスクを取得 (Statusが「未着手」または「進行中」のものをフィルター)
     const statusProp = props.status;
-    const filter = {};
+    const filter = {}; // フィルターは空で初期化
 
     if (statusProp) {
         const activeStatuses = statusProp.selectOptions
@@ -462,10 +462,18 @@ async function loadTasks() {
         }
     }
 
-    const response = await notionApi(`/databases/${dbId}/query`, 'POST', {
-        filter: filter,
+    // ★ 修正箇所: クエリボディの整形
+    const queryBody = {
         sorts: [{ property: props.title.name, direction: 'ascending' }]
-    });
+    };
+
+    // フィルターが設定されている場合のみ、queryBodyに追加する
+    if (Object.keys(filter).length > 0) {
+        queryBody.filter = filter;
+    }
+    // ★ 修正箇所ここまで
+
+    const response = await notionApi(`/databases/${dbId}/query`, 'POST', queryBody);
 
     if (response.error) {
         dom.taskList.innerHTML = `<li><p style="text-align:center; color:var(--danger-color);">エラー: ${response.error}</p></li>`;
