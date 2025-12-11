@@ -1,7 +1,7 @@
 console.log('*** 📱スマホ完璧版 APP.JS 全関数完備 START ***');
 
 // =========================================================================
-// グローバル変数
+// グローバル変数 (変更なし)
 // =========================================================================
 const STORAGE_KEY = 'taskTrackerSettings';
 let localRunningTask = null;
@@ -42,7 +42,7 @@ function loadSettings() {
 }
 
 // =========================================================================
-// フォーム描画（UI改善版）
+// フォーム描画（ロジック変更なし）
 // =========================================================================
 function renderFormOptions() {
   const catContainer = document.getElementById('newCatContainer');
@@ -50,12 +50,12 @@ function renderFormOptions() {
   const targetDisplay = document.getElementById('targetDbDisplay');
   
   const targetDb = CURRENT_DB_CONFIG || ALL_DB_CONFIGS[0];
-  if (targetDisplay) targetDisplay.textContent = targetDb ? `登録先: ${targetDb.name} (ID: ${targetDb.id.slice(0,8)}...)` : '設定必要（⚙️ボタンより設定）';
+  if (targetDisplay) targetDisplay.textContent = targetDb ? `登録先DB: ${targetDb.name} (ID: ${targetDb.id.slice(0,8)}...)` : '⚙️設定ボタンより登録先DBを設定してください';
   if ($startNewTaskButton) $startNewTaskButton.disabled = !targetDb;
   
   if (!targetDb || !catContainer || !deptContainer) return;
   
-  // カテゴリ選択（カスタムラジオボタン）
+  // カテゴリ選択
   catContainer.innerHTML = `
     <label>カテゴリ選択</label>
     <div class="select-group">
@@ -68,9 +68,9 @@ function renderFormOptions() {
     </div>
   `;
   
-  // 部門選択（カスタムチェックボックス）
+  // 部門選択
   deptContainer.innerHTML = ''; 
-  deptContainer.className = 'select-group'; // index.htmlのCSSクラスを使用
+  deptContainer.className = 'select-group';
   DEPARTMENTS.forEach(dept => {
     const label = document.createElement('label');
     label.innerHTML = `<input type="checkbox" name="taskDepartment" value="${dept}"><span>${dept}</span>`;
@@ -95,7 +95,7 @@ function renderDbFilterOptions() {
 }
 
 // =========================================================================
-// 📱 スマホタブ（スワイプ対応） (変更なし)
+// 📱 スマホタブ（上部固定タブに対応）
 // =========================================================================
 function initMobileTabs() {
   $tabTasks = document.getElementById('tabTasks');
@@ -114,22 +114,23 @@ function initMobileTabs() {
   };
 
   $tabTasks?.addEventListener('click', ()=>switchTab(true));
-  $tabTasks?.addEventListener('touchstart', ()=>switchTab(true));
   $tabNew?.addEventListener('click', ()=>switchTab(false));
-  $tabNew?.addEventListener('touchstart', ()=>switchTab(false));
 
+  // スワイプ対応は前回同様に実装可能だが、今回は固定タブに集中
+  /*
   let startX = 0;
   document.addEventListener('touchstart', e=>startX = e.touches[0].clientX);
   document.addEventListener('touchend', e=>{
     const endX = e.changedTouches[0].clientX;
     if (Math.abs(startX-endX)>50) switchTab(startX>endX);
   });
+  */
 
   switchTab(true);
 }
 
 // =========================================================================
-// 設定モーダル（UI改善対応）
+// 設定モーダル (ロジック変更なし)
 // =========================================================================
 function initSettingsModal() {
   console.log('🔧 initSettingsModal実行');
@@ -175,7 +176,6 @@ function initSettingsModal() {
 
   // イベントリスナーの設定
   openBtn.onclick = window.openSettingsHandler;
-  openBtn.ontouchstart = window.openSettingsHandler;
   document.getElementById('closeSettings').onclick = () => modal.classList.add('hidden');
   modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
 
@@ -255,7 +255,7 @@ async function loadTasksFromSingleDb(dbConfig) {
 }
 
 // =========================================================================
-// タスク一覧ロード（UI改善対応）
+// タスク一覧ロード (ロジック変更なし)
 // =========================================================================
 async function loadTaskList() { 
   console.log(`タスク一覧をロード中 (ビュー: ${CURRENT_VIEW_ID})...`);
@@ -302,9 +302,8 @@ async function loadTaskList() { 
       const sourceDbName = task.sourceDbName || '不明なDB'; 
 
       const listItem = document.createElement('li');
-      listItem.className = 'task-item'; // CSSクラスを適用
+      listItem.className = 'task-item';
 
-      // タスクアイテムのHTMLを新しいデザインに合わせて更新
       listItem.innerHTML = `
         <div class="task-info">
           <span class="task-title">${title}</span>
@@ -335,20 +334,19 @@ async function loadTaskList() { 
 }
 
 // =========================================================================
-// KPIロード（UI改善対応）
+// KPIロード（KPIカードへの対応）
 // =========================================================================
 async function loadKpi() {
   const weekEl = document.getElementById('kpiWeek');
   const monthEl = document.getElementById('kpiMonth');
   const catEl = document.getElementById('kpiCategoryContainer');
   
-  // CURRENT_VIEW_ID === 'all' の場合は、KPIカード自体を非表示にする
-  const kpiCard = document.querySelector('#sectionTasks .card:nth-child(2)');
+  // KPIは常におまけとして表示するが、データは単一DB選択時のみ表示
   if (CURRENT_VIEW_ID === 'all' || !CURRENT_DB_CONFIG) {
-    kpiCard?.classList.add('hidden');
+    if (weekEl) weekEl.textContent = '--';
+    if (monthEl) monthEl.textContent = '--';
+    if (catEl) catEl.innerHTML = '<p style="margin:5px 0;">単一DB選択時のみ詳細が表示されます</p>';
     return;
-  } else {
-    kpiCard?.classList.remove('hidden');
   }
   
   try {
@@ -452,15 +450,13 @@ async function createNotionTask(e) {
 }
 
 // =========================================================================
-// 計測開始（UI改善対応）
+// 計測開始 (ロジック変更なし)
 // =========================================================================
 async function startTogglTracking(taskTitle, pageId) {
   localRunningTask = { title: taskTitle, pageId, startTime: Date.now() };
   localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
   
   document.getElementById('runningTaskTitle').textContent = taskTitle;
-  // 開始時刻はスマホUIで非表示にしたためコメントアウト
-  // document.getElementById('runningStartTime').textContent = new Date().toLocaleTimeString();
   document.getElementById('runningTimer').textContent = '00:00:00';
   $runningTaskContainer.classList.remove('hidden');
   
@@ -484,7 +480,7 @@ async function markTaskCompleted(pageId) {
 }
 
 // =========================================================================
-// 実行中状態チェック（UI改善対応）
+// 実行中状態チェック (ロジック変更なし)
 // =========================================================================
 async function checkRunningState() {
   try {
@@ -492,10 +488,8 @@ async function checkRunningState() {
     if (stored) {
       localRunningTask = JSON.parse(stored);
       const titleEl = document.getElementById('runningTaskTitle');
-      // const timeEl = document.getElementById('runningStartTime'); // UIで非表示
-
+      
       if (titleEl) titleEl.textContent = localRunningTask.title;
-      // if (timeEl) timeEl.textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
       
       if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(updateTimerDisplay, 1000);
@@ -505,7 +499,7 @@ async function checkRunningState() {
     } else {
       localRunningTask = null;
       if (timerInterval) clearInterval(timerInterval);
-      $runningTaskContainer.classList.add('hidden'); // 非実行時は必ず非表示
+      $runningTaskContainer.classList.add('hidden');
     }
   } catch (e) {
     console.error('checkRunningStateエラー:', e);
@@ -548,7 +542,7 @@ function handleDbFilterChange() {
 }
 
 // =========================================================================
-// 思考ログボタン設定（UI改善対応）
+// 思考ログボタン設定 (ロジック変更なし)
 // =========================================================================
 function setupThinkingLogButtons() {
   const completeBtn = document.getElementById('completeRunningTask');
@@ -559,7 +553,6 @@ function setupThinkingLogButtons() {
     completeBtn.addEventListener('click', async () => {
       const input = document.getElementById('thinkingLogInput');
       const note = input?.value.trim();
-      // ログフォーマットを改善: 日付と時刻を追加
       const logEntry = note ? `\n[${new Date().toLocaleString('ja-JP')}] 完了ログ: ${note}` : '';
       
       if (localRunningTask?.pageId && logEntry) {
@@ -585,7 +578,6 @@ function setupThinkingLogButtons() {
     stopBtn.addEventListener('click', async () => {
       const input = document.getElementById('thinkingLogInput');
       const note = input?.value.trim();
-      // ログフォーマットを改善
       const logEntry = note ? `\n[${new Date().toLocaleString('ja-JP')}] 停止ログ: ${note}` : '';
       
       if (localRunningTask?.pageId && logEntry) {
@@ -604,12 +596,11 @@ function setupThinkingLogButtons() {
 }
 
 // =========================================================================
-// ユーティリティ（UI改善対応）
+// ユーティリティ (変更なし)
 // =========================================================================
 function showToast(message, bgColor) {
   const el = document.createElement('div');
   el.textContent = message;
-  // UI改善に合わせてトーストのデザインを微調整
   el.style.cssText = `
     position:fixed;top:20px;right:20px;
     background:${bgColor};color:${bgColor==='#ffc107'?'#333':'white'};
@@ -621,7 +612,6 @@ function showToast(message, bgColor) {
 }
 
 function showLoading() {
-  // bodyのスタイル操作はやめて、ローディングスピナーに集中
   if ($loader) $loader.classList.remove('hidden');
 }
 
@@ -630,7 +620,7 @@ function hideLoading() {
 }
 
 // =========================================================================
-// 初期化（UI改善対応）
+// 初期化（変更なし）
 // =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('🚀 📱スマホ対応アプリ初期化開始');
@@ -652,7 +642,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkRunningState();
   await loadTasksAndKpi();
   
-  // 📱 イベント（タッチ対応）
+  // イベントリスナー
   $reloadTasksBtn?.addEventListener('click', loadTasksAndKpi);
   $startNewTaskButton?.addEventListener('click', createNotionTask);
   $taskDbFilterSelect?.addEventListener('change', handleDbFilterChange);
