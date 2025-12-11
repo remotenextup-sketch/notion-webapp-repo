@@ -1,5 +1,5 @@
 // =========================================================
-// app.js (Notion クエリ 修正済み最終完全版)
+// app.js (プロパティ名確定・エラー修正済み最終完全版)
 // =========================================================
 
 // =========================================================
@@ -318,7 +318,8 @@ async function stopTask(isCompleted) {
     const statusProp = props.status;
     if (statusProp && isCompleted) {
          // Notionデータベースに合わせて完了ステータスのIDを検索
-        const completedOption = statusProp.selectOptions.find(opt => opt.name.includes('完了'));
+         // ステータス名が「完了」の場合
+        const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
         if (completedOption) {
             propertiesToUpdate[statusProp.name] = {
                 select: { id: completedOption.id }
@@ -340,7 +341,8 @@ async function stopTask(isCompleted) {
         }
     } else if (logProp && logProp.type === 'rich_text') {
         // 親タスクの既存のリッチテキストに追記
-        await notionApi(`/blocks/${settings.currentRunningTask.id}/children`, 'PATCH', {
+        // PATCHではなくAPPENDを使用
+        await notionApi(`/blocks/${settings.currentRunningTask.id}/children`, 'POST', {
             children: [{
                 object: 'block',
                 type: 'paragraph',
@@ -397,23 +399,23 @@ async function getDbProperties(dbId) {
 
     for (const name in props) {
         const prop = props[name];
-        // 1. タイトル
-        if (prop.type === 'title') {
+        
+        // 1. タイトルプロパティ (タスク名)
+        if (prop.type === 'title' && name === 'タイトル') {
             mappedProps.title = { name, type: 'title' };
         } 
-        // 2. ステータス 
-        else if (prop.type === 'select' && (name.includes('ステータス') || name.includes('Status'))) {
+        // 2. ステータスプロパティ
+        else if (prop.type === 'select' && name === 'ステータス') {
             mappedProps.status = { name, type: 'select', selectOptions: prop.select.options };
         }
-        // 3. カテゴリ (マルチセレクト)
-        else if (prop.type === 'multi_select' && (name.includes('カテゴリ') || name.includes('Category'))) {
+        // 3. カテゴリプロパティ (マルチセレクト)
+        else if (prop.type === 'multi_select' && name === 'カテゴリ') {
             mappedProps.category = { name, type: 'multi_select', options: prop.multi_select.options };
         }
-        // 4. 部門/担当者
+        // 4. その他のプロパティ (部門/ログなど - 前回までのロジックを維持)
         else if ((prop.type === 'multi_select' || prop.type === 'people') && (name.includes('部門') || name.includes('Department') || name.includes('担当'))) {
             mappedProps.department = { name, type: prop.type, options: prop.multi_select ? prop.multi_select.options : [] };
         }
-        // 5. ログ/時間 (リレーションまたはリッチテキスト)
         else if (prop.type === 'relation' && (name.includes('ログ') || name.includes('Log'))) {
             const relation = prop.relation;
             if (relation && relation.database_id) {
@@ -438,8 +440,8 @@ async function loadTasks() {
     }
 
     const props = await getDbProperties(dbId);
-    if (!props) {
-        dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--danger-color);">データベースのプロパティ取得に失敗しました。トークンと権限を確認してください。</p></li>';
+    if (!props || !props.title) {
+        dom.taskList.innerHTML = '<li><p style="text-align:center; color:var(--danger-color);">データベースのプロパティ（タイトル）が見つかりません。トークンと権限を確認してください。</p></li>';
         return;
     }
     
@@ -452,8 +454,9 @@ async function loadTasks() {
     const filter = {}; // フィルターは空で初期化
 
     if (statusProp) {
+        // ステータス名が「未着手」または「進行中」のものを対象とする
         const activeStatuses = statusProp.selectOptions
-            .filter(opt => !opt.name.includes('完了') && !opt.name.includes('アーカイブ'))
+            .filter(opt => opt.name === '未着手' || opt.name === '進行中')
             .map(opt => ({ select: { equals: opt.name } }));
 
         if (activeStatuses.length > 0) {
@@ -462,7 +465,7 @@ async function loadTasks() {
         }
     }
 
-    // ★ 修正箇所: クエリボディの整形
+    // クエリボディの整形
     const queryBody = {
         sorts: [{ property: props.title.name, direction: 'ascending' }]
     };
@@ -471,8 +474,7 @@ async function loadTasks() {
     if (Object.keys(filter).length > 0) {
         queryBody.filter = filter;
     }
-    // ★ 修正箇所ここまで
-
+    
     const response = await notionApi(`/databases/${dbId}/query`, 'POST', queryBody);
 
     if (response.error) {
@@ -480,13 +482,39 @@ async function loadTasks() {
         return;
     }
 
-    availableTasks = response.results.map(page => ({
-        id: page.id,
-        dbId: dbId,
-        title: page.properties[props.title.name].title.map(t => t.plain_text).join('') || 'タイトルなし',
-        category: page.properties[props.category.name] ? page.properties[props.category.name].multi_select.map(s => s.name) : [],
-        status: statusProp && page.properties[statusProp.name].select ? page.properties[statusProp.name].select.name : '不明'
-    }));
+    // エラー対策: 取得したタスクデータを安全にマッピングする
+    availableTasks = response.results.map(page => {
+        // プロパティ名でNotionページデータから値を取得するヘルパー
+        const getPagePropValue = (propKey, defaultValue) => {
+            const prop = props[propKey];
+            if (!prop) return defaultValue; // マッピング情報がない
+            
+            const pageProp = page.properties[prop.name];
+            return pageProp || defaultValue; // ページデータがない
+        };
+
+        // 1. タイトル (タスク名)
+        const titleProp = getPagePropValue('title');
+        const title = titleProp && titleProp.title.length > 0
+            ? titleProp.title.map(t => t.plain_text).join('')
+            : 'タイトルなし';
+
+        // 2. カテゴリ (Multi-select)
+        const categoryProp = getPagePropValue('category', { multi_select: [] });
+        const categories = categoryProp.multi_select.map(s => s.name);
+
+        // 3. ステータス (Select)
+        const statusPropValue = getPagePropValue('status', { select: null });
+        const status = statusPropValue.select ? statusPropValue.select.name : '不明';
+
+        return {
+            id: page.id,
+            dbId: dbId,
+            title: title,
+            category: categories,
+            status: status
+        };
+    });
     
     renderTasks();
     calculateKpi();
@@ -511,7 +539,8 @@ function renderTasks() {
              li.style.opacity = '0.5';
         }
 
-        const taskMeta = `DB: ${settings.databases.find(db => db.id === task.dbId).name} | [${task.category.join('][')}] | ステータス: ${task.status}`;
+        const dbInfo = settings.databases.find(db => db.id === task.dbId) || { name: '不明なDB' };
+        const taskMeta = `DB: ${dbInfo.name} | [${task.category.join('][')}] | ステータス: ${task.status}`;
 
         li.innerHTML = `
             <span class="task-title">${task.title}</span>
@@ -638,9 +667,14 @@ async function createNewTask(e) {
     const properties = {};
 
     // 1. タイトル
-    properties[props.title.name] = {
-        title: [{ text: { content: title } }]
-    };
+    if(props.title) {
+        properties[props.title.name] = {
+            title: [{ text: { content: title } }]
+        };
+    } else {
+        alert('エラー: タイトルプロパティが見つかりません。');
+        return;
+    }
 
     // 2. カテゴリ (Multi-select)
     const selectedCats = Array.from(document.querySelectorAll('input[name="new-task-cat"]:checked'))
@@ -663,7 +697,8 @@ async function createNewTask(e) {
     // 4. ステータス 
     const statusProp = props.status;
     if (statusProp) {
-        const notStartedOption = statusProp.selectOptions.find(opt => opt.name.includes('未着手') || opt.name.includes('Todo') || opt.name.includes('To Do'));
+        // 未着手のステータス名と一致するものを検索
+        const notStartedOption = statusProp.selectOptions.find(opt => opt.name === '未着手');
         if (notStartedOption) {
             properties[statusProp.name] = {
                 select: { id: notStartedOption.id }
@@ -693,7 +728,7 @@ async function createNewTask(e) {
     // フォームをリセットし、既存タスクタブに戻る
     dom.newTaskForm.reset();
     switchTab('tasks'); // タブを既存タスクに戻す
-    loadTasks(); // 既存タスクリストを更新
+    // loadTasks(); // switchTabで既にロードされるため不要
 }
 
 // =========================================================
