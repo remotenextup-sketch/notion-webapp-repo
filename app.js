@@ -732,6 +732,34 @@ if ($addDbEntryBtn) {
     $addDbEntryBtn.addEventListener('click', addDbEntry);
 }
 
+// ★完了ボタン直接設定（恒久版）★
+const completeBtn = document.getElementById('completeRunningTask');
+if (completeBtn) {
+  completeBtn.addEventListener('click', async () => {
+    console.log('🛑 完了ボタンクリック！');
+    
+    if (localRunningTask?.pageId) {
+      await markTaskCompleted(localRunningTask.pageId);
+    }
+    
+    // タイマー完全停止
+    localRunningTask = null;
+    localStorage.removeItem('runningTask');
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    
+    // UIクリア
+    $runningTaskContainer.classList.add('hidden');
+    completeBtn.textContent = '完了';
+    
+    console.log('✅ 完全停止完了');
+    alert('✅ タスク完了！');
+    loadTasksAndKpi();
+  });
+}
+
 // 実行中タスク停止ボタン
 const $stopRunningTaskBtn = document.getElementById('stopRunningTask');
 if ($stopRunningTaskBtn) {
