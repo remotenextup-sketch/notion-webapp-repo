@@ -1,7 +1,7 @@
 // app.js 全文 (最終版: 動的DBフォーム・エラー修正・新規タスク関数追加)
 
 // ★★★ 定数とグローバル設定 ★★★
-const PROXY_URL = 'https://notion-webapp-repo.vercel.app/api/proxy'; 
+const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 
 const settings = {
     notionToken: '',
