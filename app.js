@@ -1,6 +1,7 @@
-// app.js 全文 (最終版: 動的DBフォーム・エラー修正・新規タスク関数追加)
+// app.js 全文 (最終版: プロキシ連携ロジック修正済み)
 
 // ★★★ 定数とグローバル設定 ★★★
+// ここに新しいプロキシURLを設定
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 
 const settings = {
@@ -13,8 +14,8 @@ const settings = {
     
     databases: [], 
     currentRunningTask: null, 
-    startTime: null,          
-    timerInterval: null       
+    startTime: null,        
+    timerInterval: null      
 };
 
 const dbPropertiesCache = {}; 
@@ -105,9 +106,9 @@ function renderDbConfigForms() {
         div.innerHTML = `
             <div class="form-group" style="margin-bottom: 5px;">
                 <input type="text" placeholder="表示名 (例: タスクDB)" class="input-field db-name-input" 
-                       data-index="${index}" value="${db.name}" style="margin-bottom: 5px;">
+                        data-index="${index}" value="${db.name}" style="margin-bottom: 5px;">
                 <input type="text" placeholder="データベースID (32桁)" class="input-field db-id-input" 
-                       data-index="${index}" value="${db.id}">
+                        data-index="${index}" value="${db.id}">
             </div>
         `;
         dom.dbConfigContainer.appendChild(div);
@@ -209,15 +210,18 @@ function hideSettings() {
 // ==========================================
 
 /** 外部APIへのリクエストをプロキシ経由で送信する */
-const proxyPayload = {
+// ★★★ 修正済み: async を追加し、authDetails を受け取るように変更 ★★★
+async function externalApi(targetUrl, method, authDetails, body) { 
+    const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
-        // ★★★ 修正: authDetails の内容をペイロードに展開 ★★★
+        // プロキシが期待するトップレベルの認証キー
         tokenKey: authDetails.tokenKey, 
         tokenValue: authDetails.tokenValue,
-        notionVersion: authDetails.notionVersion, // Notionバージョン用 (Togglでは無視される)
-        // ★★★ 修正ここまで ★★★
-        body: body // NotionやToggl APIへの実際のペイロード
+        // Notionのバージョン情報
+        notionVersion: authDetails.notionVersion, 
+        // Notion/Toggl APIへの実際のペイロード
+        body: body 
     };
 
     const res = await fetch(PROXY_URL, {
@@ -247,24 +251,15 @@ async function notionApi(endpoint, method = 'GET', body = null) {
     
     console.log(`[NotionAPI] Calling ${method} ${fullUrl}`); 
 
-    const headers = {
-        'Authorization': `Bearer ${settings.notionToken}`,
-        'Notion-Version': '2022-06-28'
+    // ★★★ 修正済み: 認証情報をオブジェクト化して externalApi に渡す ★★★
+    const authDetails = {
+        tokenKey: 'notionToken', 
+        tokenValue: settings.notionToken, 
+        notionVersion: '2022-06-28' 
     };
-    
-    // ★★★ [DEBUG] トークン値チェックログ ★★★
-    if (settings.notionToken) {
-        const authHeader = headers['Authorization'];
-        console.log(`[DEBUG] Authorization Header Value Check: ${authHeader.substring(0, 30)}... (Length: ${authHeader.length})`); 
-    }
-    // ★★★ [DEBUG] ここまで ★★★
-
-    if (method === 'POST' || method === 'PATCH') {
-        headers['Content-Type'] = 'application/json';
-    }
 
     try {
-        const res = await externalApi(fullUrl, method, headers, body);
+        const res = await externalApi(fullUrl, method, authDetails, body); // authDetails を渡す
         return res;
     } catch (e) {
         console.error('Notion API Error:', e);
@@ -285,14 +280,16 @@ async function togglApi(endpoint, method = 'GET', body = null) {
     
     console.log(`[TogglAPI] Calling ${method} ${fullUrl}`); 
 
-    const headers = {
-        'Authorization': `Basic ${btoa(`${settings.togglApiToken}:api_token`)}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'Notion-Toggl-Timer-WebApp'
+    // ★★★ 修正済み: 認証情報をオブジェクト化して externalApi に渡す ★★★
+    const authDetails = {
+        tokenKey: 'togglApiToken',
+        tokenValue: settings.togglApiToken,
+        // Togglでは不要だが、externalApiの引数形式に合わせる
+        notionVersion: '' 
     };
 
     try {
-        const res = await externalApi(fullUrl, method, headers, body);
+        const res = await externalApi(fullUrl, method, authDetails, body); // authDetails を渡す
         return res;
     } catch (e) {
         console.error('Toggl API Error:', e);
@@ -581,7 +578,7 @@ async function renderNewTaskForm() {
     }
 }
 
-/** 新規タスク作成・開始のハンドラ (スケルトン) */
+/** 新規タスク作成・開始のハンドラ */
 async function handleStartNewTask() {
     const title = dom.newTaskTitle.value.trim();
     const dbId = dom.taskDbFilter.value;
@@ -607,7 +604,7 @@ async function handleStartNewTask() {
 
         // 3. 部門 (Multi-select)
         const selectedDepts = Array.from(document.querySelectorAll('.dept-checkbox:checked'))
-                                 .map(cb => ({ id: cb.dataset.id }));
+                             .map(cb => ({ id: cb.dataset.id }));
         if (props.department && selectedDepts.length > 0) {
             properties[props.department.name] = { multi_select: selectedDepts };
         }
@@ -635,7 +632,7 @@ async function handleStartNewTask() {
             id: createRes.id,
             dbId: dbId,
             title: title,
-            properties: {} // 新規作成時はプロパティはシンプルにしておく
+            properties: {} 
         };
 
         alert(`新規タスク「${title}」を作成しました。計測を開始します。`);
@@ -650,21 +647,140 @@ async function handleStartNewTask() {
 
 // ==========================================
 // 6. 実行・停止ロジック (コア機能)
-// ... (startTask, stopTask, checkRunningState, updateRunningTaskDisplay, updateTimer, formatTime, clearElement は省略しませんが、全文に含まれます)
 // ==========================================
 
-/** 実行中タスクの有無をチェックし、UIを更新する (スケルトン) */
+/** タスク計測を開始する */
+async function startTask(task) {
+    if (settings.currentRunningTask) {
+        alert('既にタスクが実行中です。現在のタスクを完了または停止してください。');
+        return;
+    }
+    
+    try {
+        // Togglのタグを構築
+        const tags = [];
+        const cat = task.properties.category?.name;
+        const depts = task.properties.department?.map(d => d.name) || [];
+        if (cat) tags.push(cat);
+        depts.forEach(d => tags.push(d));
+
+        // 1. Toggl計測開始
+        const togglEntry = await startToggl(task.title, tags);
+        task.togglEntryId = togglEntry.id;
+        
+        // 2. 状態保存
+        settings.currentRunningTask = task;
+        settings.startTime = Date.now();
+        
+        // 3. Notionステータスを '進行中' に更新 (ここでエラーになっても計測は継続させる)
+        try {
+            const props = await getDbProperties(task.dbId);
+            if (props.status) {
+                const statusOption = props.status.selectOptions.find(o => o.name === '進行中');
+                if (statusOption) {
+                    await notionApi(`/pages/${task.id}`, 'PATCH', {
+                        properties: {
+                            [props.status.name]: { status: { id: statusOption.id } }
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn("Notionステータス更新中に警告が発生しました:", e.message);
+        }
+
+        // 4. UI更新と保存
+        saveSettings();
+        updateRunningTaskDisplay(true);
+        loadTasks(); // タスク一覧をリロード
+        alert(`タスク「${task.title}」を開始しました。`);
+        
+    } catch (e) {
+        alert(`タスクの開始に失敗しました: ${e.message}`);
+        console.error(e);
+        settings.currentRunningTask = null;
+        settings.startTime = null;
+        saveSettings();
+    }
+}
+
+/** タスク計測を停止または完了する */
+async function stopTask(isComplete) {
+    if (!settings.currentRunningTask || !settings.currentRunningTask.togglEntryId) {
+        alert('実行中のタスクはありません。');
+        return;
+    }
+
+    const task = settings.currentRunningTask;
+    const logText = dom.thinkingLogInput.value.trim();
+    const duration = Date.now() - settings.startTime;
+
+    try {
+        // 1. Toggl計測停止
+        await stopToggl(task.togglEntryId);
+        
+        // 2. Notionページを更新
+        const props = await getDbProperties(task.dbId);
+        const patchBody = { properties: {} };
+        
+        // ステータス更新
+        if (props.status && isComplete) {
+            const statusOption = props.status.selectOptions.find(o => o.name === '完了');
+            if (statusOption) {
+                patchBody.properties[props.status.name] = { status: { id: statusOption.id } };
+            }
+        }
+        
+        // ログ更新
+        if (logText && props.logRichText) {
+            patchBody.properties[props.logRichText.name] = {
+                rich_text: [{ type: "text", text: { content: logText } }]
+            };
+        } else if (logText && props.logRelation) {
+            // Relationプロパティの場合、新規ログページを作成して関連付けるロジックが必要（ここではスキップ）
+            console.warn("Relationログプロパティへの書き込みは未実装です。");
+        }
+
+
+        // 実際にNotionにPATCHリクエストを送信
+        if (Object.keys(patchBody.properties).length > 0) {
+            await notionApi(`/pages/${task.id}`, 'PATCH', patchBody);
+        }
+
+        // 3. 状態クリアとUI更新
+        settings.currentRunningTask = null;
+        settings.startTime = null;
+        dom.thinkingLogInput.value = '';
+
+        saveSettings();
+        updateRunningTaskDisplay(false);
+        loadTasks();
+        
+        alert(`タスク「${task.title}」を${isComplete ? '完了' : '停止'}しました。計測時間: ${formatTime(duration)}`);
+        
+    } catch (e) {
+        alert(`タスクの停止/完了処理中にエラーが発生しました: ${e.message}`);
+        console.error(e);
+        // エラー時も計測状態はクリアし、手動でTogglを停止するよう促す
+        settings.currentRunningTask = null;
+        settings.startTime = null;
+        saveSettings();
+        updateRunningTaskDisplay(false);
+    }
+}
+
+
+/** 実行中タスクの有無をチェックし、UIを更新する */
 async function checkRunningState() {
-    // 実行中タスクの確認ロジック
     if (settings.currentRunningTask && settings.startTime) {
         updateRunningTaskDisplay(true);
-        // 必要に応じてTogglでの計測状態もチェックするロジックをここに追加
+        // ここにTogglの実行状態をチェックするロジックを将来的に追加可能
     } else {
         updateRunningTaskDisplay(false);
     }
 }
 
-/** 実行中タスクの表示を更新 (スケルトン) */
+/** 実行中タスクの表示を更新 */
 function updateRunningTaskDisplay(isRunning) {
     if (isRunning) {
         dom.runningTaskContainer.classList.remove('hidden');
@@ -684,13 +800,34 @@ function updateRunningTaskDisplay(isRunning) {
     }
 }
 
-// ... 他のユーティリティ関数（startTask, stopTask, updateTimerなど）は省略
+/** タイマーを更新する */
+function updateTimer() {
+    if (settings.startTime) {
+        const elapsed = Date.now() - settings.startTime;
+        dom.runningTimer.textContent = formatTime(elapsed);
+    }
+}
+
+/** ミリ秒を H:MM:SS 形式にフォーマット */
+function formatTime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const pad = (num) => num.toString().padStart(2, '0');
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
 
 /** DOM要素の内容をクリアするユーティリティ関数 */
 function clearElement(element) {
     element.innerHTML = '';
 }
 
+
+// ==========================================
+// 7. 初期ロード
+// ==========================================
 
 document.addEventListener('DOMContentLoaded', async () => {
     // イベントリスナー設定
@@ -706,9 +843,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     dom.startExistingTask.addEventListener('click', switchTab);
     dom.startNewTask.addEventListener('click', switchTab);
     
-    // ★★★ 修正: handleStartNewTask 関数が定義されたため、リスナーを再度追加 ★★★
+    // 新規タスク開始ボタン
     document.getElementById('startNewTaskButton').addEventListener('click', handleStartNewTask);
     
+    // 停止/完了ボタン
     document.getElementById('stopTaskButton').addEventListener('click', () => stopTask(false));
     document.getElementById('completeTaskButton').addEventListener('click', () => stopTask(true));
     
