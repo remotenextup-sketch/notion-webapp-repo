@@ -297,73 +297,70 @@ async function stopTask(isCompleted) {
     settings.currentRunningTask.memo = memo;
     saveSettings(settings);
 
-    // ★★★ 修正箇所: ページIDを最優先でクリーンアップし、変数に格納 ★★★
-    // ここでIDが有効でない場合は、以降のAPI呼び出しをスキップする準備をする
+    // IDをクリーンアップし、有効性チェック
     const rawTaskId = settings.currentRunningTask.id;
-    // ★修正: trim() で前後の空白を確実に除去
-    const taskId = rawTaskId ? rawTaskId.replace(/-/g, '').trim() : null;
+    const taskId = rawTaskId ? rawTaskId.replace(/-/g, '').trim() : null; 
     
     if (!taskId || taskId.length !== 32) {
-        alert('エラー: タスクIDが取得できないか、無効な形式です。タスクの更新をスキップし、計測を停止します。');
-        // 計測停止処理のみ実行し、API呼び出しはスキップ
-        settings.currentRunningTask = null;
-        settings.startTime = null;
-        settings.timerInterval = null;
-        saveSettings(settings);
-        updateRunningTaskDisplay();
-        dom.runningTimer.textContent = '00:00:00';
-        dom.thinkingLogInput.value = '';
-        loadTasks();
-        return;
-    }
+        alert('エラー: タスクIDが不正なため、Notionへの更新をスキップします。計測は停止されます。');
+        // 以下、計測停止処理へジャンプ
+    } else {
+        // IDが有効な場合のみ、Notion APIの更新を試みる
 
-    const logContent = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')}】\n計測時間: ${formatTime(durationSeconds)}\nメモ: ${memo}`;
-    
-    const dbId = settings.currentRunningTask.dbId;
-    const props = dbPropertiesCache[dbId];
+        const logContent = `【${isCompleted ? '完了' : '停止'}ログ - ${new Date().toLocaleString('ja-JP')}】\n計測時間: ${formatTime(durationSeconds)}\nメモ: ${memo}`;
+        const dbId = settings.currentRunningTask.dbId;
+        const props = dbPropertiesCache[dbId];
 
-    if (!props) {
-        alert('エラー: データベースのプロパティ情報が見つかりません。');
-        // API呼び出しはスキップし、計測停止処理へ (この時点でtaskIdが有効ならAPIが通るはずだが念のため)
-    }
+        // 1. ログ (ブロック) の追加を試みる
+        const logProp = props ? (props.logRichText || props.logRelation) : null;
 
-    const propertiesToUpdate = {};
-    
-    const statusProp = props ? props.status : null;
-    if (statusProp && isCompleted) {
-        const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
-        if (completedOption) {
-            propertiesToUpdate[statusProp.name] = {
-                select: { id: completedOption.id }
-            };
+        if (logProp && logProp.type === 'rich_text') {
+            try {
+                // ログ追加（エラー発生元の呼び出し）
+                await notionApi(`/blocks/${taskId}/children`, 'POST', { 
+                    children: [{
+                        object: 'block',
+                        type: 'paragraph',
+                        paragraph: {
+                            rich_text: [
+                                { type: 'text', text: { content: logContent } }
+                            ]
+                        }
+                    }]
+                });
+            } catch (error) {
+                console.error("ログブロック追加エラー:", error);
+                alert("警告: ログブロックの追加に失敗しました。ページ更新を試みます。");
+            }
+        }
+
+        // 2. ステータス (プロパティ) の更新を試みる
+        const propertiesToUpdate = {};
+        const statusProp = props ? props.status : null;
+        
+        if (statusProp && isCompleted) {
+            const completedOption = statusProp.selectOptions.find(opt => opt.name === '完了');
+            if (completedOption) {
+                propertiesToUpdate[statusProp.name] = {
+                    select: { id: completedOption.id }
+                };
+            }
+        }
+
+        if (Object.keys(propertiesToUpdate).length > 0) {
+            try {
+                // ページプロパティの更新
+                await notionApi(`/pages/${taskId}`, 'PATCH', { 
+                    properties: propertiesToUpdate
+                });
+            } catch (error) {
+                console.error("ページプロパティ更新エラー:", error);
+                alert("警告: ページプロパティ（ステータス）の更新に失敗しました。");
+            }
         }
     }
 
-    const logProp = props ? (props.logRichText || props.logRelation) : null;
-
-    if (logProp && logProp.type === 'rich_text') {
-        // ★★★ 修正箇所: クリーンアップしたIDを使用 (/blocks/...) ★★★
-        await notionApi(`/blocks/${taskId}/children`, 'POST', {
-            children: [{
-                object: 'block',
-                type: 'paragraph',
-                paragraph: {
-                    rich_text: [
-                        { type: 'text', text: { content: logContent } }
-                    ]
-                }
-            }]
-        });
-    }
-
-    if (Object.keys(propertiesToUpdate).length > 0) {
-        // ★★★ 修正箇所: クリーンアップしたIDを使用 (/pages/...) ★★★
-        await notionApi(`/pages/${taskId}`, 'PATCH', {
-            properties: propertiesToUpdate
-        });
-    }
-
-    // 最後に計測停止処理
+    // 最後に計測停止処理 (APIの成功/失敗に関わらず実行)
     settings.currentRunningTask = null;
     settings.startTime = null;
     settings.timerInterval = null;
