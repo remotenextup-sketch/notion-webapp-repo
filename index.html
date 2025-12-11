@@ -18,7 +18,7 @@
             --focus-color: #0056b3;
 
             /* Notion Select Colors (一部抜粋) */
-            --default: #ddd;
+            --default: #ccc; /* 濃いめに設定 */
             --gray: #ccc;
             --brown: #9b746c;
             --orange: #f59639;
@@ -186,9 +186,9 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 15px;
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-color);
+            /* margin-bottom: 20px; */ /* タスクリストの下に移動したため調整 */
+            padding-top: 20px; /* タスクリストとの区切り */
+            border-top: 1px solid var(--border-color);
         }
 
         .kpi-card {
@@ -317,10 +317,10 @@
         }
         
         /* 部門選択時のスタイル（app.jsで制御） */
-        .select-chip:has(+ input:checked) {
+        /* .select-chip:has(+ input:checked) {
             color: white !important;
             background-color: currentColor !important;
-        }
+        } */
     </style>
 </head>
 <body>
@@ -353,7 +353,17 @@
 
             <section id="sectionTasks">
                 
-                <div class="kpi-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <select id="taskDbFilter" class="input-field" style="width: 75%; margin-right: 10px;">
+                        </select>
+                    <button id="reloadTasks" class="btn btn-primary" style="width: 25%;">🔄 更新</button>
+                </div>
+                
+                <ul id="taskList" class="task-list">
+                    <li><p style="text-align:center; color:var(--sub-text-color);">タスクをロードしてください。</p></li>
+                </ul>
+
+                <div class="kpi-section" style="margin-top: 20px;">
                     <div class="kpi-card">
                         <h3>週間合計 (Mock)</h3>
                         <p id="kpiWeek">0.0h</p>
@@ -368,16 +378,6 @@
                             </div>
                     </div>
                 </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <select id="taskDbFilter" class="input-field" style="width: 75%; margin-right: 10px;">
-                        </select>
-                    <button id="reloadTasks" class="btn btn-primary" style="width: 25%;">🔄 更新</button>
-                </div>
-                
-                <ul id="taskList" class="task-list">
-                    <li><p style="text-align:center; color:var(--sub-text-color);">タスクをロードしてください。</p></li>
-                </ul>
             </section>
 
             <section id="sectionNew" class="hidden">
@@ -422,6 +422,7 @@
                 </label>
                 <input type="text" id="humanUserIdInput" class="input-field" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width: 100%;">
             </div>
+
             <button id="saveSettings" class="btn btn-primary" style="width: 100%; margin-bottom: 20px;">設定を保存</button>
 
             <h3 style="font-size: 16px;">対象データベース管理</h3>
