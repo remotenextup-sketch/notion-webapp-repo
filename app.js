@@ -449,6 +449,8 @@ async function startTogglTracking(taskTitle, pageId) {
   console.log('✅ TIMER STARTED');
 }
 
+// createNotionTask以降（完全版）
+
 async function createNotionTask(e) {
     e.preventDefault();
     
@@ -464,4 +466,290 @@ async function createNotionTask(e) {
     
     let targetDbConfig = CURRENT_DB_CONFIG;
     if (CURRENT_VIEW_ID === 'all' && ALL_DB_CONFIGS.length > 0) {
-        targetDb
+        targetDbConfig = ALL_DB_CONFIGS[0];
+    }
+
+    if (!targetDbConfig) {
+        alert('エラー: タスクを登録するDBが選択されていません。設定を確認してください。');
+        return;
+    }
+    
+    const deptProps = selectedDepartments.map(d => ({ name: d }));
+    const pageProperties = {
+        'タスク名': { title: [{ type: 'text', text: { content: title } }] },
+        'カテゴリ': { select: { name: category } },
+        '部門': { multi_select: deptProps },
+        'ステータス': { status: { name: '未着手' } }
+    };
+    
+    const parentObject = { type: 'database_id', database_id: targetDbConfig.id };
+    const targetUrl = 'https://api.notion.com/v1/pages';
+    
+    try {
+        showLoading();
+        const pageResponse = await apiFetch(targetUrl, 'POST', { parent: parentObject, properties: pageProperties }, 'notionToken', NOTION_TOKEN);
+        const newPageId = pageResponse.id; 
+
+        alert(`タスクが正常にDB「${targetDbConfig.name}」に作成されました！`);
+        await startTogglTracking(title, newPageId); 
+        
+        document.getElementById('newTaskTitle').value = ''; 
+        if (document.getElementById('taskCategory')) document.getElementById('taskCategory').value = ''; 
+        document.querySelectorAll('#newDeptContainer input[name="taskDepartment"]:checked').forEach(cb => cb.checked = false);
+        await loadTasksAndKpi();
+    } catch (e) {
+        alert(`タスク作成に失敗しました。\nエラー: ${e.message}`);
+        console.error('タスク作成エラー:', e);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function markTaskCompleted(pageId) {
+    if (confirm('このタスクを「完了」にしますか？')) {
+        const targetUrl = `https://api.notion.com/v1/pages/${pageId}`;
+        const updateProperties = {
+            'ステータス': { status: { name: '完了' } },
+            '完了日': { date: { start: new Date().toISOString().split('T')[0] } } 
+        };
+
+        try {
+            showLoading();
+            await apiFetch(targetUrl, 'PATCH', { properties: updateProperties }, 'notionToken', NOTION_TOKEN);
+            alert('タスクを完了にしました。');
+            await loadTasksAndKpi();
+        } catch (e) {
+            alert(`タスク完了処理に失敗しました。\nエラー: ${e.message}`);
+            console.error('タスク完了エラー:', e);
+        } finally {
+            hideLoading();
+        }
+    }
+}
+
+// =========================================================================
+// Toggl 連携（完全版）
+// =========================================================================
+async function checkRunningState() {
+  const stored = localStorage.getItem('runningTask');
+  if (stored) {
+    localRunningTask = JSON.parse(stored);
+    document.getElementById('runningTaskTitle').textContent = localRunningTask.title;
+    document.getElementById('runningStartTime').textContent = new Date(localRunningTask.startTime).toLocaleTimeString();
+    
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimerDisplay, 1000);
+    updateTimerDisplay();
+    
+    $runningTaskContainer.classList.remove('hidden');
+    console.log('✅ 実行中状態復元完了');
+    return;
+  }
+  
+  localRunningTask = null;
+  if (timerInterval) clearInterval(timerInterval);
+  $runningTaskContainer.classList.add('hidden');
+}
+
+// ★思考ログ追記関数（Page API版）★
+async function appendThinkingLog(pageId, newLog) {
+  try {
+    console.log('📝 思考ログ追記開始:', pageId);
+    
+    const pageResponse = await apiFetch(`https://api.notion.com/v1/pages/${pageId}`, 'GET', null, 'notionToken', NOTION_TOKEN);
+    let currentLog = pageResponse.properties['思考ログ']?.rich_text?.map(t => t.text?.content || '').join('\n') || '';
+    const fullLog = currentLog + newLog;
+    
+    await apiFetch(`https://api.notion.com/v1/pages/${pageId}`, 'PATCH', {
+      properties: { 
+        '思考ログ': { 
+          rich_text: [{ type: 'text', text: { content: fullLog } }] 
+        } 
+      }
+    }, 'notionToken', NOTION_TOKEN);
+    console.log('✅ 思考ログ保存完了');
+  } catch (e) { 
+    console.error('思考ログエラー:', e); 
+  }
+}
+
+async function getTogglRunningEntry() {
+  return await apiFetch('https://api.track.toggl.com/api/v9/me/time_entries/current', 'GET', null, 'togglApiToken', TOGGL_API_TOKEN);
+}
+
+async function stopTogglTracking(entryId) {
+    if (!entryId) return;
+    try {
+        showLoading();
+        const stopEntryUrl = `https://api.track.toggl.com/api/v9/time_entries/${entryId}/stop`;
+        await apiFetch(stopEntryUrl, 'PATCH', null, 'togglApiToken', TOGGL_API_TOKEN);
+        alert('タスクの計測を停止しました。');
+    } catch (e) {
+        alert(`タスク停止に失敗しました。\nエラー: ${e.message}`);
+        console.error('タスク停止エラー:', e);
+        throw e;
+    } finally {
+        hideLoading();
+    }
+}
+
+// =========================================================================
+// UIイベントリスナー
+// =========================================================================
+if ($startNewTaskButton) $startNewTaskButton.addEventListener('click', createNotionTask);
+if ($settingsBtn) $settingsBtn.addEventListener('click', openSettingsModal);
+if ($saveSettingsBtn) $saveSettingsBtn.addEventListener('click', saveSettings);
+if ($cancelConfigBtn) $cancelConfigBtn.addEventListener('click', () => $settingsModal.classList.add('hidden'));
+if ($reloadTasksBtn) $reloadTasksBtn.addEventListener('click', loadTasksAndKpi);
+
+if ($taskDbFilterSelect) {
+    $taskDbFilterSelect.addEventListener('change', async function() {
+        const newViewId = this.value;
+        CURRENT_VIEW_ID = newViewId;
+        CURRENT_DB_CONFIG = ALL_DB_CONFIGS.find(db => db.id === newViewId) || null;
+        
+        const currentSettings = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+        currentSettings.currentViewId = newViewId;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
+        
+        let targetDbConfig = CURRENT_DB_CONFIG;
+        if (!targetDbConfig && ALL_DB_CONFIGS.length > 0) targetDbConfig = ALL_DB_CONFIGS[0];
+
+        if (targetDbConfig) {
+            try {
+                await loadDbProperties(targetDbConfig.id); 
+                renderFormOptions();
+                displayCurrentDbTitle(newViewId === 'all' ? '統合ビュー' : targetDbConfig.name);
+            } catch (e) {
+                alert(`DB設定のロードに失敗しました。新規タスクの作成はできません。\nエラー: ${e.message}`);
+                CATEGORIES = []; DEPARTMENTS = []; renderFormOptions();
+                displayCurrentDbTitle(newViewId === 'all' ? '統合ビュー' : 'エラー');
+            }
+        } else {
+            CATEGORIES = []; DEPARTMENTS = []; renderFormOptions();
+            displayCurrentDbTitle('エラー');
+        }
+        loadTasksAndKpi(); 
+    });
+}
+
+if ($taskModeRadios) {
+    $taskModeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'new') {
+                $existingTaskContainer.classList.add('hidden');
+                $newTaskContainer.classList.remove('hidden');
+            } else {
+                $existingTaskContainer.classList.remove('hidden');
+                $newTaskContainer.classList.add('hidden');
+            }
+        });
+    });
+}
+
+if ($addDbEntryBtn) $addDbEntryBtn.addEventListener('click', addDbEntry);
+
+// ★思考ログ機能 最終版ボタン★
+const completeBtn = document.getElementById('completeRunningTask');
+if (completeBtn) {
+  completeBtn.addEventListener('click', async () => {
+    console.log('🛑 完了ボタンクリック！');
+    const thinkingNote = prompt('思考ログ（任意）:');
+    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
+    
+    if (localRunningTask?.pageId && logEntry) await appendThinkingLog(localRunningTask.pageId, logEntry);
+    if (localRunningTask?.pageId) await markTaskCompleted(localRunningTask.pageId);
+    
+    localRunningTask = null; localStorage.removeItem('runningTask');
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    $runningTaskContainer.classList.add('hidden');
+    
+    alert('✅ タスク完了！' + (logEntry ? '（思考ログ保存）' : ''));
+    loadTasksAndKpi();
+  });
+}
+
+const stopBtn = document.getElementById('stopRunningTask');
+if (stopBtn) {
+  stopBtn.addEventListener('click', async () => {
+    console.log('⏹️ 停止ボタンクリック');
+    const thinkingNote = prompt('思考ログ（任意）:');
+    const logEntry = thinkingNote ? `\n[${new Date().toLocaleDateString('ja-JP')}] ${thinkingNote}` : '';
+    
+    if (localRunningTask?.pageId && logEntry) await appendThinkingLog(localRunningTask.pageId, logEntry);
+    
+    localRunningTask = null; localStorage.removeItem('runningTask');
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    $runningTaskContainer.classList.add('hidden');
+    
+    alert('計測停止' + (logEntry ? '（思考ログ保存）' : ''));
+  });
+}
+
+// =========================================================================
+// 設定モーダル関数
+// =========================================================================
+function saveSettings() {
+    const notionToken = document.getElementById('confNotionToken').value;
+    const togglApiToken = document.getElementById('confTogglToken').value;
+    const togglWid = document.getElementById('confTogglWid').value;
+    
+    const newAllDbConfigs = [];
+    const dbNames = document.querySelectorAll('.confDbName');
+    const dbIds = document.querySelectorAll('.confDbId');
+
+    for (let i = 0; i < dbNames.length; i++) {
+        if (dbIds[i].value && dbNames[i].value) {
+            newAllDbConfigs.push({ name: dbNames[i].value, id: dbIds[i].value });
+        }
+    }
+    
+    if (!notionToken || newAllDbConfigs.length === 0) {
+        alert('Notionトークンと少なくとも一つのDBの設定（名前とID）は必須です。');
+        return;
+    }
+
+    let newCurrentViewId = CURRENT_VIEW_ID;
+    const currentDbStillExists = newAllDbConfigs.some(db => db.id === newCurrentViewId);
+    if (newCurrentViewId !== 'all' && !currentDbStillExists) newCurrentViewId = 'all'; 
+    else if (!newCurrentViewId && newAllDbConfigs.length > 0) newCurrentViewId = newAllDbConfigs[0].id;
+
+    const settings = { notionToken, togglApiToken, togglWid, allDbConfigs: newAllDbConfigs, currentViewId: newCurrentViewId };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    
+    alert('設定を保存しました。アプリケーションをリロードします。');
+    $settingsModal.classList.add('hidden');
+    location.reload(); 
+}
+
+function openSettingsModal() {
+    if (!$settingsModal) {
+         console.error('設定モーダル要素が見つかりません。');
+         alert('設定モーダルを開けませんでした。');
+         return;
+    }
+
+    document.getElementById('confNotionToken').value = NOTION_TOKEN;
+    document.getElementById('confTogglToken').value = TOGGL_API_TOKEN;
+    document.getElementById('confTogglWid').value = TOGGL_WID;
+    renderDbInputs(); 
+    $settingsModal.classList.remove('hidden'); 
+}
+
+// =========================================================================
+// ローディングUI
+// =========================================================================
+function showLoading() {
+    document.body.style.cursor = 'wait';
+    document.body.style.pointerEvents = 'none'; 
+    const loader = document.getElementById('loader');
+    if (loader) loader.classList.remove('hidden');
+}
+
+function hideLoading() {
+    document.body.style.cursor = 'default';
+    document.body.style.pointerEvents = 'auto';
+    const loader = document.getElementById('loader');
+    if (loader) loader.classList.add('hidden');
+}
+
