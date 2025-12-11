@@ -442,9 +442,10 @@ function addDbEntry() {
 // アクション処理
 // =========================================================================
 
-// ✅ 修正版（行850付近）
 async function startTogglTracking(taskTitle, pageId) {
-  // ★Toggl proxy完全削除→ローカルタイマーのみ★
+  console.log('🎯 LOCAL TIMER START:', taskTitle);
+  
+  // ★Toggl完全削除→ローカルタイマーのみ★
   localRunningTask = { 
     title: taskTitle, 
     pageId: pageId, 
@@ -452,18 +453,20 @@ async function startTogglTracking(taskTitle, pageId) {
   };
   localStorage.setItem('runningTask', JSON.stringify(localRunningTask));
   
+  // タイマー開始
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(updateTimerDisplay, 1000);
   updateTimerDisplay();
   
-  // UI即時更新
+  // UI更新
   document.getElementById('runningTaskTitle').textContent = taskTitle;
-  document.getElementById('runningStartTime').textContent = 
-    new Date(localRunningTask.startTime).toLocaleTimeString();
+  document.getElementById('runningStartTime').textContent = new Date().toLocaleTimeString();
   $runningTaskContainer.classList.remove('hidden');
   
+  console.log('✅ LOCAL MEASUREMENT STARTED');
   alert(`✅ 計測開始: ${taskTitle}`);
 }
+
 
 async function createNotionTask(e) {
     e.preventDefault();
