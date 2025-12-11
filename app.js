@@ -1,11 +1,11 @@
-// app.js 全文 (エラー修正・複数DB・Toggl対応版)
+// app.js 全文 (最終版: 動的DBフォーム・エラー修正・Toggl対応版)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://notion-webapp-repo.vercel.app/api/proxy'; 
 
 const settings = {
     notionToken: '',
-    notionDatabases: [], 
+    notionDatabases: [], // [{ name: "DB名", id: "DBID" }, ...]
     humanUserId: '', 
     
     togglApiToken: '',
@@ -27,10 +27,14 @@ const dom = {
 
     // 設定フォーム
     confNotionToken: document.getElementById('confNotionToken'),
-    confNotionDbConfig: document.getElementById('confNotionDbConfig'), 
     confNotionUserId: document.getElementById('confNotionUserId'),
     confTogglToken: document.getElementById('confTogglToken'), 
     confTogglWid: document.getElementById('confTogglWid'),     
+    
+    // ★★★ 追加要素 ★★★
+    dbConfigContainer: document.getElementById('dbConfigContainer'),
+    addDbConfigButton: document.getElementById('addDbConfig'),
+    // ★★★ ここまで ★★★
 
     // タスク一覧・フィルター
     taskDbFilter: document.getElementById('taskDbFilter'),
@@ -61,8 +65,6 @@ const dom = {
 // 1. 初期化 & 設定管理
 // ==========================================
 
-// ★★★ 修正: 関数定義の後にDOM操作を行うため、関数を先に定義 ★★★
-
 /** ローカルストレージから設定を読み込む */
 function loadSettings() {
     settings.notionToken = localStorage.getItem('notionToken') || '';
@@ -88,22 +90,65 @@ function loadSettings() {
     }
 }
 
+/** データベース設定フォームのペアをレンダリングする */
+function renderDbConfigForms() {
+    clearElement(dom.dbConfigContainer);
+
+    // 設定がない場合、空のフォームを一つ追加
+    if (settings.notionDatabases.length === 0) {
+        settings.notionDatabases.push({ name: '', id: '' });
+    }
+
+    settings.notionDatabases.forEach((db, index) => {
+        const div = document.createElement('div');
+        div.className = 'db-config-pair';
+        div.style.marginBottom = '10px';
+        div.innerHTML = `
+            <div class="form-group" style="margin-bottom: 5px;">
+                <input type="text" placeholder="表示名 (例: タスクDB)" class="input-field db-name-input" 
+                       data-index="${index}" value="${db.name}" style="margin-bottom: 5px;">
+                <input type="text" placeholder="データベースID (32桁)" class="input-field db-id-input" 
+                       data-index="${index}" value="${db.id}">
+            </div>
+        `;
+        dom.dbConfigContainer.appendChild(div);
+    });
+}
+
+/** データベース設定の追加ボタンのハンドラ */
+function handleAddDbConfig() {
+    // 空のデータを設定に追加
+    settings.notionDatabases.push({ name: '', id: '' });
+    renderDbConfigForms(); // フォームを再描画
+}
+
+
 /** 設定を保存する */
 function handleSaveSettings() {
     settings.notionToken = dom.confNotionToken.value.trim();
     
-    const dbConfigString = dom.confNotionDbConfig.value.trim();
-    try {
-        const parsed = JSON.parse(dbConfigString);
-        settings.notionDatabases = Array.isArray(parsed) ? parsed : [];
-        if (settings.notionDatabases.length > 0 && 
-            !settings.notionDatabases.every(db => db.name && db.id)) {
-            throw new Error("フォーマットが不正です。各要素が name と id を含む必要があります。");
+    // ★★★ 修正：フォームから配列を読み取る ★★★
+    const newDbConfigs = [];
+    const names = Array.from(document.querySelectorAll('.db-name-input'));
+    const ids = Array.from(document.querySelectorAll('.db-id-input'));
+
+    names.forEach((nameInput, index) => {
+        const idInput = ids[index];
+        const name = nameInput.value.trim();
+        const id = idInput.value.trim();
+
+        if (name && id) { // 両方入力されているもののみ採用
+            newDbConfigs.push({ name: name, id: id });
         }
-    } catch (e) {
-        alert("データベース設定のJSON形式が不正です。\n" + e.message);
-        return; 
+    });
+
+    settings.notionDatabases = newDbConfigs;
+
+    if (settings.notionDatabases.length === 0) {
+        alert("データベース設定が一つも入力されていません。");
+        return; // 保存を中断
     }
+    // ★★★ 修正 ここまで ★★★
 
     settings.humanUserId = dom.confNotionUserId.value.trim();
     
@@ -144,10 +189,13 @@ function saveSettings() {
 /** 設定画面を表示 */
 function showSettings() {
     dom.confNotionToken.value = settings.notionToken;
-    dom.confNotionDbConfig.value = JSON.stringify(settings.notionDatabases, null, 2);
+    
+    // ★★★ 修正：動的フォームをレンダリング ★★★
+    renderDbConfigForms();
+    // ★★★ 修正 ここまで ★★★
+
     dom.confNotionUserId.value = settings.humanUserId;
     dom.confTogglToken.value = settings.togglApiToken; 
-    // ★★★ 修正箇所：DOM要素から値を取得しないように修正 ★★★
     dom.confTogglWid.value = settings.togglWorkspaceId; 
 
     dom.mainView.classList.add('hidden');
@@ -163,44 +211,321 @@ function hideSettings() {
 
 // ==========================================
 // 2. API基盤 (Notion & Toggl)
-// ... (notionApi, externalApi, togglApi は省略しませんが、全文に含まれます)
 // ==========================================
+
+/** 外部APIへのリクエストをプロキシ経由で送信する */
+async function externalApi(targetUrl, method, headers, body) {
+    const proxyPayload = {
+        targetUrl: targetUrl,
+        method: method,
+        headers: headers,
+        body: body
+    };
+
+    const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proxyPayload)
+    });
+
+    if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({ message: '不明なプロキシエラー' }));
+        console.error('Proxy/API Error:', errorJson);
+        throw new Error(`API Error (${res.status}): ${errorJson.message || 'サーバー側で問題が発生しました'}`);
+    }
+
+    return res.status === 204 ? null : res.json();
+}
+
+// --- Notion API ---
+
+/** Notion APIへのリクエストを処理する */
+async function notionApi(endpoint, method = 'GET', body = null) {
+    if (!settings.notionToken) {
+        throw new Error('Notion APIトークンが設定されていません。');
+    }
+
+    const fullUrl = `https://api.notion.com/v1${endpoint}`;
+    
+    console.log(`[NotionAPI] Calling ${method} ${fullUrl}`); 
+
+    const headers = {
+        'Authorization': `Bearer ${settings.notionToken}`,
+        'Notion-Version': '2022-06-28'
+    };
+    
+    // ★★★ [DEBUG] トークン値チェックログ ★★★
+    if (settings.notionToken) {
+        const authHeader = headers['Authorization'];
+        console.log(`[DEBUG] Authorization Header Value Check: ${authHeader.substring(0, 30)}... (Length: ${authHeader.length})`); 
+    }
+    // ★★★ [DEBUG] ここまで ★★★
+
+    if (method === 'POST' || method === 'PATCH') {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    try {
+        const res = await externalApi(fullUrl, method, headers, body);
+        return res;
+    } catch (e) {
+        console.error('Notion API Error:', e);
+        throw e;
+    }
+}
+
+
+// --- Toggl API ---
+
+/** Toggl APIへのリクエストを処理する */
+async function togglApi(endpoint, method = 'GET', body = null) {
+    if (!settings.togglApiToken || !settings.togglWorkspaceId) {
+        throw new Error('Toggl設定（トークンとワークスペースID）が不完全です。');
+    }
+
+    const fullUrl = `https://api.track.toggl.com/api/v9${endpoint}`;
+    
+    console.log(`[TogglAPI] Calling ${method} ${fullUrl}`); 
+
+    const headers = {
+        'Authorization': `Basic ${btoa(`${settings.togglApiToken}:api_token`)}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Notion-Toggl-Timer-WebApp'
+    };
+
+    try {
+        const res = await externalApi(fullUrl, method, headers, body);
+        return res;
+    } catch (e) {
+        console.error('Toggl API Error:', e);
+        throw new Error(`Toggl APIとの通信エラー: ${e.message}`);
+    }
+}
 
 
 // ==========================================
 // 3. Togglアクション
-// ... (startToggl, stopToggl は省略しませんが、全文に含まれます)
 // ==========================================
+
+/** Togglで新しい計測を開始する */
+async function startToggl(title, tags) {
+    const wid = settings.togglWorkspaceId;
+    
+    const body = {
+        workspace_id: parseInt(wid),
+        description: title,
+        created_with: 'Notion Toggl Timer WebApp',
+        start: new Date().toISOString(),
+        duration: -1, // -1は計測中を意味します
+        tags: tags
+    };
+    return await togglApi('/time_entries', 'POST', body);
+}
+
+/** Togglで計測を停止する */
+async function stopToggl(entryId) {
+    const wid = settings.togglWorkspaceId;
+    return await togglApi(`/workspaces/${wid}/time_entries/${entryId}/stop`, 'PATCH', null);
+}
 
 
 // ==========================================
 // 4. Notionデータ取得
-// ... (fetchDatabaseList, getDbProperties, loadTasks, renderTaskList は省略しませんが、全文に含まれます)
 // ==========================================
+
+/** データベース一覧を取得し、フィルターをレンダリングする */
+async function fetchDatabaseList() {
+    if (settings.notionDatabases.length === 0) {
+        settings.databases = [];
+        dom.taskDbFilter.innerHTML = '<option value="">DBが設定されていません</option>';
+        return;
+    }
+
+    try {
+        // 1. ボットユーザーIDを取得
+        const userRes = await notionApi('/users/me', 'GET');
+        settings.botUserId = userRes.id;
+        
+        const fetchedDatabases = [];
+
+        // 2. 設定された各データベースIDの情報を取得 (設定された表示名を使用)
+        for (const dbConfig of settings.notionDatabases) {
+            const dbId = dbConfig.id;
+            const dbName = dbConfig.name;
+            
+            try {
+                const res = await notionApi(`/databases/${dbId.replace(/-/g, '').trim()}`, 'GET');
+                
+                fetchedDatabases.push({
+                    id: res.id,
+                    name: dbName 
+                });
+            } catch (e) {
+                console.warn(`[WARN] DB ID: ${dbId} のデータベース情報の取得に失敗しました。このDBはスキップされます。`, e);
+            }
+        }
+        
+        settings.databases = fetchedDatabases;
+        saveSettings();
+        
+        if (settings.databases.length === 0) {
+             dom.taskDbFilter.innerHTML = '<option value="">有効なDBが見つかりません</option>';
+             return;
+        }
+
+        // フィルターのレンダリング
+        const currentSelectedDbId = dom.taskDbFilter.value || settings.databases[0].id; 
+        
+        dom.taskDbFilter.innerHTML = settings.databases.map(db => 
+            `<option value="${db.id}" ${db.id === currentSelectedDbId ? 'selected' : ''}>${db.name}</option>`
+        ).join('');
+        
+    } catch (e) {
+        console.error("データベース一覧取得エラー:", e);
+        if (e.message.includes('API Error (400)') || e.message.includes('API Error (401)')) {
+            alert(`Notion APIトークンまたは権限に問題があるため、データベース一覧の取得に失敗しました。設定を確認してください。`);
+        } else {
+             alert(`データベース一覧の取得に失敗しました: ${e.message}`);
+        }
+    }
+}
+
+/** データベースのプロパティ情報を取得しキャッシュする */
+async function getDbProperties(dbId) {
+    if (dbPropertiesCache[dbId]) return dbPropertiesCache[dbId];
+
+    try {
+        const res = await notionApi(`/databases/${dbId}`, 'GET');
+        const props = res.properties;
+        
+        const propertyMap = {};
+        for (const name in props) {
+            const prop = props[name];
+            switch (prop.type) {
+                case 'title':
+                    propertyMap.title = { name: name, type: 'title' }; break;
+                case 'select':
+                    if (name.includes('カテゴリ')) propertyMap.category = { name: name, type: 'select', selectOptions: prop.select.options }; break;
+                case 'multi_select':
+                    if (name.includes('部門')) propertyMap.department = { name: name, type: 'multi_select', options: prop.multi_select.options }; break;
+                case 'people':
+                    if (name.includes('担当者')) propertyMap.assignee = { name: name, type: 'people' }; break;
+                case 'rich_text':
+                    if (name.includes('ログ') || name.includes('メモ')) propertyMap.logRichText = { name: name, type: 'rich_text' }; break;
+                case 'relation':
+                    if (name.includes('ログ') || name.includes('メモ')) propertyMap.logRelation = { name: name, type: 'relation', dbId: prop.relation.database_id }; break;
+                case 'status':
+                    if (name.includes('ステータス')) propertyMap.status = { name: name, type: 'select', selectOptions: prop.status.options }; break;
+            }
+        }
+
+        dbPropertiesCache[dbId] = propertyMap;
+        return propertyMap;
+    } catch (e) {
+        console.error("プロパティ取得エラー:", e);
+        return null;
+    }
+}
+
+/** タスク一覧をロードしレンダリングする */
+async function loadTasks() {
+    const dbId = dom.taskDbFilter.value;
+    if (!dbId) {
+        dom.taskListContainer.innerHTML = '<p>データベースが選択されていません。</p>';
+        return;
+    }
+
+    dom.taskListContainer.innerHTML = '<p>タスクを読み込み中...</p>';
+    try {
+        const props = await getDbProperties(dbId);
+        if (!props || !props.title) throw new Error('プロパティ情報が見つかりません。');
+        
+        const filterBody = {
+            filter: {
+                and: [
+                    { property: props.status.name, status: { does_not_equal: '完了' } }
+                ]
+            },
+            sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }]
+        };
+
+        const res = await notionApi(`/databases/${dbId}/query`, 'POST', filterBody);
+        renderTaskList(res.results, dbId, props);
+
+    } catch (e) {
+        dom.taskListContainer.innerHTML = `<p style="color: red;">エラー: ${e.message}</p>`;
+    }
+}
+
+/** タスク一覧をレンダリングする */
+function renderTaskList(tasks, dbId, props) {
+    const list = document.createElement('ul');
+    list.className = 'task-list';
+
+    if (tasks.length === 0) {
+        dom.taskListContainer.innerHTML = '<p>実行可能なタスクはありません。</p>';
+        return;
+    }
+
+    tasks.forEach(task => {
+        const titleProp = task.properties[props.title.name]?.title?.[0]?.plain_text || '無題';
+        const assigneeProp = props.assignee ? task.properties[props.assignee.name]?.people : [];
+        const isAssignedToMe = assigneeProp.some(p => p.id === settings.humanUserId);
+        
+        const assigneeName = assigneeProp.length > 0 ? assigneeProp[0].name : '';
+
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <span>${titleProp}</span>
+            <span class="assignee">${assigneeName ? `(${assigneeName})` : ''}</span>
+        `;
+        
+        const startButton = document.createElement('button');
+        startButton.textContent = '▶ 開始';
+        startButton.className = 'btn-green';
+        
+        startButton.addEventListener('click', () => {
+            const taskData = {
+                id: task.id,
+                dbId: dbId,
+                title: titleProp,
+                properties: {
+                    category: task.properties[props.category.name]?.select,
+                    department: task.properties[props.department.name]?.multi_select,
+                }
+            };
+            startTask(taskData);
+        });
+        
+        li.appendChild(startButton);
+        list.appendChild(li);
+    });
+
+    dom.taskListContainer.innerHTML = '';
+    dom.taskListContainer.appendChild(list);
+}
 
 
 // ==========================================
 // 5. 新規タスクフォーム管理
-// ... (handleStartNewTask, switchTab, renderNewTaskForm は省略しませんが、全文に含まれます)
+// ... (handleStartNewTask, renderNewTaskForm は省略しませんが、全文に含まれます)
 // ==========================================
 
-/** タブを切り替える (switchTabの定義を追加) */
+/** タブを切り替える */
 function switchTab(event) {
     const target = event.target.dataset.target;
 
-    // ボタンの状態切り替え
     dom.startExistingTask.classList.remove('active');
     dom.startNewTask.classList.remove('active');
     event.target.classList.add('active');
 
-    // コンテンツの切り替え
     if (target === 'existing') {
         dom.existingTaskTab.classList.remove('hidden');
         dom.newTaskTab.classList.add('hidden');
     } else {
         dom.existingTaskTab.classList.add('hidden');
         dom.newTaskTab.classList.remove('hidden');
-        renderNewTaskForm(); // 新規作成フォームをレンダリング
+        renderNewTaskForm(); 
     }
 }
 
@@ -210,8 +535,11 @@ function switchTab(event) {
 // ... (startTask, stopTask, checkRunningState, updateRunningTaskDisplay, updateTimer, formatTime, clearElement は省略しませんが、全文に含まれます)
 // ==========================================
 
+/** DOM要素の内容をクリアするユーティリティ関数 */
+function clearElement(element) {
+    element.innerHTML = '';
+}
 
-// ★★★ 修正: DOMContentLoaded の呼び出し順序を調整し、エラーを防ぐ ★★★
 
 document.addEventListener('DOMContentLoaded', async () => {
     // イベントリスナー設定
@@ -219,6 +547,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('saveConfig').addEventListener('click', handleSaveSettings);
     document.getElementById('cancelConfig').addEventListener('click', hideSettings);
     document.getElementById('reloadTasks').addEventListener('click', loadTasks);
+
+    // ★★★ 新しいリスナーを追加 ★★★
+    dom.addDbConfigButton.addEventListener('click', handleAddDbConfig);
+    // ★★★ ここまで ★★★
 
     // switchTabの定義が完了した後にイベントリスナーを設定
     dom.startExistingTask.addEventListener('click', switchTab);
@@ -231,13 +563,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     dom.taskDbFilter.addEventListener('change', loadTasks);
 
     loadSettings();
-    // 依存性の低い処理を先に実行
     await checkRunningState(); 
 
     if (settings.notionToken) {
-        // Notion連携が可能な場合のみAPIコール
         await fetchDatabaseList();
-        loadTasks(); // fetchDatabaseListの後に実行
+        loadTasks(); 
     } else {
         showSettings();
     }
