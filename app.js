@@ -138,9 +138,18 @@ function renderDbFilterOptions() {
 }
 
 async function loadTasksAndKpi() {
+    // ❌ 従来：KPI→タスク（上に来る）
+    // await loadTaskList();
+    // await loadKpi();
+    
+    // ✅ 修正：タスク→KPI（下に来る）
     await loadTaskList();
-    await loadKpi();
+    // KPIは最後に描画（DOM最後尾に確定）
+    setTimeout(async () => {
+        await loadKpi();
+    }, 100); // タスク描画完了後
 }
+
 
 function updateTimerDisplay() {
   if (!localRunningTask) return;
