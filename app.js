@@ -604,18 +604,59 @@ function calculateKpi() {
 // 新規タスク作成ロジック
 // =========================================================
 
+// app.js (修正箇所: initNewTaskForm 関数, 582行目付近)
+
 /** 新規タスクフォームを準備する */
 async function initNewTaskForm() {
-    // ... (中略: dbId, propsの取得ロジックは変更なし) ...
+    const dbId = dom.taskDbFilter.value;
+    if (!dbId) {
+        dom.targetDbDisplay.textContent = 'データベースが選択されていません。';
+        return;
+    }
 
-    // 1. カテゴリ (Select) のレンダリング (変更なし)
-    // ... (中略) ...
+    const dbInfo = settings.databases.find(db => db.id === dbId);
+    dom.targetDbDisplay.textContent = `登録先DB: ${dbInfo ? dbInfo.name : '不明'}`;
+    
+    // ★修正: 変数を事前に宣言
+    let props = null;
+
+    try {
+        props = await getDbProperties(dbId);
+    } catch (e) {
+        console.error("Failed to get DB properties:", e);
+        dom.targetDbDisplay.textContent += ' (プロパティ情報取得中にエラー)';
+        return;
+    }
+
+    if (!props || !props.title) {
+        dom.targetDbDisplay.textContent += ' (プロパティ情報が見つからないか、タイトルプロパティが設定されていません)';
+        return;
+    }
+
+    // 1. カテゴリ (Select) のレンダリング
+    clearElement(dom.newCatContainer);
+    if (props.category && props.category.selectOptions) {
+        const catGroup = document.createElement('div');
+        catGroup.className = 'form-group';
+        catGroup.innerHTML = '<label for="newCatSelect" style="font-size: 14px; font-weight: 500;">カテゴリ</label><select id="newCatSelect" class="input-field" style="width: 100%;"></select>';
+        
+        const selectElement = catGroup.querySelector('#newCatSelect');
+        selectElement.innerHTML = '<option value="">--- 選択してください ---</option>';
+
+        props.category.selectOptions.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option.id;
+            optionElement.textContent = option.name;
+            selectElement.appendChild(optionElement);
+        });
+        dom.newCatContainer.appendChild(catGroup);
+    }
 
     // 2. 部門 (Multi-select) と 担当者 (People) の表示
     clearElement(dom.newDeptContainer);
     
     // 2-1. 部門 (Multi-select) のレンダリング
-    const deptProp = props.department;
+    const deptProp = props.department; // ★ここで安全に props を参照
     if (deptProp && deptProp.type === 'multi_select' && deptProp.options) {
         const deptGroup = document.createElement('div');
         deptGroup.className = 'form-group';
@@ -625,7 +666,6 @@ async function initNewTaskForm() {
         deptProp.options.forEach(option => {
             const id = `new-dept-${option.id}`;
             
-            // ★★★ 修正箇所: シンプルなチェックボックスとラベルの組み合わせに変更 ★★★
             const div = document.createElement('div');
             div.style.marginBottom = '5px';
             div.innerHTML = `
@@ -635,15 +675,19 @@ async function initNewTaskForm() {
             optionsDiv.appendChild(div);
         });
         dom.newDeptContainer.appendChild(deptGroup);
-
-        // ★★★ 修正箇所: チップクリック用のイベントリスナーは不要になったため削除 ★★★
-        // (削除) document.querySelectorAll('.select-chip').forEach(...)
     }
 
-    // 2-2. 担当者 (People) の表示 (変更なし)
+    // 2-2. 担当者 (People) の表示
     const assigneeProp = props.assignee;
     if (assigneeProp && assigneeProp.type === 'people') {
-        // ... (中略: 担当者メッセージ) ...
+        const status = settings.humanUserId ? '✅ 割り当て設定済み' : '⚠️ 設定が必要です';
+        const assigneeMessage = `<p style="font-size: 14px; color: var(--sub-text-color); font-weight: 500;">${assigneeProp.name}プロパティ: ${status}。<br>新規作成時に**設定されたユーザーID**が自動で設定されます。</p>`;
+        
+        if (dom.newDeptContainer.innerHTML) {
+            dom.newDeptContainer.innerHTML += assigneeMessage;
+        } else {
+            dom.newDeptContainer.innerHTML = assigneeMessage;
+        }
     } else if (!deptProp && !assigneeProp) {
          dom.newDeptContainer.innerHTML = '<p style="font-size: 14px; color: var(--sub-text-color);">部門/担当者プロパティが見つかりませんでした。</p>';
     }
