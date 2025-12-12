@@ -3,7 +3,7 @@ console.log('🔥 APP.JS PROXY BUILD 2025-12-12 18:40');
 // 🔒 SAFETY PATCH: Toggl直叩き完全防止 & デバッグ可視化
 // ==========================================
 
-// fetch をラップして Toggl直叩きを即検知・即停止
+
 (() => {
     const originalFetch = window.fetch;
 
