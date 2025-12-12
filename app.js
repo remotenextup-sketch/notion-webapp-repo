@@ -907,10 +907,6 @@ function calculateReportDates(period) {
     };
 }
 
-
-/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
-// app.js (933行目付近)
-
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId || !settings.humanUserId) {
@@ -948,9 +944,6 @@ async function fetchKpiReport() {
             dom.reportTotalTime.textContent = '総計測時間: 00:00:00';
             return;
         }
-
-        // --- ローカル集計ロジック (以降は変更なし) ---
-        // ... (省略)
 
 
 /** KPIレポートの表示/非表示を切り替える */
