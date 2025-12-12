@@ -1,4 +1,4 @@
-// app.js 全文 (最終版3: KPIレポート 日付フォーマット最終修正 + 計測時間累計統合 + UXタブ修正)
+// app.js 全文 (最終版4: KPIレポート 日付フォーマットのローカルコンポーネント抽出)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -921,11 +921,19 @@ function calculateReportDates(period) {
         end.setMonth(now.getMonth(), 0); // 先月の最終日に設定
     }
     
-    // toISOString()でUTCに変換されるため、日付部分 (YYYY-MM-DD) のみを取得
-    const formatYMD = (date) => date.toISOString().split('T')[0];
+    // -----------------------------------------------------------------
+    // ★★★ 最終修正箇所: ローカルタイムの日付コンポーネントを直接使用 ★★★
+    // -----------------------------------------------------------------
+    const formatYMD_Local = (date) => {
+        const year = date.getFullYear();
+        // 月は 0 から始まるため +1
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
 
-    const startDateYMD = formatYMD(start);
-    const endDateYMD = formatYMD(end);
+    const startDateYMD = formatYMD_Local(start);
+    const endDateYMD = formatYMD_Local(end);
     
     // Toggl Reports API v3 が要求する厳密な形式に文字列で結合 (UTC $00:00:00Z$ と $23:59:59Z$)
     return { 
