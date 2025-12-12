@@ -989,8 +989,6 @@ function calculateReportDates(period) {
     };
 }
 
-
-/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
         dom.kpiResultsContainer.innerHTML = '<p style="color: red;">Toggl設定不完全</p>';
@@ -1002,8 +1000,14 @@ async function fetchKpiReport() {
     
     try {
         // ★★★ UNIX timestamp（秒）で変換 ★★★
+        const { start, end } = calculateReportDates(dom.reportPeriodSelect.value);
+        console.log('📅 raw dates:', start, end);  // "2025-12-08" "2025-12-14"
+        
         const since = Math.floor(new Date(start + 'T00:00:00Z') / 1000);
         const until = Math.floor(new Date(end + 'T23:59:59Z') / 1000);
+        console.log('🔢 since type:', typeof since, since);  // number 1733961600
+        console.log('🔢 until type:', typeof until, until);  // number 1734547199
+        console.log('🌐 full URL:', `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`);
         
         const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`;
         
