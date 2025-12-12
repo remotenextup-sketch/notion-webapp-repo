@@ -944,7 +944,7 @@ async function fetchKpiReport() {
             dom.reportTotalTime.textContent = '総計測時間: 00:00:00';
             return;
         }
-
+    }
 
 /** KPIレポートの表示/非表示を切り替える */
 function toggleKpiReport() {
