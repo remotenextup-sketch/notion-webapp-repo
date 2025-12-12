@@ -1,7 +1,6 @@
-// app.js 全文 (最終版: プロキシ連携ロジック修正済み)
+// app.js 全文 (最終版: 通知機能とUX改善を適用)
 
 // ★★★ 定数とグローバル設定 ★★★
-// ここに新しいプロキシURLを設定
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 
 const settings = {
@@ -60,6 +59,39 @@ const dom = {
     newTaskTab: document.getElementById('newTaskTab'),
     taskSelectionSection: document.getElementById('taskSelectionSection')
 };
+
+// ==========================================
+// 0. UX改善 (通知機能)
+// ==========================================
+
+/** 指定されたメッセージを短時間通知表示する */
+function showNotification(message, duration = 3000) {
+    let notification = document.getElementById('appNotification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'appNotification';
+        // スタイルはCSSではなく、ここで直接指定（シンプルな通知のため）
+        notification.style.cssText = `
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background-color: #4CAF50; color: white; padding: 10px 20px;
+            border-radius: 5px; z-index: 1000; opacity: 0; transition: opacity 0.5s;
+            font-size: 14px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        `;
+        document.body.appendChild(notification);
+    }
+    
+    notification.textContent = message;
+    notification.style.opacity = '1';
+
+    // 既存のタイマーがあればクリア
+    clearTimeout(notification.timer); 
+
+    // 指定時間後に非表示にするタイマーを設定
+    notification.timer = setTimeout(() => {
+        notification.style.opacity = '0';
+    }, duration);
+}
+
 
 // ==========================================
 // 1. 初期化 & 設定管理
@@ -144,8 +176,8 @@ function handleSaveSettings() {
     settings.notionDatabases = newDbConfigs;
 
     if (settings.notionDatabases.length === 0) {
-        alert("データベース設定が一つも入力されていません。");
-        return; // 保存を中断
+        alert("データベース設定が一つも入力されていません。"); // 処理中断のためalertを保持
+        return; 
     }
 
     settings.humanUserId = dom.confNotionUserId.value.trim();
@@ -159,7 +191,7 @@ function handleSaveSettings() {
     localStorage.setItem('togglApiToken', settings.togglApiToken);
     localStorage.setItem('togglWorkspaceId', settings.togglWorkspaceId);
     
-    alert('設定を保存しました。');
+    showNotification('設定を保存しました。'); // 通知に変更
     saveSettings(); 
     hideSettings();
     fetchDatabaseList();
@@ -210,17 +242,13 @@ function hideSettings() {
 // ==========================================
 
 /** 外部APIへのリクエストをプロキシ経由で送信する */
-// ★★★ 修正済み: async を追加し、authDetails を受け取るように変更 ★★★
 async function externalApi(targetUrl, method, authDetails, body) { 
     const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
-        // プロキシが期待するトップレベルの認証キー
         tokenKey: authDetails.tokenKey, 
         tokenValue: authDetails.tokenValue,
-        // Notionのバージョン情報
         notionVersion: authDetails.notionVersion, 
-        // Notion/Toggl APIへの実際のペイロード
         body: body 
     };
 
@@ -251,7 +279,6 @@ async function notionApi(endpoint, method = 'GET', body = null) {
     
     console.log(`[NotionAPI] Calling ${method} ${fullUrl}`); 
 
-    // ★★★ 修正済み: 認証情報をオブジェクト化して externalApi に渡す ★★★
     const authDetails = {
         tokenKey: 'notionToken', 
         tokenValue: settings.notionToken, 
@@ -259,7 +286,7 @@ async function notionApi(endpoint, method = 'GET', body = null) {
     };
 
     try {
-        const res = await externalApi(fullUrl, method, authDetails, body); // authDetails を渡す
+        const res = await externalApi(fullUrl, method, authDetails, body); 
         return res;
     } catch (e) {
         console.error('Notion API Error:', e);
@@ -280,16 +307,14 @@ async function togglApi(endpoint, method = 'GET', body = null) {
     
     console.log(`[TogglAPI] Calling ${method} ${fullUrl}`); 
 
-    // ★★★ 修正済み: 認証情報をオブジェクト化して externalApi に渡す ★★★
     const authDetails = {
         tokenKey: 'togglApiToken',
         tokenValue: settings.togglApiToken,
-        // Togglでは不要だが、externalApiの引数形式に合わせる
         notionVersion: '' 
     };
 
     try {
-        const res = await externalApi(fullUrl, method, authDetails, body); // authDetails を渡す
+        const res = await externalApi(fullUrl, method, authDetails, body); 
         return res;
     } catch (e) {
         console.error('Toggl API Error:', e);
@@ -378,9 +403,10 @@ async function fetchDatabaseList() {
     } catch (e) {
         console.error("データベース一覧取得エラー:", e);
         if (e.message.includes('API Error (400)') || e.message.includes('API Error (401)')) {
-            alert(`Notion APIトークンまたは権限に問題があるため、データベース一覧の取得に失敗しました。設定を確認してください。`);
+            // 認証失敗など、続行不可能なエラーはalertを保持
+            alert(`Notion APIトークンまたは権限に問題があるため、データベース一覧の取得に失敗しました。設定を確認してください。`); 
         } else {
-             alert(`データベース一覧の取得に失敗しました: ${e.message}`);
+             alert(`データベース一覧の取得に失敗しました: ${e.message}`); // 処理中断のためalertを保持
         }
     }
 }
@@ -435,6 +461,7 @@ async function loadTasks() {
         const props = await getDbProperties(dbId);
         if (!props || !props.title) throw new Error('プロパティ情報が見つかりません。');
         
+        // ステータスが「完了」ではないものを取得するフィルター
         const filterBody = {
             filter: {
                 and: [
@@ -583,8 +610,8 @@ async function handleStartNewTask() {
     const title = dom.newTaskTitle.value.trim();
     const dbId = dom.taskDbFilter.value;
     
-    if (!title) { alert('タスク名を入力してください。'); return; }
-    if (!dbId) { alert('データベースを選択してください。'); return; }
+    if (!title) { alert('タスク名を入力してください。'); return; } // 処理中断のためalertを保持
+    if (!dbId) { alert('データベースを選択してください。'); return; } // 処理中断のためalertを保持
 
     try {
         const props = await getDbProperties(dbId);
@@ -635,11 +662,12 @@ async function handleStartNewTask() {
             properties: {} 
         };
 
-        alert(`新規タスク「${title}」を作成しました。計測を開始します。`);
+        showNotification(`新規タスク「${title}」を作成しました。計測を開始します。`); // 通知に変更
         startTask(newTaskData);
+        dom.newTaskTitle.value = ''; // フォームをクリア
 
     } catch (e) {
-        alert(`新規タスクの作成に失敗しました: ${e.message}`);
+        alert(`新規タスクの作成に失敗しました: ${e.message}`); // 処理中断のためalertを保持
         console.error(e);
     }
 }
@@ -652,7 +680,7 @@ async function handleStartNewTask() {
 /** タスク計測を開始する */
 async function startTask(task) {
     if (settings.currentRunningTask) {
-        alert('既にタスクが実行中です。現在のタスクを完了または停止してください。');
+        alert('既にタスクが実行中です。現在のタスクを完了または停止してください。'); // 処理中断のためalertを保持
         return;
     }
     
@@ -693,10 +721,10 @@ async function startTask(task) {
         saveSettings();
         updateRunningTaskDisplay(true);
         loadTasks(); // タスク一覧をリロード
-        alert(`タスク「${task.title}」を開始しました。`);
+        showNotification(`タスク「${task.title}」を開始しました。`); // 通知に変更
         
     } catch (e) {
-        alert(`タスクの開始に失敗しました: ${e.message}`);
+        alert(`タスクの開始に失敗しました: ${e.message}`); // 処理中断のためalertを保持
         console.error(e);
         settings.currentRunningTask = null;
         settings.startTime = null;
@@ -707,7 +735,7 @@ async function startTask(task) {
 /** タスク計測を停止または完了する */
 async function stopTask(isComplete) {
     if (!settings.currentRunningTask || !settings.currentRunningTask.togglEntryId) {
-        alert('実行中のタスクはありません。');
+        alert('実行中のタスクはありません。'); // 処理中断のためalertを保持
         return;
     }
 
@@ -756,10 +784,11 @@ async function stopTask(isComplete) {
         updateRunningTaskDisplay(false);
         loadTasks();
         
-        alert(`タスク「${task.title}」を${isComplete ? '完了' : '停止'}しました。計測時間: ${formatTime(duration)}`);
+        // 通知に変更
+        showNotification(`タスク「${task.title}」を${isComplete ? '完了' : '停止'}しました。計測時間: ${formatTime(duration)}`);
         
     } catch (e) {
-        alert(`タスクの停止/完了処理中にエラーが発生しました: ${e.message}`);
+        alert(`タスクの停止/完了処理中にエラーが発生しました: ${e.message}`); // 処理中断のためalertを保持
         console.error(e);
         // エラー時も計測状態はクリアし、手動でTogglを停止するよう促す
         settings.currentRunningTask = null;
@@ -774,7 +803,6 @@ async function stopTask(isComplete) {
 async function checkRunningState() {
     if (settings.currentRunningTask && settings.startTime) {
         updateRunningTaskDisplay(true);
-        // ここにTogglの実行状態をチェックするロジックを将来的に追加可能
     } else {
         updateRunningTaskDisplay(false);
     }
