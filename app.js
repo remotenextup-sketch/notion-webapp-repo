@@ -1144,7 +1144,12 @@ function init() {
     if (dom.completeTaskButton) dom.completeTaskButton.addEventListener('click', () => stopTask(true)); 
     
     // KPIレポート
-    if (dom.fetchKpiButton) dom.fetchKpiButton.addEventListener('click', fetchKpiReport); // ✅ 復元
+    if (dom.fetchKpiButton) {
+    dom.fetchKpiButton.addEventListener('click', () => {
+        console.log('🔥 KPIボタンクリック検知！'); // ← これ追加
+        fetchKpiReport();
+    });
+}
 
     // 4. 初期表示処理
     if (settings.notionToken && settings.notionDatabases.length > 0) {
