@@ -1,4 +1,4 @@
-// app.js 全文 (最終版8: KPIレポートを Toggl Reports API v2 に切り替え)
+// app.js 全文 (最終版9: KPIレポートを Toggl Reports API v2 の GET/Query形式に修正)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -252,6 +252,13 @@ function hideSettings() {
 
 /** 外部APIへのリクエストをプロキシ経由で送信する */
 async function externalApi(targetUrl, method, authDetails, body) { 
+    
+    // ★★★ 修正箇所: GETリクエストにbodyが含まれていたら警告し、無視する ★★★
+    if (method === 'GET' && body !== null) {
+        console.warn('警告: externalApiがGETリクエストでbodyを受け取りました。Toggl Reports APIの仕様により無視されます。');
+        body = null;
+    }
+
     const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
@@ -262,7 +269,7 @@ async function externalApi(targetUrl, method, authDetails, body) {
     };
 
     const res = await fetch(PROXY_URL, {
-        method: 'POST',
+        method: 'POST', // プロキシへのリクエストは常にPOST
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(proxyPayload)
     });
@@ -315,7 +322,7 @@ function getTogglAuthDetails() {
 }
 
 // ==========================================
-// 3. Togglアクション (togglApiは廃止し、externalApiを使用)
+// 3. Togglアクション
 // ==========================================
 
 /** Togglで新しい計測を開始する (Track API v9) */
@@ -981,25 +988,27 @@ async function fetchKpiReport() {
 
     try {
         // -----------------------------------------------------------------
-        // ★★★ 修正箇所: Reports API v2 のエンドポイントに変更 ★★★
+        // ★★★ 修正1: Reports API v2 のパラメータを URLSearchParams で構築 ★★★
         // -----------------------------------------------------------------
-        const targetUrl = `https://api.track.toggl.com/reports/api/v2/summary`; 
+        const params = new URLSearchParams({
+            since: start,       // YYYY-MM-DD 形式
+            until: end,         // YYYY-MM-DD 形式
+            workspace_id: wid,
+            user_agent: 'NotionTogglTimerWebApp', // 任意のユニークな名前
+            grouping: 'tags',   // タグでグループ化（カテゴリ別集計のため）
+            subgrouping: 'time_entries',
+            display_hours: 'decimal' // オプション
+        });
         
-        // Reports API v2 のペイロード
-        const body = {
-            since: start,  // YYYY-MM-DD 形式
-            until: end,    // YYYY-MM-DD 形式
-            workspace_id: parseInt(wid),
-            user_agent: 'Notion Toggl Timer WebApp',
-            grouping: 'tags', // タグでグループ化
-            subgrouping: 'time_entries'
-        };
+        // ★★★ 修正2: Query付きURLを構築 ★★★
+        const targetUrl = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
         
-        // externalApiを直接呼び出す (v2はBasic認証を要求しますが、プロキシが処理することを想定)
-        const summary = await externalApi(targetUrl, 'GET', getTogglAuthDetails(), body); 
+        // ★★★ 修正3: bodyなしのGETリクエストとして externalApi を呼び出す ★★★
+        // Reports API v2 は GET リクエスト (URLクエリ) を要求する
+        const summary = await externalApi(targetUrl, 'GET', getTogglAuthDetails(), null); 
         
         
-        if (!summary || !summary.data || summary.data.length === 0) {
+        if (!summary || !summary.total_grand) {
             dom.kpiResultsContainer.innerHTML = '<p>この期間に計測されたタスクはありません。</p>';
             dom.reportTotalTime.textContent = '総計測時間: 00:00:00';
             return;
@@ -1010,11 +1019,10 @@ async function fetchKpiReport() {
         // total_grand はミリ秒単位
         let totalDurationMs = summary.total_grand; 
         
-        // v2のレスポンスは data の中にグループ化されて返される
         summary.data.forEach(group => {
-            // grouping: 'tags' なので、tagが存在する group を抽出
             if (group.title.tag) {
-                const tag = group.title.tag;
+                // v2レスポンスでは tag の name が返されることを想定
+                const tag = group.title.tag.name || group.title.tag;
                 // time はミリ秒単位
                 const durationMs = group.time; 
                 categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs;
@@ -1050,6 +1058,7 @@ async function fetchKpiReport() {
 
     } catch (e) {
         console.error("KPIレポートエラー:", e);
+        // エラー通知を強化
         dom.kpiResultsContainer.innerHTML = `<p style="color: red;">レポート集計中にエラーが発生しました: ${e.message}</p>`;
     }
 }
