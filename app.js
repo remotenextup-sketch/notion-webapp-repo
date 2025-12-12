@@ -1,9 +1,11 @@
-// app.js 全文 (最終版12: KPIレポートを Toggl Reports API v2 の GET/Query形式に修正し、
-//             認証ヘッダーをクライアント側で生成する回避策を適用)
+// app.js 全文 (最終版13: KPIレポートを Toggl Reports API v2 の POST + JSON Body 形式に修正)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
+// Toggl Reports API v2 のベースURL
+const TOGGL_REPORTS_V2_BASE_URL = 'https://api.track.toggl.com/reports/api/v2';
+
 
 const settings = {
     notionToken: '',
@@ -254,7 +256,7 @@ function hideSettings() {
 /** 外部APIへのリクエストをプロキシ経由で送信する */
 async function externalApi(targetUrl, method, authDetails, body) { 
     
-    // GETリクエストにbodyが含まれていたら警告し、無視する (app.js 修正版9/10/11/12対応)
+    // GETリクエストにbodyが含まれていたら警告し、無視する
     if (method === 'GET' && body !== null) {
         console.warn('警告: externalApiがGETリクエストでbodyを受け取りました。Toggl Reports APIの仕様により無視されます。');
         body = null;
@@ -264,7 +266,7 @@ async function externalApi(targetUrl, method, authDetails, body) {
     const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
-        tokenKey: authDetails.tokenKey,      // 'notionToken' or 'togglApiToken' or 'Authorization'
+        tokenKey: authDetails.tokenKey,      // 'notionToken', 'togglApiToken', or 'Authorization' (for custom header)
         tokenValue: authDetails.tokenValue,  // トークン値 or 'Basic <Base64>'
         notionVersion: authDetails.notionVersion, 
         body: body 
@@ -318,7 +320,7 @@ async function notionApi(endpoint, method = 'GET', body = null) {
 
 /** Toggl API用の認証詳細を生成する */
 function getTogglAuthDetails() {
-    // ★★★ 修正箇所: Reports APIに必要な Basic 認証ヘッダーをクライアント側で生成する回避策 ★★★
+    // ★★★ Reports APIに必要な Basic 認証ヘッダーをクライアント側で生成する回避策 ★★★
     // Basic認証: base64(API_TOKEN:api_token)
     const auth = btoa(`${settings.togglApiToken}:api_token`);
     return {
@@ -796,7 +798,7 @@ async function stopTask(isComplete) {
         
         // Notionのページ情報を取得 (計測時間累計のため)
         let notionPage = null;
-        if (props.durationNumber) {
+        if (props.durationNumber || props.logRichText) {
              notionPage = await notionApi(`/pages/${task.id}`, 'GET');
         }
 
@@ -991,36 +993,45 @@ function calculateReportDates(period) {
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">Toggl設定不完全</p>';
+        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
         return;
     }
     
-    const { start, end } = calculateReportDates(dom.reportPeriodSelect.value);
-    dom.kpiResultsContainer.innerHTML = `集計中: ${start}〜${end}...`;
+    const period = dom.reportPeriodSelect.value;
+    // start, end は YYYY-MM-DD 形式
+    const { start, end } = calculateReportDates(period);
+    const wid = settings.togglWorkspaceId;
     
+    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v2 POST)...</p>`;
+        
     try {
-        // ★★★ Reports v2: POST + JSON body ★★★
+        // ★★★ 修正箇所: Reports v2 Summary は POST + JSON body を使用する ★★★
         const body = {
-            since: start,        // YYYY-MM-DD
-            until: end,          // YYYY-MM-DD
-            workspace_id: settings.togglWorkspaceId,
+            since: start,            // YYYY-MM-DD 形式
+            until: end,              // YYYY-MM-DD 形式
+            workspace_id: wid,
             grouping: 'tags',
-            user_agent: 'NotionTogglTimer'
+            user_agent: 'NotionTogglTimer' // v2では必須
         };
         
+        const url = `${TOGGL_REPORTS_V2_BASE_URL}/summary`;
+        
+        // POSTリクエストとして externalApi を呼び出す
         const data = await externalApi(
-            'https://api.track.toggl.com/reports/api/v2/summary',
+            url, 
             'POST', 
             getTogglAuthDetails(), 
-            body  // 👈 JSON bodyでPOST
+            body // 👈 JSON bodyでPOST
         );
 
-        // 生レスポンス表示
+        // 簡易表示（詳細集計は後回し）
         dom.reportTotalTime.textContent = `総時間: ${formatTime(data.total_grand || 0)}`;
-        dom.kpiResultsContainer.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-        
+        // 生のJSONレスポンスをそのまま表示することで、認証と通信が成功したかを確認する
+        dom.kpiResultsContainer.innerHTML = `<h3>Toggl API 生レスポンス</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+
     } catch(e) {
-        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">${e.message}</p>`;
+        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">レポートエラー: ${e.message}</p>`;
+        console.error("KPIレポートエラー:", e);
     }
 }
 
