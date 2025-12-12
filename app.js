@@ -991,40 +991,36 @@ function calculateReportDates(period) {
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
+        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">Toggl設定不完全</p>';
         return;
     }
     
-    const period = dom.reportPeriodSelect.value;
-    // start, end は YYYY-MM-DD 形式
-    const { start, end } = calculateReportDates(period);
-    const wid = settings.togglWorkspaceId;
+    const { start, end } = calculateReportDates(dom.reportPeriodSelect.value);
+    dom.kpiResultsContainer.innerHTML = `集計中: ${start}〜${end}...`;
     
-    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v2 GET)...</p>`;
-        
     try {
-        // ✅ v2正しいURL + Query（bodyなし）
-        const params = new URLSearchParams({
-            since: start,            // YYYY-MM-DD 形式
-            until: end,              // YYYY-MM-DD 形式
-            workspace_id: wid,
-            user_agent: 'NotionTogglTimerWebApp',
-            grouping: 'tags'
-        });
-        const url = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
+        // ★★★ Reports v2: POST + JSON body ★★★
+        const body = {
+            since: start,        // YYYY-MM-DD
+            until: end,          // YYYY-MM-DD
+            workspace_id: settings.togglWorkspaceId,
+            grouping: 'tags',
+            user_agent: 'NotionTogglTimer'
+        };
         
-        // ✅ bodyなしのGETリクエストとして externalApi を呼び出す
-        // getTogglAuthDetails() で Basic認証ヘッダーを生成し、プロキシ経由で転送させる
-        const data = await externalApi(url, 'GET', getTogglAuthDetails(), null);
+        const data = await externalApi(
+            'https://api.track.toggl.com/reports/api/v2/summary',
+            'POST', 
+            getTogglAuthDetails(), 
+            body  // 👈 JSON bodyでPOST
+        );
 
-        // 簡易表示（詳細集計は後回し）
+        // 生レスポンス表示
         dom.reportTotalTime.textContent = `総時間: ${formatTime(data.total_grand || 0)}`;
-        // 生のJSONレスポンスをそのまま表示することで、認証と通信が成功したかを確認する
-        dom.kpiResultsContainer.innerHTML = `<h3>Toggl API 生レスポンス</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
-
+        dom.kpiResultsContainer.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        
     } catch(e) {
-        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">レポートエラー: ${e.message}</p>`;
-        console.error("KPIレポートエラー:", e);
+        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">${e.message}</p>`;
     }
 }
 
