@@ -1,4 +1,4 @@
-console.log('🔥 APP.JS BUILD ID = 2025-02-13-PROXY-ONLY');
+console.log('🔥 APP.JS PROXY BUILD 2025-12-12 18:40');
 // ==========================================
 // 🔒 SAFETY PATCH: Toggl直叩き完全防止 & デバッグ可視化
 // ==========================================
