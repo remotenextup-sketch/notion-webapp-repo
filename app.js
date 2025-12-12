@@ -1004,7 +1004,7 @@ async function fetchKpiReport() {
         
     try {
         // ✅ v2正しいURL + Query（bodyなし）
-        const params = new new URLSearchParams({
+        const params = new URLSearchParams({
             since: start,            // YYYY-MM-DD 形式
             until: end,              // YYYY-MM-DD 形式
             workspace_id: wid,
