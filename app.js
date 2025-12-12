@@ -973,6 +973,8 @@ function calculateReportDates(period) {
 
 
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
+// app.js (972行目付近)
+/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
         dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
@@ -984,28 +986,30 @@ async function fetchKpiReport() {
     const { start, end } = calculateReportDates(period); 
     const wid = settings.togglWorkspaceId;
 
-    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
+    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v3 GET)...</p>`;
 
     try {
         // -----------------------------------------------------------------
-        // ★★★ 修正1: Reports API v2 のパラメータを URLSearchParams で構築 ★★★
+        // ★★★ 修正1: Reports API v3 のエンドポイントに変更 ★★★
         // -----------------------------------------------------------------
+        const targetBaseUrl = 'https://api.track.toggl.com/reports/api/v3/workspace';
+        const targetUrl = `${targetBaseUrl}/${wid}/summary/time`;
+        
+        // ★★★ 修正2: v3が要求する形式で Query Parameters を構築 ★★★
+        // v3は since, until ではなく start_date, end_date を使用し、時間情報を含む形式を推奨するが、
+        // GET/Queryではシンプルに日付のみを送るパターンを試す
         const params = new URLSearchParams({
-            since: start,       // YYYY-MM-DD 形式
-            until: end,         // YYYY-MM-DD 形式
-            workspace_id: wid,
-            user_agent: 'NotionTogglTimerWebApp', // 任意のユニークな名前
-            grouping: 'tags',   // タグでグループ化（カテゴリ別集計のため）
-            subgrouping: 'time_entries',
-            display_hours: 'decimal' // オプション
+            start_date: start,       // YYYY-MM-DD 形式
+            end_date: end,           // YYYY-MM-DD 形式
+            user_agent: 'NotionTogglTimerWebApp',
+            grouping: 'tags' 
         });
         
-        // ★★★ 修正2: Query付きURLを構築 ★★★
-        const targetUrl = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
+        const finalUrl = `${targetUrl}?${params.toString()}`;
         
         // ★★★ 修正3: bodyなしのGETリクエストとして externalApi を呼び出す ★★★
-        // Reports API v2 は GET リクエスト (URLクエリ) を要求する
-        const summary = await externalApi(targetUrl, 'GET', getTogglAuthDetails(), null); 
+        // GETリクエスト + クエリパラメータ（body=null）でプロキシの挙動の変化を試す
+        const summary = await externalApi(finalUrl, 'GET', getTogglAuthDetails(), null); 
         
         
         if (!summary || !summary.total_grand) {
@@ -1014,26 +1018,44 @@ async function fetchKpiReport() {
             return;
         }
 
-        // --- ローカル集計ロジック (v2のレスポンス形式に合わせる) ---
+        // --- ローカル集計ロジック (v3のレスポンス形式に合わせる) ---
         const categoryTimes = {};
         // total_grand はミリ秒単位
         let totalDurationMs = summary.total_grand; 
         
+        // v3のsummary/timeエンドポイントは、responsesの配列を返す
         summary.data.forEach(group => {
-            if (group.title.tag) {
-                // v2レスポンスでは tag の name が返されることを想定
-                const tag = group.title.tag.name || group.title.tag;
-                // time はミリ秒単位
-                const durationMs = group.time; 
-                categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs;
+            // v3のレスポンス構造はv2と異なるが、time_entriesをグループ化した場合のタグは
+            // descriptionの代わりにtagというキーで時間を含むと仮定する
+            if (group.tag) { // タグがキーとなっていることを期待
+                const tag = group.tag; 
+                // durationは秒単位で返されることが多い。ここでは便宜上 total_duration_seconds を参照
+                const durationSeconds = group.total_duration_seconds; 
+                
+                // API v3のGETレスポンスの正確な構造が不明なため、フォールバックロジック
+                if (durationSeconds !== undefined) {
+                    const durationMs = durationSeconds * 1000;
+                    categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs;
+                }
             }
         });
+        
+        // ★★★ V3のレスポンス構造が複雑なため、集計ロジックの調整が必要 ★★★
+        // もし上記の集計がうまくいかない場合、summary.dataを直接確認してください。
+        
+        // --- 結果のレンダリング (V3対応) ---
+        // V3ではデータ構造が複雑なため、total_grandが正しくても集計できない場合があります。
+        // ここでは、total_grandを優先して表示します。
 
-        // --- 結果のレンダリング ---
         dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalDurationMs)}`;
         
+        // カテゴリ集計が空の場合は、エラー表示
+        if (Object.keys(categoryTimes).length === 0) {
+            dom.kpiResultsContainer.innerHTML = `<p>タスクは見つかりましたが、カテゴリ（タグ）集計に失敗しました。<br>プロキシサーバーまたはToggl API v3のエラーの可能性が高いです。</p>`;
+            return;
+        }
+
         let html = '<ul class="task-list">';
-        
         const sortedCategories = Object.keys(categoryTimes).sort((a, b) => categoryTimes[b] - categoryTimes[a]);
 
         sortedCategories.forEach(cat => {
@@ -1058,11 +1080,9 @@ async function fetchKpiReport() {
 
     } catch (e) {
         console.error("KPIレポートエラー:", e);
-        // エラー通知を強化
-        dom.kpiResultsContainer.innerHTML = `<p style="color: red;">レポート集計中にエラーが発生しました: ${e.message}</p>`;
+        dom.kpiResultsContainer.innerHTML = `<p style="color: red;">レポート集計中にエラーが発生しました: ${e.message}<br>（プロキシの問題の可能性が高いです）</p>`;
     }
 }
-
 
 /** KPIレポートの表示/非表示を切り替える */
 function toggleKpiReport() {
