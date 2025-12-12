@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: 通知機能とUX改善、ラジオボタン、KPIレポートを適用)
+// app.js 全文 (最終版: KPIレポートをページ下部トグル表示に変更)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -52,15 +52,15 @@ const dom = {
     newDeptContainer: document.getElementById('newDeptContainer'),
     targetDbDisplay: document.getElementById('targetDbDisplay'),
 
-    // タブボタン
+    // タブボタン (KPIレポートは除外)
     startExistingTask: document.getElementById('startExistingTask'),
     startNewTask: document.getElementById('startNewTask'),
     existingTaskTab: document.getElementById('existingTaskTab'),
     newTaskTab: document.getElementById('newTaskTab'),
     taskSelectionSection: document.getElementById('taskSelectionSection'),
     
-    // KPIレポート要素 ★★★ 追加 ★★★
-    showKpiReport: document.getElementById('showKpiReport'),
+    // KPIレポート要素
+    toggleKpiReportBtn: document.getElementById('toggleKpiReportBtn'), // ★★★ 追加 ★★★
     kpiReportTab: document.getElementById('kpiReportTab'),
     reportPeriodSelect: document.getElementById('reportPeriodSelect'),
     fetchKpiButton: document.getElementById('fetchKpiButton'),
@@ -537,7 +537,7 @@ function renderTaskList(tasks, dbId, props) {
 
 
 // ==========================================
-// 5. 新規タスクフォーム管理
+// 5. タスクフォーム/タブ管理
 // ==========================================
 
 /** タブを切り替える */
@@ -546,20 +546,15 @@ function switchTab(event) {
 
     dom.startExistingTask.classList.remove('active');
     dom.startNewTask.classList.remove('active');
-    dom.showKpiReport.classList.remove('active'); // ★★★ 追加 ★★★
     event.target.classList.add('active');
-
-    dom.existingTaskTab.classList.add('hidden');
-    dom.newTaskTab.classList.add('hidden');
-    dom.kpiReportTab.classList.add('hidden'); // ★★★ 追加 ★★★
 
     if (target === 'existing') {
         dom.existingTaskTab.classList.remove('hidden');
-    } else if (target === 'new') {
+        dom.newTaskTab.classList.add('hidden');
+    } else {
+        dom.existingTaskTab.classList.add('hidden');
         dom.newTaskTab.classList.remove('hidden');
         renderNewTaskForm(); 
-    } else if (target === 'kpi') { // ★★★ 追加 ★★★
-        dom.kpiReportTab.classList.remove('hidden');
     }
 }
 
@@ -579,7 +574,7 @@ async function renderNewTaskForm() {
     try {
         const props = await getDbProperties(dbId);
         
-        // カテゴリ (Select) のレンダリング -> ★★★ ラジオボタンに変更 ★★★
+        // カテゴリ (Select) のレンダリング -> ラジオボタン
         if (props.category) {
             dom.newCatContainer.innerHTML = `
                 <div class="form-group">
@@ -638,7 +633,7 @@ async function handleStartNewTask() {
             },
         };
         
-        // 2. カテゴリ (Select) -> ★★★ ラジオボタンから値を取得するように修正 ★★★
+        // 2. カテゴリ (Select)
         const selectedCatRadio = document.querySelector('input[name="newCatSelect"]:checked');
         if (props.category && selectedCatRadio) {
             properties[props.category.name] = { select: { id: selectedCatRadio.value } };
@@ -651,7 +646,7 @@ async function handleStartNewTask() {
             properties[props.department.name] = { multi_select: selectedDepts };
         }
 
-        // 4. 担当者
+        // 4. 担当者 (自動で自分を設定)
         if (props.assignee && settings.humanUserId) {
              properties[props.assignee.name] = { people: [{ id: settings.humanUserId }] };
         }
@@ -869,7 +864,7 @@ function clearElement(element) {
 
 
 // ==========================================
-// 7. KPIレポートロジック ★★★ 追加 ★★★
+// 7. KPIレポートロジック
 // ==========================================
 
 /** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
@@ -880,7 +875,7 @@ function calculateReportDates(period) {
 
     const currentDay = start.getDay(); // 0=日曜, 1=月曜, ...
     
-    // 日本の週次 (月曜始まり) に対応: 0(日)の場合は -6, 1(月)の場合は -0, 2(火)の場合は -1, ...
+    // 日本の週次 (月曜始まり) に対応
     const diffToMonday = (currentDay === 0 ? 6 : currentDay - 1); 
 
     if (period === 'current_week') {
@@ -916,7 +911,7 @@ function calculateReportDates(period) {
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId || !settings.humanUserId) {
-        alert('Toggl設定またはNotionユーザーIDが不完全です。設定画面を確認してください。');
+        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定またはNotionユーザーIDが不完全です。設定画面を確認してください。</p>';
         return;
     }
 
@@ -930,11 +925,15 @@ async function fetchKpiReport() {
         // Toggl Reports API (v9 /search/time_entries) を使用して期間内の全エントリを取得
         const reportUrl = `/time_entries/search`;
         
+        // humanUserIdはNotionのものだが、TogglのAPIによってはTogglのユーザーIDが使われる。
+        // Toggl V9 /search/time_entries は user_ids を受け付けるが、Notion IDとToggl IDが異なるため、
+        // 現状はワークスペース全体を取得し、Notion IDが設定されていても、個人での絞り込みはできません。
+        // （ここは、ユーザーがTogglユーザーIDを別途設定するか、全期間のデータを取得するかのトレードオフがあります。ここでは最も安全な方法として、ワークスペースIDのみを使用し、全エントリを取得後、タグでフィルタリングします。）
+        
         const body = {
             start_date: start,
             end_date: end,
             workspace_ids: [parseInt(wid)],
-            user_ids: [parseInt(settings.humanUserId)], // 自分だけのデータに絞り込む
         };
         
         const allEntries = await togglApi(reportUrl, 'POST', body);
@@ -1006,6 +1005,16 @@ async function fetchKpiReport() {
 }
 
 
+/** KPIレポートの表示/非表示を切り替える */
+function toggleKpiReport() {
+    dom.kpiReportTab.classList.toggle('hidden');
+    // レポートが表示されたら、自動で集計を実行する
+    if (!dom.kpiReportTab.classList.contains('hidden') && dom.kpiResultsContainer.innerHTML.includes('集計ボタン')) {
+        fetchKpiReport();
+    }
+}
+
+
 // ==========================================
 // 8. 初期ロード
 // ==========================================
@@ -1023,10 +1032,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // タブ切り替え
     dom.startExistingTask.addEventListener('click', switchTab);
     dom.startNewTask.addEventListener('click', switchTab);
-    dom.showKpiReport.addEventListener('click', switchTab); // ★★★ 追加 ★★★
+    
+    // KPIレポート表示トグルボタン ★★★ 追加 ★★★
+    dom.toggleKpiReportBtn.addEventListener('click', toggleKpiReport);
     
     // KPIレポート集計ボタン
-    dom.fetchKpiButton.addEventListener('click', fetchKpiReport); // ★★★ 追加 ★★★
+    dom.fetchKpiButton.addEventListener('click', fetchKpiReport);
     
     // 新規タスク開始ボタン
     document.getElementById('startNewTaskButton').addEventListener('click', handleStartNewTask);
