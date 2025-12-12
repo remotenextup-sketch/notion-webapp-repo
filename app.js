@@ -909,6 +909,9 @@ function calculateReportDates(period) {
 
 
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
+// app.js (933行目付近)
+
+/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId || !settings.humanUserId) {
         dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定またはNotionユーザーIDが不完全です。設定画面を確認してください。</p>';
@@ -922,21 +925,23 @@ async function fetchKpiReport() {
     dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
 
     try {
-        // Toggl Reports API (v9 /search/time_entries) を使用して期間内の全エントリを取得
-        const reportUrl = `/time_entries/search`;
-        
-        // humanUserIdはNotionのものだが、TogglのAPIによってはTogglのユーザーIDが使われる。
-        // Toggl V9 /search/time_entries は user_ids を受け付けるが、Notion IDとToggl IDが異なるため、
-        // 現状はワークスペース全体を取得し、Notion IDが設定されていても、個人での絞り込みはできません。
-        // （ここは、ユーザーがTogglユーザーIDを別途設定するか、全期間のデータを取得するかのトレードオフがあります。ここでは最も安全な方法として、ワークスペースIDのみを使用し、全エントリを取得後、タグでフィルタリングします。）
-        
-        const body = {
+        // ★★★ 修正: Toggl Reports API (v9 /time_entries) をGETメソッドで呼び出す ★★★
+        // Toggl v9 の /time_entries (GET) は、フィルターパラメータをクエリ文字列で受け取ります。
+        // TogglはユーザーIDフィルタリングが複雑なため、シンプルにワークスペースの全エントリを取得します。
+
+        const queryParams = new URLSearchParams({
+            workspace_id: wid,
             start_date: start,
             end_date: end,
-            workspace_ids: [parseInt(wid)],
-        };
+            // user_agent: 'Notion Toggl Timer WebApp' // これは不要かも
+        }).toString();
         
-        const allEntries = await togglApi(reportUrl, 'POST', body);
+        const reportUrl = `/time_entries?${queryParams}`;
+        
+        // GETメソッドでAPIコール
+        const allEntries = await togglApi(reportUrl, 'GET', null); // メソッドを'GET'に変更し、bodyをnullに
+        
+        // ★★★ 修正終わり ★★★
         
         if (!allEntries || allEntries.length === 0) {
             dom.kpiResultsContainer.innerHTML = '<p>この期間に計測されたタスクはありません。</p>';
@@ -944,65 +949,8 @@ async function fetchKpiReport() {
             return;
         }
 
-        // --- ローカル集計ロジック ---
-        const categoryTimes = {};
-        let totalDurationMs = 0;
-        const knownCategories = ['思考', '作業', '教育']; // Notionで設定したカテゴリと一致させる必要あり
-
-        for (const entry of allEntries) {
-            // duration は秒単位で返される。計測中は -1
-            if (entry.duration <= 0) continue; 
-            
-            const durationMs = entry.duration * 1000;
-            totalDurationMs += durationMs;
-
-            let assignedCategory = 'その他';
-            
-            // タグからカテゴリを特定
-            if (entry.tags && entry.tags.length > 0) {
-                for (const tag of entry.tags) {
-                    if (knownCategories.includes(tag)) {
-                        assignedCategory = tag;
-                        break; 
-                    }
-                }
-            }
-            
-            categoryTimes[assignedCategory] = (categoryTimes[assignedCategory] || 0) + durationMs;
-        }
-
-        // --- 結果のレンダリング ---
-        dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalDurationMs)}`;
-        
-        let html = '<ul class="task-list">';
-        
-        const sortedCategories = Object.keys(categoryTimes).sort((a, b) => categoryTimes[b] - categoryTimes[a]);
-
-        sortedCategories.forEach(cat => {
-            const ms = categoryTimes[cat];
-            const percentage = totalDurationMs > 0 ? ((ms / totalDurationMs) * 100).toFixed(1) : 0;
-            
-            html += `
-                <li>
-                    <span>${cat}:</span>
-                    <span>
-                        ${formatTime(ms)} 
-                        <span style="font-weight: bold; color: ${percentage > 30 ? '#007bff' : 'green'}; margin-left: 10px;">
-                            (${percentage}%)
-                        </span>
-                    </span>
-                </li>
-            `;
-        });
-
-        html += '</ul>';
-        dom.kpiResultsContainer.innerHTML = html;
-
-    } catch (e) {
-        console.error("KPIレポートエラー:", e);
-        dom.kpiResultsContainer.innerHTML = `<p style="color: red;">レポート集計中にエラーが発生しました: ${e.message}</p>`;
-    }
-}
+        // --- ローカル集計ロジック (以降は変更なし) ---
+        // ... (省略)
 
 
 /** KPIレポートの表示/非表示を切り替える */
