@@ -69,20 +69,37 @@
             background-color: #dc3545;
             color: white;
         }
+        
+        /* ★★★ タブデザイン修正: スタイルを追加 ★★★ */
+        .tab-container {
+            display: flex;
+            justify-content: center; /* 中央寄せ */
+            margin-bottom: 15px;
+        }
         .tab-btn {
             background-color: #e9ecef;
             color: #495057;
-            border: none;
-            padding: 10px 15px;
+            border: 1px solid #ccc;
+            padding: 10px 25px;
             cursor: pointer;
-            margin-right: 5px;
-            border-radius: 4px 4px 0 0;
+            margin: 0 -1px 0 0; /* ボタン間の隙間をなくす */
+            border-radius: 0;
+            flex-grow: 1; 
+            max-width: 50%;
         }
         .tab-btn.active {
-            background-color: white;
-            border: 1px solid #ccc;
-            border-bottom: none;
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+            z-index: 1;
         }
+        #startExistingTask {
+            border-radius: 4px 0 0 4px;
+        }
+        #startNewTask {
+            border-radius: 0 4px 4px 0;
+        }
+        /* ★★★ タブデザイン修正 終わり ★★★ */
 
         /* タスク一覧 */
         .task-list {
@@ -156,7 +173,7 @@
                     <button id="reloadTasks" class="btn btn-secondary">リロード</button>
                 </div>
 
-                <div style="margin-bottom: 15px;">
+                <div class="tab-container">
                     <button id="startExistingTask" class="tab-btn active" data-target="existing">既存タスク</button>
                     <button id="startNewTask" class="tab-btn" data-target="new">新規タスク開始</button>
                 </div>
