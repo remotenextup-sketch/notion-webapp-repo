@@ -1,4 +1,6 @@
+// app.js 全文 (最終版: Toggl API呼び出しを externalApi に統一し、405エラーを解消)
 
+// ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
 
@@ -1046,4 +1048,3 @@ document.addEventListener('DOMContentLoaded', async () => {
         showSettings();
     }
 });
-```
