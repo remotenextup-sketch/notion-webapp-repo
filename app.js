@@ -1,6 +1,8 @@
-// ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
+
+// Toggl Reports API のベースURL (今回はV9を使用するためコメントアウト、定数としては保持)
+// const TOGGL_REPORTS_BASE_URL = 'https://api.track.toggl.com/reports/api/v3';
 
 const settings = {
     notionToken: '',
@@ -12,7 +14,7 @@ const settings = {
     
     databases: [], 
     currentRunningTask: null, 
-    startTime: null,        
+    startTime: null,         
     timerInterval: null      
 };
 
@@ -68,7 +70,7 @@ const dom = {
 };
 
 // ==========================================
-// 0. UX改善 (通知機能)
+// 0. UX改善 (通知機能 & ユーティリティ)
 // ==========================================
 
 /** 指定されたメッセージを短時間通知表示する */
@@ -97,6 +99,22 @@ function showNotification(message, duration = 3000) {
     notification.timer = setTimeout(() => {
         notification.style.opacity = '0';
     }, duration);
+}
+
+/** DOM要素の子要素を全てクリアする */
+function clearElement(element) {
+    element.innerHTML = '';
+}
+
+/** ミリ秒を H:MM:SS 形式にフォーマット */
+function formatTime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    // H:MM:SS
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 
@@ -248,13 +266,13 @@ function hideSettings() {
 // 2. API基盤 (Notion & Toggl)
 // ==========================================
 
-/** 外部APIへのリクエストをプロキシ経由で送信する (Notion専用) */
+/** 外部APIへのリクエストをプロキシ経由で送信する */
 async function externalApi(targetUrl, method, authDetails, body) { 
     
     const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
-        // Notion認証情報
+        // 認証情報
         tokenKey: authDetails.tokenKey,      
         tokenValue: authDetails.tokenValue,  
         notionVersion: authDetails.notionVersion, 
@@ -305,10 +323,26 @@ async function notionApi(endpoint, method = 'GET', body = null) {
     }
 }
 
-// --- Toggl API (直接コール) ---
+// --- Toggl API (プロキシ経由 - レポート用) ---
 
-// getTogglAuthDetails は不要になりました (認証は直接ヘッダーに埋め込まれるため)
+/**
+ * Toggl APIへのリクエストをプロキシ経由で送信するラッパー関数
+ * @param {string} targetUrl - Toggl APIのフルURL
+ * @param {string} method - HTTPメソッド
+ * @param {object|null} body - リクエストボディ
+ */
+async function externalTogglApi(targetUrl, method = 'GET', body = null) {
+    // Togglの認証情報を使用して externalApi を呼び出す
+    const authDetails = {
+        tokenKey: 'togglApiToken',
+        tokenValue: settings.togglApiToken,
+        notionVersion: '2022-06-28'  // 互換性のため
+    };
+    
+    return await externalApi(targetUrl, method, authDetails, body);
+}
 
+// --- Toggl API (直接コール - V9用) ---
 
 /** Togglで新しい計測を開始する (Track API v9) */
 async function startToggl(title, tags) {
@@ -408,8 +442,8 @@ async function fetchDatabaseList() {
         saveSettings();
         
         if (settings.databases.length === 0) {
-             dom.taskDbFilter.innerHTML = '<option value="">有効なDBが見つかりません</option>';
-             return;
+              dom.taskDbFilter.innerHTML = '<option value="">有効なDBが見つかりません</option>';
+              return;
         }
 
         // フィルターのレンダリング
@@ -564,16 +598,27 @@ function switchTab(event) {
 
     dom.startExistingTask.classList.remove('active');
     dom.startNewTask.classList.remove('active');
+    dom.toggleKpiReportBtn.classList.remove('active'); // KPIボタンも切り替え対象に
     event.target.classList.add('active');
 
-    // UX修正: どちらか一方のみを表示するように変更
-    if (target === 'existing') {
-        dom.existingTaskTab.classList.remove('hidden');
-        dom.newTaskTab.classList.add('hidden'); 
+    // タスク選択/作成セクションとKPIレポートセクションの表示を切り替える
+    if (target === 'report') {
+        dom.taskSelectionSection.classList.add('hidden');
+        dom.kpiReportTab.classList.remove('hidden');
+        clearElement(dom.kpiResultsContainer); // レポートタブに切り替えたら結果をクリア
     } else {
-        dom.existingTaskTab.classList.add('hidden'); // 既存タスクタブを非表示に
-        dom.newTaskTab.classList.remove('hidden'); 
-        renderNewTaskForm(); 
+        dom.taskSelectionSection.classList.remove('hidden');
+        dom.kpiReportTab.classList.add('hidden');
+
+        // タスク選択タブと新規作成タブの切り替え
+        if (target === 'existing') {
+            dom.existingTaskTab.classList.remove('hidden');
+            dom.newTaskTab.classList.add('hidden'); 
+        } else if (target === 'new') {
+            dom.existingTaskTab.classList.add('hidden'); 
+            dom.newTaskTab.classList.remove('hidden'); 
+            renderNewTaskForm(); 
+        }
     }
 }
 
@@ -877,13 +922,17 @@ function updateRunningTaskDisplay(isRunning) {
     if (isRunning) {
         dom.runningTaskContainer.classList.remove('hidden');
         dom.taskSelectionSection.classList.add('hidden');
+        dom.kpiReportTab.classList.add('hidden'); // KPIレポートも非表示に
         dom.runningTaskTitle.textContent = settings.currentRunningTask.title || '実行中タスク';
         if (!settings.timerInterval) {
             settings.timerInterval = setInterval(updateTimer, 1000);
         }
     } else {
         dom.runningTaskContainer.classList.add('hidden');
-        dom.taskSelectionSection.classList.remove('hidden');
+        // 実行中のタスクがない場合は、タスク選択セクションに戻す (ただしKPIレポートタブがアクティブでない場合に限る)
+        if (!dom.toggleKpiReportBtn.classList.contains('active')) {
+            dom.taskSelectionSection.classList.remove('hidden');
+        }
         if (settings.timerInterval) {
             clearInterval(settings.timerInterval);
             settings.timerInterval = null;
@@ -900,221 +949,180 @@ function updateTimer() {
     }
 }
 
-/** ミリ秒を H:MM:SS 形式にフォーマット */
-function formatTime(ms) {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    const pad = (num) => num.toString().padStart(2, '0');
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-}
-
-/** DOM要素の内容をクリアするユーティリティ関数 */
-function clearElement(element) {
-    element.innerHTML = '';
-}
-
-
 // ==========================================
-// 6. KPIレポートロジック
+// 6. KPIレポート機能 (Toggl Reports API)
 // ==========================================
 
-/** Togglレポート用の開始日と終了日 (YYYY-MM-DD形式) を計算する (月曜始まり) */
+/** 期間セレクタに基づいてレポート開始日と終了日を計算する */
 function calculateReportDates(period) {
     const now = new Date();
-    
-    // YYYY-MM-DD の形式で日付をフォーマットするヘルパー関数
-    const formatYMD = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
+    // 終了日を今日の終わりにする
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    let start;
 
-    let start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    let end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    if (period === 'current_week' || period === 'last_week') {
-        // --- 週次計算ロジック (月曜始まり) ---
-        // Date.getDay()は日曜=0, 月曜=1, ..., 土曜=6
-        const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); 
-        const diffToMonday = dayOfWeek - 1; 
-        
-        // 今週の月曜日
-        start = new Date(now);
-        start.setDate(now.getDate() - diffToMonday);
-        start.setHours(0, 0, 0, 0); // 時間をリセットして計算を安定させる
-        
-        // 今週の日曜日
-        end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        end.setHours(0, 0, 0, 0); // 時間をリセットして計算を安定させる
-
-        if (period === 'last_week') {
-            // 先週にするために、両方を7日前にシフト
-            start.setDate(start.getDate() - 7);
-            end.setDate(end.getDate() - 7);
-        }
-
-    } else if (period === 'current_month') {
-        // --- 今月 ---
-        start = new Date(now.getFullYear(), now.getMonth(), 1); // 今月の1日
-        end = new Date(now.getFullYear(), now.getMonth() + 1, 0); // 来月の0日目 (今月の最終日)
-
-    } else if (period === 'last_month') {
-        // --- 先月 ---
-        start = new Date(now.getFullYear(), now.getMonth() - 1, 1); // 先月の1日
-        end = new Date(now.getFullYear(), now.getMonth(), 0); // 今月の0日目 (先月の最終日)
+    switch (period) {
+        case 'week':
+            // 今週の月曜日 (ISO 8601: 月曜日=1)
+            const dayOfWeek = (now.getDay() + 6) % 7; // 0=月曜, 6=日曜
+            start = new Date(now);
+            start.setDate(now.getDate() - dayOfWeek);
+            break;
+        case 'month':
+            // 今月の1日
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        case 'last_month':
+            // 先月の1日
+            start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            // 終了日は先月の末日
+            end.setDate(0); 
+            end.setHours(23, 59, 59, 999);
+            break;
+        case 'year':
+            // 今年の1月1日
+            start = new Date(now.getFullYear(), 0, 1);
+            break;
+        default: // 'today'
+            start = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 今日の始まり
     }
     
-    // YYYY-MM-DD 形式の文字列を取得
-    const startDateYMD = formatYMD(start);
-    const endDateYMD = formatYMD(end);
-    
-    // YYYY-MM-DD 形式のみを返す
-    return { 
-        start: startDateYMD, 
-        end: endDateYMD
+    // 時間情報をクリア
+    start.setHours(0, 0, 0, 0);
+
+    return {
+        // Toggl V9 Time Entries APIはUNIX epoch time (秒)でsince, untilを指定するため、ここでは Dateオブジェクトを返す
+        startDate: start,
+        endDate: end
     };
 }
 
 
-/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
+/** Toggl Time Entries API V9 からデータを取得し、タグごとに集計する (プロキシ経由) */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
+        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">Toggl設定不完全。設定画面でAPIトークンとWorkspace IDを確認してください。</p>';
+        dom.reportTotalTime.textContent = '00:00:00';
         return;
     }
+
+    const { startDate, endDate } = calculateReportDates(dom.reportPeriodSelect.value);
     
-    const { start, end } = calculateReportDates(dom.reportPeriodSelect.value);
-    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v9 Direct Call)...</p>`;
-        
+    // APIはUNIX epoch time (秒) を要求するため変換
+    const since = Math.floor(startDate.getTime() / 1000);
+    const until = Math.floor(endDate.getTime() / 1000);
+
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    dom.kpiResultsContainer.innerHTML = `<p>集計中: **${startDateStr}** 〜 **${endDateStr}**...</p>`;
+    dom.reportTotalTime.textContent = '計算中...';
+
     try {
-        // ★★★ プロキシ完全回避：直接Toggl APIコール ★★★
-        // since/untilをUNIX秒 (Time Entries v9の仕様) に変換し、整数として渡す
-        const since = Math.floor(new Date(start + 'T00:00:00Z') / 1000);
-        const until = Math.floor(new Date(end + 'T23:59:59Z') / 1000);
-        
+        // Toggl V9 Time Entries APIを使用
+        // duration > 0 のもののみを対象とする（実行中ではないものを取得）
         const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`;
         
-        console.log('🔢 Direct API:', url);
+        console.log('🔢 Toggl V9 Time Entries via Proxy:', url);
         
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                // クライアント側で Basic 認証ヘッダーを生成
-                'Authorization': `Basic ${btoa(`${settings.togglApiToken}:api_token`)}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            // Toggl APIからのエラーレスポンスを表示
-            throw new Error(`Toggl API ${response.status}: ${await response.text()}`);
-        }
-        
-        const entries = await response.json();
-        
-        // ★★★ クライアント集計 ★★★
-        const categoryTimes = {};
+        // externalTogglApi を使用してプロキシ経由でCORS回避
+        const response = await externalTogglApi(url); 
+
+        const categoryTimes = {}; 
         let totalMs = 0;
         
-        entries.forEach(entry => {
-            // durationが-1の場合は計測中なのでスキップ。絶対値を取って秒単位にする
-            const durationSeconds = Math.abs(entry.duration || 0); 
+        // Time Entryのdurationは秒単位
+        response.forEach(entry => {
+            // durationがマイナス（計測中）でないものを集計。durationは秒単位
+            const durationSeconds = entry.duration > 0 ? entry.duration : 0; 
             const durationMs = durationSeconds * 1000;
-            const tags = entry.tags || [];
-            totalMs += durationMs;
             
-            tags.forEach(tag => {
-                categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs;
-            });
+            if (durationMs > 0) {
+                const tags = entry.tags && entry.tags.length > 0 ? entry.tags : ['(タグなし)'];
+                totalMs += durationMs;
+                tags.forEach(tag => categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs);
+            }
         });
+
+        dom.reportTotalTime.textContent = `総時間: ${formatTime(totalMs)} (${response.length}件のTime Entry)`;
         
-        // 表示
-        dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalMs)} (${entries.length}件)`;
-        
-        if (Object.keys(categoryTimes).length === 0) {
-            dom.kpiResultsContainer.innerHTML = '<p>この期間のタスクはすべてタグなしです。</p>';
+        if (totalMs === 0) {
+            dom.kpiResultsContainer.innerHTML = `<p>期間: **${startDateStr}** 〜 **${endDateStr}**</p><p>この期間の有効な計測データはありません。</p>`;
             return;
         }
+
+        let html = `<p>期間: **${startDateStr}** 〜 **${endDateStr}**</p>`;
+        html += '<ul class="task-list">';
         
-        // カテゴリ一覧（時間降順）
-        let html = '<ul class="task-list">';
-        Object.entries(categoryTimes)
-            .sort(([,a], [,b]) => b - a)
+        Object.entries(categoryTimes).sort(([,a], [,b]) => b - a)
             .forEach(([tag, ms]) => {
                 const pct = totalMs ? ((ms / totalMs) * 100).toFixed(1) : 0;
                 html += `<li><strong>${tag}</strong>: ${formatTime(ms)} <span style="color:#007bff">(${pct}%)</span></li>`;
             });
         html += '</ul>';
-        dom.kpiResultsContainer.innerHTML = html;
         
+        dom.kpiResultsContainer.innerHTML = html;
         showNotification('✅ KPIレポート取得成功！');
             
     } catch(e) {
-        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">${e.message}</p>`;
+        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">KPIレポート取得エラー: ${e.message}</p>`;
         console.error('KPI Error:', e);
-    }
-}
-
-
-/** KPIレポートの表示/非表示を切り替える */
-function toggleKpiReport() {
-    dom.kpiReportTab.classList.toggle('hidden');
-    // レポートが表示されたら、自動で集計を実行する
-    if (!dom.kpiReportTab.classList.contains('hidden')) {
-        fetchKpiReport();
+        dom.reportTotalTime.textContent = 'エラー';
     }
 }
 
 
 // ==========================================
-// 7. 初期ロード
+// 7. 初期ロードとイベントリスナー設定
 // ==========================================
 
-document.addEventListener('DOMContentLoaded', async () => {
+/** 初期化処理 */
+function init() {
+    loadSettings();
+
+    // 設定画面の初期値設定
+    dom.confNotionToken.value = settings.notionToken;
+    dom.confNotionUserId.value = settings.humanUserId;
+    dom.confTogglToken.value = settings.togglApiToken; 
+    dom.confTogglWid.value = settings.togglWorkspaceId; 
+
     // イベントリスナー設定
-    document.getElementById('toggleSettings').addEventListener('click', showSettings);
+    // 🚨 修正2: ID不整合の修正
     document.getElementById('saveConfig').addEventListener('click', handleSaveSettings);
-    document.getElementById('cancelConfig').addEventListener('click', hideSettings);
-    document.getElementById('reloadTasks').addEventListener('click', loadTasks);
-
-    // DB設定フォームの追加ボタン
+    document.getElementById('toggleSettings').addEventListener('click', showSettings);
+    document.getElementById('closeSettingsBtn').addEventListener('click', hideSettings);
     dom.addDbConfigButton.addEventListener('click', handleAddDbConfig);
 
+    dom.taskDbFilter.addEventListener('change', loadTasks);
+    
     // タブ切り替え
     dom.startExistingTask.addEventListener('click', switchTab);
     dom.startNewTask.addEventListener('click', switchTab);
+    dom.toggleKpiReportBtn.addEventListener('click', switchTab); // KPIボタン
+
+    // 新規タスクフォーム
+    dom.newTaskForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        handleStartNewTask();
+    });
+
+    // 実行中タスク操作
+    document.getElementById('stopTaskBtn').addEventListener('click', () => stopTask(false));
+    document.getElementById('completeTaskBtn').addEventListener('click', () => stopTask(true));
     
-    // KPIレポート表示トグルボタン 
-    dom.toggleKpiReportBtn.addEventListener('click', toggleKpiReport);
-    
-    // KPIレポート集計ボタン
+    // KPIレポート
     dom.fetchKpiButton.addEventListener('click', fetchKpiReport);
-    
-    // 新規タスク開始ボタン
-    document.getElementById('startNewTaskButton').addEventListener('click', handleStartNewTask);
-    
-    // 停止/完了ボタン
-    document.getElementById('stopTaskButton').addEventListener('click', () => stopTask(false));
-    document.getElementById('completeTaskButton').addEventListener('click', () => stopTask(true));
-    
-    dom.taskDbFilter.addEventListener('change', loadTasks);
 
-    loadSettings();
-    await checkRunningState(); 
 
-    if (settings.notionToken) {
-        await fetchDatabaseList();
-        
-        // 最初のロード時には「既存タスク」タブを選択状態にする
-        dom.startExistingTask.click(); 
-        
-        loadTasks(); 
+    // 初期表示処理
+    if (settings.notionToken && settings.notionDatabases.length > 0) {
+        fetchDatabaseList().then(() => {
+            loadTasks();
+            checkRunningState();
+        });
     } else {
         showSettings();
     }
-});
+}
+
+// アプリケーションの開始
+init();
