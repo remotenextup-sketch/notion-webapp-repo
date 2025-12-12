@@ -1,4 +1,5 @@
-// app.js 全文 (最終版9: KPIレポートを Toggl Reports API v2 の GET/Query形式に修正)
+// app.js 全文 (最終版12: KPIレポートを Toggl Reports API v2 の GET/Query形式に修正し、
+//             認証ヘッダーをクライアント側で生成する回避策を適用)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -253,17 +254,18 @@ function hideSettings() {
 /** 外部APIへのリクエストをプロキシ経由で送信する */
 async function externalApi(targetUrl, method, authDetails, body) { 
     
-    // ★★★ 修正箇所: GETリクエストにbodyが含まれていたら警告し、無視する ★★★
+    // GETリクエストにbodyが含まれていたら警告し、無視する (app.js 修正版9/10/11/12対応)
     if (method === 'GET' && body !== null) {
         console.warn('警告: externalApiがGETリクエストでbodyを受け取りました。Toggl Reports APIの仕様により無視されます。');
         body = null;
     }
 
+    // authDetailsのtokenKey, tokenValueをプロキシに送る
     const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
-        tokenKey: authDetails.tokenKey, 
-        tokenValue: authDetails.tokenValue,
+        tokenKey: authDetails.tokenKey,      // 'notionToken' or 'togglApiToken' or 'Authorization'
+        tokenValue: authDetails.tokenValue,  // トークン値 or 'Basic <Base64>'
         notionVersion: authDetails.notionVersion, 
         body: body 
     };
@@ -312,18 +314,20 @@ async function notionApi(endpoint, method = 'GET', body = null) {
     }
 }
 
+// --- Toggl API ---
 
+/** Toggl API用の認証詳細を生成する */
 function getTogglAuthDetails() {
+    // ★★★ 修正箇所: Reports APIに必要な Basic 認証ヘッダーをクライアント側で生成する回避策 ★★★
+    // Basic認証: base64(API_TOKEN:api_token)
+    const auth = btoa(`${settings.togglApiToken}:api_token`);
     return {
-        tokenKey: 'togglApiToken',
-        tokenValue: settings.togglApiToken,
-        notionVersion: '' 
+        tokenKey: 'Authorization', // プロキシにAuthorizationヘッダーとして転送を要求
+        tokenValue: `Basic ${auth}`,
+        notionVersion: ''
     };
 }
 
-// ==========================================
-// 3. Togglアクション
-// ==========================================
 
 /** Togglで新しい計測を開始する (Track API v9) */
 async function startToggl(title, tags) {
@@ -342,7 +346,13 @@ async function startToggl(title, tags) {
         duration: -1, // -1は計測中を意味します
         tags: tags
     };
-    return await externalApi(targetUrl, 'POST', getTogglAuthDetails(), body);
+    // Track API v9 (POST) は認証が異なるため、従来のtokenKeyで送る
+    const authDetails = {
+        tokenKey: 'togglApiToken',
+        tokenValue: settings.togglApiToken,
+        notionVersion: '' 
+    };
+    return await externalApi(targetUrl, 'POST', authDetails, body);
 }
 
 /** Togglで計測を停止する (Track API v9) */
@@ -354,12 +364,18 @@ async function stopToggl(entryId) {
     const wid = settings.togglWorkspaceId;
     const targetUrl = `${TOGGL_V9_BASE_URL}/workspaces/${wid}/time_entries/${entryId}/stop`;
     
-    return await externalApi(targetUrl, 'PATCH', getTogglAuthDetails(), null);
+    // Track API v9 (PATCH) は認証が異なるため、従来のtokenKeyで送る
+    const authDetails = {
+        tokenKey: 'togglApiToken',
+        tokenValue: settings.togglApiToken,
+        notionVersion: '' 
+    };
+    return await externalApi(targetUrl, 'PATCH', authDetails, null);
 }
 
 
 // ==========================================
-// 4. Notionデータ取得
+// 3. Notionデータ取得
 // ==========================================
 
 /** データベース一覧を取得し、フィルターをレンダリングする */
@@ -545,7 +561,7 @@ function renderTaskList(tasks, dbId, props) {
 
 
 // ==========================================
-// 5. タスクフォーム/タブ管理
+// 4. タスクフォーム/タブ管理
 // ==========================================
 
 /** タブを切り替える */
@@ -698,7 +714,7 @@ async function handleStartNewTask() {
 
 
 // ==========================================
-// 6. 実行・停止ロジック (コア機能)
+// 5. 実行・停止ロジック (コア機能)
 // ==========================================
 
 /** タスク計測を開始する */
@@ -909,7 +925,7 @@ function clearElement(element) {
 
 
 // ==========================================
-// 7. KPIレポートロジック
+// 6. KPIレポートロジック
 // ==========================================
 
 /** Togglレポート用の開始日と終了日 (YYYY-MM-DD形式) を計算する (月曜始まり) */
@@ -973,116 +989,45 @@ function calculateReportDates(period) {
 
 
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
-// app.js (972行目付近)
-/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
         dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
         return;
     }
-
+    
     const period = dom.reportPeriodSelect.value;
     // start, end は YYYY-MM-DD 形式
-    const { start, end } = calculateReportDates(period); 
+    const { start, end } = calculateReportDates(period);
     const wid = settings.togglWorkspaceId;
-
-    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v3 GET)...</p>`;
-
+    
+    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v2 GET)...</p>`;
+        
     try {
-        // -----------------------------------------------------------------
-        // ★★★ 修正1: Reports API v3 のエンドポイントに変更 ★★★
-        // -----------------------------------------------------------------
-        const targetBaseUrl = 'https://api.track.toggl.com/reports/api/v3/workspace';
-        const targetUrl = `${targetBaseUrl}/${wid}/summary/time`;
-        
-        // ★★★ 修正2: v3が要求する形式で Query Parameters を構築 ★★★
-        // v3は since, until ではなく start_date, end_date を使用し、時間情報を含む形式を推奨するが、
-        // GET/Queryではシンプルに日付のみを送るパターンを試す
-        const params = new URLSearchParams({
-            start_date: start,       // YYYY-MM-DD 形式
-            end_date: end,           // YYYY-MM-DD 形式
+        // ✅ v2正しいURL + Query（bodyなし）
+        const params = new new URLSearchParams({
+            since: start,            // YYYY-MM-DD 形式
+            until: end,              // YYYY-MM-DD 形式
+            workspace_id: wid,
             user_agent: 'NotionTogglTimerWebApp',
-            grouping: 'tags' 
+            grouping: 'tags'
         });
+        const url = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
         
-        const finalUrl = `${targetUrl}?${params.toString()}`;
-        
-        // ★★★ 修正3: bodyなしのGETリクエストとして externalApi を呼び出す ★★★
-        // GETリクエスト + クエリパラメータ（body=null）でプロキシの挙動の変化を試す
-        const summary = await externalApi(finalUrl, 'GET', getTogglAuthDetails(), null); 
-        
-        
-        if (!summary || !summary.total_grand) {
-            dom.kpiResultsContainer.innerHTML = '<p>この期間に計測されたタスクはありません。</p>';
-            dom.reportTotalTime.textContent = '総計測時間: 00:00:00';
-            return;
-        }
+        // ✅ bodyなしのGETリクエストとして externalApi を呼び出す
+        // getTogglAuthDetails() で Basic認証ヘッダーを生成し、プロキシ経由で転送させる
+        const data = await externalApi(url, 'GET', getTogglAuthDetails(), null);
 
-        // --- ローカル集計ロジック (v3のレスポンス形式に合わせる) ---
-        const categoryTimes = {};
-        // total_grand はミリ秒単位
-        let totalDurationMs = summary.total_grand; 
-        
-        // v3のsummary/timeエンドポイントは、responsesの配列を返す
-        summary.data.forEach(group => {
-            // v3のレスポンス構造はv2と異なるが、time_entriesをグループ化した場合のタグは
-            // descriptionの代わりにtagというキーで時間を含むと仮定する
-            if (group.tag) { // タグがキーとなっていることを期待
-                const tag = group.tag; 
-                // durationは秒単位で返されることが多い。ここでは便宜上 total_duration_seconds を参照
-                const durationSeconds = group.total_duration_seconds; 
-                
-                // API v3のGETレスポンスの正確な構造が不明なため、フォールバックロジック
-                if (durationSeconds !== undefined) {
-                    const durationMs = durationSeconds * 1000;
-                    categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs;
-                }
-            }
-        });
-        
-        // ★★★ V3のレスポンス構造が複雑なため、集計ロジックの調整が必要 ★★★
-        // もし上記の集計がうまくいかない場合、summary.dataを直接確認してください。
-        
-        // --- 結果のレンダリング (V3対応) ---
-        // V3ではデータ構造が複雑なため、total_grandが正しくても集計できない場合があります。
-        // ここでは、total_grandを優先して表示します。
+        // 簡易表示（詳細集計は後回し）
+        dom.reportTotalTime.textContent = `総時間: ${formatTime(data.total_grand || 0)}`;
+        // 生のJSONレスポンスをそのまま表示することで、認証と通信が成功したかを確認する
+        dom.kpiResultsContainer.innerHTML = `<h3>Toggl API 生レスポンス</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
 
-        dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalDurationMs)}`;
-        
-        // カテゴリ集計が空の場合は、エラー表示
-        if (Object.keys(categoryTimes).length === 0) {
-            dom.kpiResultsContainer.innerHTML = `<p>タスクは見つかりましたが、カテゴリ（タグ）集計に失敗しました。<br>プロキシサーバーまたはToggl API v3のエラーの可能性が高いです。</p>`;
-            return;
-        }
-
-        let html = '<ul class="task-list">';
-        const sortedCategories = Object.keys(categoryTimes).sort((a, b) => categoryTimes[b] - categoryTimes[a]);
-
-        sortedCategories.forEach(cat => {
-            const ms = categoryTimes[cat];
-            const percentage = totalDurationMs > 0 ? ((ms / totalDurationMs) * 100).toFixed(1) : 0;
-            
-            html += `
-                <li>
-                    <span>${cat}:</span>
-                    <span>
-                        ${formatTime(ms)} 
-                        <span style="font-weight: bold; color: ${percentage > 30 ? '#007bff' : 'green'}; margin-left: 10px;">
-                            (${percentage}%)
-                        </span>
-                    </span>
-                </li>
-            `;
-        });
-
-        html += '</ul>';
-        dom.kpiResultsContainer.innerHTML = html;
-
-    } catch (e) {
+    } catch(e) {
+        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">レポートエラー: ${e.message}</p>`;
         console.error("KPIレポートエラー:", e);
-        dom.kpiResultsContainer.innerHTML = `<p style="color: red;">レポート集計中にエラーが発生しました: ${e.message}<br>（プロキシの問題の可能性が高いです）</p>`;
     }
 }
+
 
 /** KPIレポートの表示/非表示を切り替える */
 function toggleKpiReport() {
@@ -1095,7 +1040,7 @@ function toggleKpiReport() {
 
 
 // ==========================================
-// 8. 初期ロード
+// 7. 初期ロード
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', async () => {
