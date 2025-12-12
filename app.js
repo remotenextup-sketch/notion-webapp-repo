@@ -1,4 +1,4 @@
-// app.js 全文 (最終版4: KPIレポート 日付フォーマットのローカルコンポーネント抽出)
+// app.js 全文 (最終版5: KPIレポート 日付フォーマットを YYYY-MM-DD 形式に簡略化)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -922,7 +922,7 @@ function calculateReportDates(period) {
     }
     
     // -----------------------------------------------------------------
-    // ★★★ 最終修正箇所: ローカルタイムの日付コンポーネントを直接使用 ★★★
+    // ★★★ 最終修正箇所: ローカルタイムの日付コンポーネントを直接使用し、日付のみの形式に簡略化 ★★★
     // -----------------------------------------------------------------
     const formatYMD_Local = (date) => {
         const year = date.getFullYear();
@@ -935,10 +935,10 @@ function calculateReportDates(period) {
     const startDateYMD = formatYMD_Local(start);
     const endDateYMD = formatYMD_Local(end);
     
-    // Toggl Reports API v3 が要求する厳密な形式に文字列で結合 (UTC $00:00:00Z$ と $23:59:59Z$)
+    // Toggl Reports API v3 が YYYY-MM-DD 形式も許容することを期待して渡す
     return { 
-        start: startDateYMD + 'T00:00:00Z', 
-        end: endDateYMD + 'T23:59:59Z'
+        start: startDateYMD, 
+        end: endDateYMD
     };
 }
 
@@ -951,18 +951,18 @@ async function fetchKpiReport() {
     }
 
     const period = dom.reportPeriodSelect.value;
-    const { start, end } = calculateReportDates(period);
+    const { start, end } = calculateReportDates(period); // start, end は YYYY-MM-DD 形式
     const wid = settings.togglWorkspaceId;
 
     // YYYY-MM-DD の部分のみを抽出して表示
-    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start.substring(0, 10)} 〜 ${end.substring(0, 10)}<br>集計中...</p>`;
+    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
 
     try {
         // Reports API v3 のフルURLを直接構築
         const targetUrl = `https://api.track.toggl.com/reports/api/v3/workspace/${wid}/search/time_entries`; 
         
         const body = {
-            // start, end は calculateReportDates から取得したISO 8601形式の文字列 (修正済み)
+            // start, end は calculateReportDates から取得した YYYY-MM-DD 形式の文字列
             start_date: start, 
             end_date: end,
             // user_ids は削除済み
