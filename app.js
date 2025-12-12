@@ -900,45 +900,57 @@ function clearElement(element) {
 /** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
 // app.js (904行目付近)
 /** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
+// app.js (904行目付近)
+/** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
 function calculateReportDates(period) {
     const now = new Date();
-    const start = new Date(now);
-    const end = new Date(now);
-
-    const currentDay = start.getDay(); // 0=日曜, 1=月曜, ...
     
-    // 日本の週次 (月曜始まり) に対応
-    const diffToMonday = (currentDay === 0 ? 6 : currentDay - 1); 
-
-    if (period === 'current_week') {
-        start.setDate(now.getDate() - diffToMonday); // 今週の月曜日に設定
-    } else if (period === 'last_week') {
-        start.setDate(now.getDate() - diffToMonday - 7); 
-        end.setDate(start.getDate() + 6);
-    } else if (period === 'current_month') {
-        start.setDate(1); // 今月の1日に設定
-        end.setMonth(now.getMonth() + 1, 0); // 今月の最終日に設定
-    } else if (period === 'last_month') {
-        start.setMonth(now.getMonth() - 1, 1); // 先月の1日に設定
-        end.setMonth(now.getMonth(), 0); // 先月の最終日に設定
-    }
-    
-    // -----------------------------------------------------------------
-    // ★★★ 最終修正箇所: ローカルタイムの日付コンポーネントを直接使用し、UTCの境界時間を付与 ★★★
-    // -----------------------------------------------------------------
-    const formatYMD_Local = (date) => {
+    // YYYY-MM-DD の形式で日付をフォーマットするヘルパー関数
+    const formatYMD = (date) => {
         const year = date.getFullYear();
-        // 月は 0 から始まるため +1
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     };
 
-    const startDateYMD = formatYMD_Local(start);
-    const endDateYMD = formatYMD_Local(end);
+    let start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (period === 'current_week' || period === 'last_week') {
+        // --- 週次計算ロジック (月曜始まり) ---
+        const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // 日曜を7として扱う (月曜=1, 日曜=7)
+        const diffToMonday = dayOfWeek - 1; // 常に月曜までの差を計算
+        
+        // 今週の月曜日
+        start = new Date(now);
+        start.setDate(now.getDate() - diffToMonday);
+        
+        // 今週の日曜日
+        end = new Date(start);
+        end.setDate(start.getDate() + 6);
+
+        if (period === 'last_week') {
+            // 先週にするために、両方を7日前にシフト
+            start.setDate(start.getDate() - 7);
+            end.setDate(end.getDate() - 7);
+        }
+
+    } else if (period === 'current_month') {
+        // --- 今月 ---
+        start = new Date(now.getFullYear(), now.getMonth(), 1); // 今月の1日
+        end = new Date(now.getFullYear(), now.getMonth() + 1, 0); // 来月の0日目 (今月の最終日)
+
+    } else if (period === 'last_month') {
+        // --- 先月 ---
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1); // 先月の1日
+        end = new Date(now.getFullYear(), now.getMonth(), 0); // 今月の0日目 (先月の最終日)
+    }
     
-    // Toggl Reports API v3 が要求する厳密な形式に文字列で結合 (UTC 00:00:00Z と 23:59:59Z)
-    // start_dateは期間の開始日の0時0分0秒UTC、end_dateは期間の最終日の23時59分59秒UTC
+    // YYYY-MM-DD 形式の文字列を取得
+    const startDateYMD = formatYMD(start);
+    const endDateYMD = formatYMD(end);
+    
+    // Toggl Reports API v3 が要求する厳密な形式に文字列で結合
     return { 
         start: startDateYMD + 'T00:00:00Z', 
         end: endDateYMD + 'T23:59:59Z'
