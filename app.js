@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: KPIレポート 400エラー修正 + 計測時間累計統合 + UXタブ修正)
+// app.js 全文 (最終版: KPIレポート 日付フォーマット修正 + 計測時間累計統合 + UXタブ修正)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -910,30 +910,25 @@ function calculateReportDates(period) {
 
     if (period === 'current_week') {
         start.setDate(now.getDate() - diffToMonday); // 今週の月曜日に設定
-        end.setHours(23, 59, 59, 999); // 終了日は今日の終わりまで
     } else if (period === 'last_week') {
         start.setDate(now.getDate() - diffToMonday - 7); 
         end.setDate(start.getDate() + 6);
-        end.setHours(23, 59, 59, 999);
     } else if (period === 'current_month') {
         start.setDate(1); // 今月の1日に設定
-        end.setMonth(now.getMonth() + 1, 0); // 来月の0日目 = 今月の最終日
-        end.setHours(23, 59, 59, 999);
     } else if (period === 'last_month') {
         start.setMonth(now.getMonth() - 1, 1); // 先月の1日に設定
         end.setMonth(now.getMonth(), 0); // 今月の0日目 = 先月の最終日
-        end.setHours(23, 59, 59, 999);
     }
     
-    // 時間部分をリセット (開始日は00:00:00)
+    // 時間部分を正確に設定
     start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
     
-    // DateオブジェクトをYYYY-MM-DD形式に変換
-    const format = (date) => date.toISOString().split('T')[0];
+    // Date.prototype.toISOString() は常にUTCで返す (Togglが要求する形式)
 
     return { 
-        start: format(start),
-        end: format(end)
+        start: start.toISOString(),
+        end: end.toISOString()
     };
 }
 
@@ -949,17 +944,17 @@ async function fetchKpiReport() {
     const { start, end } = calculateReportDates(period);
     const wid = settings.togglWorkspaceId;
 
-    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
+    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start.substring(0, 10)} 〜 ${end.substring(0, 10)}<br>集計中...</p>`;
 
     try {
         // Reports API v3 のフルURLを直接構築
         const targetUrl = `https://api.track.toggl.com/reports/api/v3/workspace/${wid}/search/time_entries`; 
         
         const body = {
-            // レポートAPIはISO 8601形式を要求するため、時間を付加
-            start_date: start + 'T00:00:00Z', 
-            end_date: end + 'T23:59:59Z',
-            // user_ids は削除 (認証トークンに対応するユーザーのデータが返るため)
+            // start, end は calculateReportDates から取得したISO 8601形式の文字列 (修正済み)
+            start_date: start, 
+            end_date: end,
+            // user_ids は削除済み
         };
         
         // externalApiを直接呼び出す
