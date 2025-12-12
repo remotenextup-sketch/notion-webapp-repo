@@ -1,4 +1,4 @@
-// app.js 全文 (最終版5: KPIレポート 日付フォーマットを YYYY-MM-DD 形式に簡略化)
+// app.js 全文 (最終版8: KPIレポートを Toggl Reports API v2 に切り替え)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -270,6 +270,8 @@ async function externalApi(targetUrl, method, authDetails, body) {
     if (!res.ok) {
         const errorJson = await res.json().catch(() => ({ message: '不明なプロキシエラー' }));
         console.error('Proxy/API Error:', errorJson);
+        // ★ エラー詳細を通知に表示 (デバッグ用)
+        showNotification(`APIエラー (${res.status}): ${errorJson.message || 'サーバー側で問題が発生しました'}`, 5000); 
         throw new Error(`API Error (${res.status}): ${errorJson.message || 'サーバー側で問題が発生しました'}`);
     }
 
@@ -471,7 +473,8 @@ async function loadTasks() {
         const filterBody = {
             filter: {
                 and: [
-                    { property: props.status.name, status: { does_not_equal: '完了' } }
+                    // Statusプロパティが存在し、かつ「完了」ではないもの
+                    ...(props.status ? [{ property: props.status.name, status: { does_not_equal: '完了' } }] : [])
                 ]
             },
             sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }]
@@ -518,8 +521,8 @@ function renderTaskList(tasks, dbId, props) {
                 dbId: dbId,
                 title: titleProp,
                 properties: {
-                    category: task.properties[props.category.name]?.select,
-                    department: task.properties[props.department.name]?.multi_select,
+                    category: props.category ? task.properties[props.category.name]?.select : null,
+                    department: props.department ? task.properties[props.department.name]?.multi_select : null,
                 }
             };
             startTask(taskData);
@@ -581,7 +584,7 @@ async function renderNewTaskForm() {
                     <div style="display: flex; gap: 15px; flex-wrap: wrap;">
                         ${props.category.selectOptions.map(opt => 
                             `<label style="display: flex; align-items: center;">
-                                <input type="radio" name="newCatSelect" class="cat-radio" value="${opt.id}" style="margin-right: 5px;">
+                                <input type="radio" name="newCatSelect" class="cat-radio" value="${opt.id}" data-name="${opt.name}" style="margin-right: 5px;">
                                 ${opt.name}
                             </label>`
                         ).join('')}
@@ -598,7 +601,7 @@ async function renderNewTaskForm() {
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     ${props.department.options.map(opt => `
                         <label>
-                            <input type="checkbox" class="dept-checkbox" data-id="${opt.id}">
+                            <input type="checkbox" class="dept-checkbox" data-id="${opt.id}" data-name="${opt.name}">
                             ${opt.name}
                         </label>
                     `).join('')}
@@ -634,15 +637,17 @@ async function handleStartNewTask() {
         
         // 2. カテゴリ (Select)
         const selectedCatRadio = document.querySelector('input[name="newCatSelect"]:checked');
+        let newCatProp = null;
         if (props.category && selectedCatRadio) {
-            properties[props.category.name] = { select: { id: selectedCatRadio.value } };
+            newCatProp = { id: selectedCatRadio.value, name: selectedCatRadio.dataset.name };
+            properties[props.category.name] = { select: { id: newCatProp.id } };
         }
 
         // 3. 部門 (Multi-select)
         const selectedDepts = Array.from(document.querySelectorAll('.dept-checkbox:checked'))
-                             .map(cb => ({ id: cb.dataset.id }));
+                             .map(cb => ({ id: cb.dataset.id, name: cb.dataset.name }));
         if (props.department && selectedDepts.length > 0) {
-            properties[props.department.name] = { multi_select: selectedDepts };
+            properties[props.department.name] = { multi_select: selectedDepts.map(d => ({ id: d.id })) };
         }
 
         // 4. 担当者 (自動で自分を設定)
@@ -668,7 +673,10 @@ async function handleStartNewTask() {
             id: createRes.id,
             dbId: dbId,
             title: title,
-            properties: {} 
+            properties: {
+                category: newCatProp,
+                department: selectedDepts,
+            } 
         };
 
         showNotification(`新規タスク「${title}」を作成しました。計測を開始します。`); // 通知に変更
@@ -897,11 +905,7 @@ function clearElement(element) {
 // 7. KPIレポートロジック
 // ==========================================
 
-/** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
-// app.js (904行目付近)
-/** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
-// app.js (904行目付近)
-/** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
+/** Togglレポート用の開始日と終了日 (YYYY-MM-DD形式) を計算する (月曜始まり) */
 function calculateReportDates(period) {
     const now = new Date();
     
@@ -918,16 +922,19 @@ function calculateReportDates(period) {
 
     if (period === 'current_week' || period === 'last_week') {
         // --- 週次計算ロジック (月曜始まり) ---
-        const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // 日曜を7として扱う (月曜=1, 日曜=7)
-        const diffToMonday = dayOfWeek - 1; // 常に月曜までの差を計算
+        // Date.getDay()は日曜=0, 月曜=1, ..., 土曜=6
+        const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); 
+        const diffToMonday = dayOfWeek - 1; 
         
         // 今週の月曜日
         start = new Date(now);
         start.setDate(now.getDate() - diffToMonday);
+        start.setHours(0, 0, 0, 0); // 時間をリセットして計算を安定させる
         
         // 今週の日曜日
         end = new Date(start);
         end.setDate(start.getDate() + 6);
+        end.setHours(0, 0, 0, 0); // 時間をリセットして計算を安定させる
 
         if (period === 'last_week') {
             // 先週にするために、両方を7日前にシフト
@@ -950,73 +957,69 @@ function calculateReportDates(period) {
     const startDateYMD = formatYMD(start);
     const endDateYMD = formatYMD(end);
     
-    // Toggl Reports API v3 が要求する厳密な形式に文字列で結合
+    // Reports API v2 が要求する YYYY-MM-DD 形式のみを返す
     return { 
-        start: startDateYMD + 'T00:00:00Z', 
-        end: endDateYMD + 'T23:59:59Z'
+        start: startDateYMD, 
+        end: endDateYMD
     };
 }
 
+
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
-    if (!settings.togglApiToken || !settings.togglWorkspaceId || !settings.humanUserId) {
-        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定またはNotionユーザーIDが不完全です。設定画面を確認してください。</p>';
+    if (!settings.togglApiToken || !settings.togglWorkspaceId) {
+        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
         return;
     }
 
     const period = dom.reportPeriodSelect.value;
-    const { start, end } = calculateReportDates(period); // start, end は YYYY-MM-DD 形式
+    // start, end は YYYY-MM-DD 形式
+    const { start, end } = calculateReportDates(period); 
     const wid = settings.togglWorkspaceId;
 
-    // YYYY-MM-DD の部分のみを抽出して表示
     dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
 
     try {
-        // Reports API v3 のフルURLを直接構築
-        const targetUrl = `https://api.track.toggl.com/reports/api/v3/workspace/${wid}/search/time_entries`; 
+        // -----------------------------------------------------------------
+        // ★★★ 修正箇所: Reports API v2 のエンドポイントに変更 ★★★
+        // -----------------------------------------------------------------
+        const targetUrl = `https://api.track.toggl.com/reports/api/v2/summary`; 
         
+        // Reports API v2 のペイロード
         const body = {
-            // start, end は calculateReportDates から取得した YYYY-MM-DD 形式の文字列
-            start_date: start, 
-            end_date: end,
-            // user_ids は削除済み
+            since: start,  // YYYY-MM-DD 形式
+            until: end,    // YYYY-MM-DD 形式
+            workspace_id: parseInt(wid),
+            user_agent: 'Notion Toggl Timer WebApp',
+            grouping: 'tags', // タグでグループ化
+            subgrouping: 'time_entries'
         };
         
-        // externalApiを直接呼び出す
-        const allEntries = await externalApi(targetUrl, 'POST', getTogglAuthDetails(), body); 
+        // externalApiを直接呼び出す (v2はBasic認証を要求しますが、プロキシが処理することを想定)
+        const summary = await externalApi(targetUrl, 'GET', getTogglAuthDetails(), body); 
         
-        if (!allEntries || allEntries.length === 0) {
+        
+        if (!summary || !summary.data || summary.data.length === 0) {
             dom.kpiResultsContainer.innerHTML = '<p>この期間に計測されたタスクはありません。</p>';
             dom.reportTotalTime.textContent = '総計測時間: 00:00:00';
             return;
         }
 
-        // --- ローカル集計ロジック (以降は変更なし) ---
+        // --- ローカル集計ロジック (v2のレスポンス形式に合わせる) ---
         const categoryTimes = {};
-        let totalDurationMs = 0;
-        const knownCategories = ['思考', '作業', '教育']; // Notionで設定したカテゴリと一致させる必要あり
-
-        for (const entry of allEntries) {
-            // duration は秒単位で返される。計測中は -1
-            if (entry.duration <= 0) continue; 
-            
-            const durationMs = entry.duration * 1000;
-            totalDurationMs += durationMs;
-
-            let assignedCategory = 'その他';
-            
-            // タグからカテゴリを特定
-            if (entry.tags && entry.tags.length > 0) {
-                for (const tag of entry.tags) {
-                    if (knownCategories.includes(tag)) {
-                        assignedCategory = tag;
-                        break; 
-                    }
-                }
+        // total_grand はミリ秒単位
+        let totalDurationMs = summary.total_grand; 
+        
+        // v2のレスポンスは data の中にグループ化されて返される
+        summary.data.forEach(group => {
+            // grouping: 'tags' なので、tagが存在する group を抽出
+            if (group.title.tag) {
+                const tag = group.title.tag;
+                // time はミリ秒単位
+                const durationMs = group.time; 
+                categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs;
             }
-            
-            categoryTimes[assignedCategory] = (categoryTimes[assignedCategory] || 0) + durationMs;
-        }
+        });
 
         // --- 結果のレンダリング ---
         dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalDurationMs)}`;
@@ -1056,10 +1059,8 @@ async function fetchKpiReport() {
 function toggleKpiReport() {
     dom.kpiReportTab.classList.toggle('hidden');
     // レポートが表示されたら、自動で集計を実行する
-    if (!dom.kpiReportTab.classList.contains('hidden') && dom.kpiResultsContainer.innerHTML.includes('集計中...')) {
+    if (!dom.kpiReportTab.classList.contains('hidden')) {
         fetchKpiReport();
-    } else if (!dom.kpiReportTab.classList.contains('hidden')) {
-        fetchKpiReport(); // 初回集計ボタン押下なしでも表示時に実行
     }
 }
 
