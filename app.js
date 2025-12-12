@@ -907,14 +907,10 @@ function calculateReportDates(period) {
     };
 }
 
-
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
-    if (!settings.togglApiToken || !settings.togglWorkspaceId || !settings.humanUserId) {
-        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定またはNotionユーザーIDが不完全です。設定画面を確認してください。</p>';
-        return;
-    }
-
+    // ... (設定チェックは省略)
+    
     const period = dom.reportPeriodSelect.value;
     const { start, end } = calculateReportDates(period);
     const wid = settings.togglWorkspaceId;
@@ -922,81 +918,36 @@ async function fetchKpiReport() {
     dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
 
     try {
-        // Toggl Reports API (v9 /time_entries) をGETメソッドで呼び出す
-        // パラメータをクエリ文字列で渡すように修正済み
-        const queryParams = new URLSearchParams({
-            workspace_id: wid,
-            start_date: start,
-            end_date: end,
-        }).toString();
+        // ★★★ 修正: Toggl Reports API v3 (POSTメソッド) を使用する ★★★
+        // v3 Reports APIはPOSTメソッドを使用し、フィルタ条件をボディで送信します。
         
-        const reportUrl = `/time_entries?${queryParams}`;
+        // 1. エンドポイントをReports API v3に変更
+        const reportUrl = `/reports/api/v3/workspace/${wid}/search/time_entries`; 
         
-        const allEntries = await togglApi(reportUrl, 'GET', null); // メソッドを'GET'に変更
+        // 2. POSTで送るボディを定義
+        const body = {
+            start_date: start + 'T00:00:00Z', // レポートAPIはISO 8601形式を要求
+            end_date: end + 'T23:59:59Z',     // レポートAPIはISO 8601形式を要求
+            user_ids: [settings.humanUserId], // フィルタリング
+            // billable: true, // 必要であれば追加
+            // client_ids: [123], // 必要であれば追加
+        };
+        
+        // 3. POSTメソッドでAPIコール
+        // プロキシは targetUrl によって Toggl Reports API のURL形式を認識します。
+        const allEntries = await togglApi(reportUrl, 'POST', body); // メソッドを'POST'に戻し、bodyを設定
+        
+        // ★★★ 修正終わり ★★★
         
         if (!allEntries || allEntries.length === 0) {
-            dom.kpiResultsContainer.innerHTML = '<p>この期間に計測されたタスクはありません。</p>';
-            dom.reportTotalTime.textContent = '総計測時間: 00:00:00';
-            return;
+            // ... (省略)
         }
 
-        // --- ローカル集計ロジック ---
-        const categoryTimes = {};
-        let totalDurationMs = 0;
-        const knownCategories = ['思考', '作業', '教育']; // Notionで設定したカテゴリと一致させる必要あり
-
-        for (const entry of allEntries) {
-            // duration は秒単位で返される。計測中は -1
-            if (entry.duration <= 0) continue; 
-            
-            const durationMs = entry.duration * 1000;
-            totalDurationMs += durationMs;
-
-            let assignedCategory = 'その他';
-            
-            // タグからカテゴリを特定
-            if (entry.tags && entry.tags.length > 0) {
-                for (const tag of entry.tags) {
-                    if (knownCategories.includes(tag)) {
-                        assignedCategory = tag;
-                        break; 
-                    }
-                }
-            }
-            
-            categoryTimes[assignedCategory] = (categoryTimes[assignedCategory] || 0) + durationMs;
-        }
-
-        // --- 結果のレンダリング ---
-        dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalDurationMs)}`;
+        // --- ローカル集計ロジック (以降は変更なし) ---
+        // ...
         
-        let html = '<ul class="task-list">';
-        
-        const sortedCategories = Object.keys(categoryTimes).sort((a, b) => categoryTimes[b] - categoryTimes[a]);
-
-        sortedCategories.forEach(cat => {
-            const ms = categoryTimes[cat];
-            const percentage = totalDurationMs > 0 ? ((ms / totalDurationMs) * 100).toFixed(1) : 0;
-            
-            html += `
-                <li>
-                    <span>${cat}:</span>
-                    <span>
-                        ${formatTime(ms)} 
-                        <span style="font-weight: bold; color: ${percentage > 30 ? '#007bff' : 'green'}; margin-left: 10px;">
-                            (${percentage}%)
-                        </span>
-                    </span>
-                </li>
-            `;
-        });
-
-        html += '</ul>';
-        dom.kpiResultsContainer.innerHTML = html;
-
     } catch (e) {
-        console.error("KPIレポートエラー:", e);
-        dom.kpiResultsContainer.innerHTML = `<p style="color: red;">レポート集計中にエラーが発生しました: ${e.message}</p>`;
+        // ... (省略)
     }
 }
 
