@@ -70,7 +70,7 @@
             color: white;
         }
         
-        /* ★★★ タブデザイン修正: スタイルを追加 ★★★ */
+        /* ★★★ タブデザイン修正: 2ボタン構成に戻す ★★★ */
         .tab-container {
             display: flex;
             justify-content: center; /* 中央寄せ */
@@ -85,7 +85,7 @@
             margin: 0 -1px 0 0; /* ボタン間の隙間をなくす */
             border-radius: 0;
             flex-grow: 1; 
-            max-width: 33.3%; /* 3つのボタンで均等に分割 */
+            max-width: 50%; /* 2つのボタンで均等に分割 */
         }
         .tab-btn.active {
             background-color: #007bff;
@@ -95,9 +95,6 @@
         }
         #startExistingTask {
             border-radius: 4px 0 0 4px;
-        }
-        #showKpiReport { /* 中央のボタン */
-            border-radius: 0;
         }
         #startNewTask {
             border-radius: 0 4px 4px 0;
@@ -139,6 +136,18 @@
             font-weight: bold;
             margin: 10px 0;
         }
+        
+        /* レポート表示/非表示トグル用のスタイル */
+        .toggle-btn {
+            width: 100%;
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e9ecef;
+            color: #495057;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -178,7 +187,7 @@
 
                 <div class="tab-container">
                     <button id="startExistingTask" class="tab-btn active" data-target="existing">既存タスク</button>
-                    <button id="showKpiReport" class="tab-btn" data-target="kpi">KPIレポート</button> <button id="startNewTask" class="tab-btn" data-target="new">新規タスク開始</button>
+                    <button id="startNewTask" class="tab-btn" data-target="new">新規タスク開始</button>
                 </div>
 
                 <div id="existingTaskTab" style="display: flex; flex-direction: column; flex-grow: 1;">
@@ -206,7 +215,9 @@
                     </form>
                 </div>
                 
-                <div id="kpiReportTab" class="hidden" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <button id="toggleKpiReportBtn" class="toggle-btn">KPIレポートを表示/非表示</button>
+                
+                <div id="kpiReportTab" class="hidden" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-top: 15px;">
                     <h2>カテゴリ別 工数レポート</h2>
                     <div style="margin-bottom: 15px; display: flex; align-items: center;">
                         <label for="reportPeriodSelect">期間:</label>
