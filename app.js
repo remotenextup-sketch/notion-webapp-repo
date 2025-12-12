@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: KPIレポートのURL修正済み + UXタブ分離修正)
+// app.js 全文 (最終版: KPIレポート 400エラー修正 + 計測時間累計統合 + UXタブ修正)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -432,11 +432,17 @@ async function getDbProperties(dbId) {
                 case 'people':
                     if (name.includes('担当者')) propertyMap.assignee = { name: name, type: 'people' }; break;
                 case 'rich_text':
-                    if (name.includes('ログ') || name.includes('メモ')) propertyMap.logRichText = { name: name, type: 'rich_text' }; break;
+                    if (name.includes('ログ') || name.includes('メモ') || name.includes('思考ログ')) propertyMap.logRichText = { name: name, type: 'rich_text' }; break;
                 case 'relation':
                     if (name.includes('ログ') || name.includes('メモ')) propertyMap.logRelation = { name: name, type: 'relation', dbId: prop.relation.database_id }; break;
                 case 'status':
                     if (name.includes('ステータス')) propertyMap.status = { name: name, type: 'select', selectOptions: prop.status.options }; break;
+                // ★★★ 計測時間プロパティの追加 ★★★
+                case 'number':
+                    if (name.includes('計測時間') || name.includes('作業時間')) propertyMap.durationNumber = { name: name, type: 'number' }; break;
+                // ★★★ 完了日プロパティの追加 ★★★
+                case 'date':
+                    if (name.includes('完了日')) propertyMap.completionDate = { name: name, type: 'date' }; break;
             }
         }
 
@@ -540,7 +546,7 @@ function switchTab(event) {
     dom.startNewTask.classList.remove('active');
     event.target.classList.add('active');
 
-    // ★★★ 修正箇所: どちらか一方のみを表示するように変更 ★★★
+    // UX修正: どちらか一方のみを表示するように変更
     if (target === 'existing') {
         dom.existingTaskTab.classList.remove('hidden');
         dom.newTaskTab.classList.add('hidden'); 
@@ -745,7 +751,9 @@ async function stopTask(isComplete) {
 
     const task = settings.currentRunningTask;
     const logText = dom.thinkingLogInput.value.trim();
-    const duration = Date.now() - settings.startTime; // 経過時間（ミリ秒）
+    const durationMs = Date.now() - settings.startTime; // 経過時間（ミリ秒）
+    const durationSeconds = Math.floor(durationMs / 1000);
+    const durationMinutes = Math.round(durationSeconds / 60);
 
     try {
         // 1. Toggl計測停止
@@ -755,26 +763,53 @@ async function stopTask(isComplete) {
         const props = await getDbProperties(task.dbId);
         const patchBody = { properties: {} };
         
+        // Notionのページ情報を取得 (計測時間累計のため)
+        let notionPage = null;
+        if (props.durationNumber) {
+             notionPage = await notionApi(`/pages/${task.id}`, 'GET');
+        }
+
+        // --- 計測時間の累計処理 ---
+        if (props.durationNumber) {
+            // 現在の値を minutes 単位で取得 (提供されたコードロジックを使用)
+            const curMinutes = notionPage?.properties[props.durationNumber.name]?.number || 0;
+            const totalMinutes = curMinutes + durationMinutes;
+
+            patchBody.properties[props.durationNumber.name] = { 
+                number: totalMinutes 
+            };
+        }
+        
         // ステータス更新
-        if (props.status && isComplete) {
-            const statusOption = props.status.selectOptions.find(o => o.name === '完了');
+        if (props.status) {
+            let statusName = isComplete ? '完了' : '保留'; // 完了でない場合は「保留」など適切なステータスに
+            const statusOption = props.status.selectOptions.find(o => o.name === statusName);
+            
             if (statusOption) {
                 patchBody.properties[props.status.name] = { status: { id: statusOption.id } };
             }
         }
+
+        // 完了日更新 (isCompleteの場合のみ)
+        if (props.completionDate && isComplete) {
+            patchBody.properties[props.completionDate.name] = { 
+                date: { start: new Date().toISOString().split('T')[0] } 
+            };
+        }
         
         // ログ更新
         if (logText && props.logRichText) {
-            patchBody.properties[props.logRichText.name] = {
-                rich_text: [{ type: "text", text: { content: logText } }]
+            // 既存ログの取得
+            const curLog = notionPage?.properties[props.logRichText.name]?.rich_text?.[0]?.plain_text || "";
+            const dateStamp = `[${new Date().toLocaleDateString()}]`;
+            const newLog = curLog ? `${curLog}\n\n${dateStamp}\n${logText}` : `${dateStamp}\n${logText}`;
+            
+            patchBody.properties[props.logRichText.name] = { 
+                rich_text: [{ text: { content: newLog } }] 
             };
-        } else if (logText && props.logRelation) {
-            // Relationプロパティの場合、新規ログページを作成して関連付けるロジックが必要（ここではスキップ）
-            console.warn("Relationログプロパティへの書き込みは未実装です。");
-        }
+        } 
 
-        // ★★★ 注記：ここに計測時間（累計または単発）をNotionに書き込むロジックを将来追加する ★★★
-        
+
         // 実際にNotionに PATCH リクエストを送信
         if (Object.keys(patchBody.properties).length > 0) {
             await notionApi(`/pages/${task.id}`, 'PATCH', patchBody);
@@ -790,7 +825,7 @@ async function stopTask(isComplete) {
         loadTasks();
         
         // 通知に変更
-        showNotification(`タスク「${task.title}」を${isComplete ? '完了' : '停止'}しました。計測時間: ${formatTime(duration)}`);
+        showNotification(`タスク「${task.title}」を${isComplete ? '完了' : '停止'}しました。計測時間: ${formatTime(durationMs)}`);
         
     } catch (e) {
         alert(`タスクの停止/完了処理中にエラーが発生しました: ${e.message}`); // 処理中断のためalertを保持
@@ -924,7 +959,7 @@ async function fetchKpiReport() {
             // レポートAPIはISO 8601形式を要求するため、時間を付加
             start_date: start + 'T00:00:00Z', 
             end_date: end + 'T23:59:59Z',
-            user_ids: [settings.humanUserId],
+            // user_ids は削除 (認証トークンに対応するユーザーのデータが返るため)
         };
         
         // externalApiを直接呼び出す
@@ -1001,8 +1036,10 @@ async function fetchKpiReport() {
 function toggleKpiReport() {
     dom.kpiReportTab.classList.toggle('hidden');
     // レポートが表示されたら、自動で集計を実行する
-    if (!dom.kpiReportTab.classList.contains('hidden') && dom.kpiResultsContainer.innerHTML.includes('集計ボタン')) {
+    if (!dom.kpiReportTab.classList.contains('hidden') && dom.kpiResultsContainer.innerHTML.includes('集計中...')) {
         fetchKpiReport();
+    } else if (!dom.kpiReportTab.classList.contains('hidden')) {
+        fetchKpiReport(); // 初回集計ボタン押下なしでも表示時に実行
     }
 }
 
