@@ -898,6 +898,8 @@ function clearElement(element) {
 // ==========================================
 
 /** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
+// app.js (904行目付近)
+/** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
 function calculateReportDates(period) {
     const now = new Date();
     const start = new Date(now);
@@ -922,7 +924,7 @@ function calculateReportDates(period) {
     }
     
     // -----------------------------------------------------------------
-    // ★★★ 最終修正箇所: ローカルタイムの日付コンポーネントを直接使用し、日付のみの形式に簡略化 ★★★
+    // ★★★ 最終修正箇所: ローカルタイムの日付コンポーネントを直接使用し、UTCの境界時間を付与 ★★★
     // -----------------------------------------------------------------
     const formatYMD_Local = (date) => {
         const year = date.getFullYear();
@@ -935,13 +937,13 @@ function calculateReportDates(period) {
     const startDateYMD = formatYMD_Local(start);
     const endDateYMD = formatYMD_Local(end);
     
-    // Toggl Reports API v3 が YYYY-MM-DD 形式も許容することを期待して渡す
+    // Toggl Reports API v3 が要求する厳密な形式に文字列で結合 (UTC 00:00:00Z と 23:59:59Z)
+    // start_dateは期間の開始日の0時0分0秒UTC、end_dateは期間の最終日の23時59分59秒UTC
     return { 
-        start: startDateYMD, 
-        end: endDateYMD
+        start: startDateYMD + 'T00:00:00Z', 
+        end: endDateYMD + 'T23:59:59Z'
     };
 }
-
 
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
