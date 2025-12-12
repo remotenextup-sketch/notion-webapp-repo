@@ -1,5 +1,3 @@
-// app.js 全文 (最終版17: 全Toggl機能のプロキシ回避適用)
-
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
