@@ -1,23 +1,4 @@
-承知いたしました！度重なる修正と $405$ エラーの原因究明、大変お疲れ様でした。
 
-KPIレポートの問題（$405$ エラー）を根本的に解決するため、
-
-1.  **KPIレポート (Reports API v3)** のために `externalApi` を直接使用。
-2.  **タイムログ (Track API v9)** のために `externalApi` を直接使用。
-3.  **URLに不要な `/api/v9` を強制的に付加していた `togglApi` 関数を完全に削除**。
-
-この重要な変更を全て含む、**最新版の `app.js` 全文**を提供します。このコードで、KPIレポート機能が正常に動作するはずです。
-
------
-
-## 💾 最終修正済み `app.js` 全文
-
-以下のコードを、お使いの環境の `app.js` に**完全に上書き**してデプロイしてください。
-
-```javascript
-// app.js 全文 (最終版: Toggl API呼び出しを externalApi に統一し、405エラーを解消)
-
-// ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
 
