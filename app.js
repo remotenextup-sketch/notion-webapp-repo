@@ -1,10 +1,8 @@
-// app.js 全文 (最終版16: KPIレポートのプロキシ回避と直接Toggl APIコール適用)
+// app.js 全文 (最終版17: 全Toggl機能のプロキシ回避適用)
 
 // ★★★ 定数とグローバル設定 ★★★
-// NOTE: PROXY_URL は Notion用として保持
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
-// NOTE: Toggl Reports APIは使用しないため、Reports URL定義は不要になりました
 
 const settings = {
     notionToken: '',
@@ -252,19 +250,13 @@ function hideSettings() {
 // 2. API基盤 (Notion & Toggl)
 // ==========================================
 
-/** 外部APIへのリクエストをプロキシ経由で送信する */
+/** 外部APIへのリクエストをプロキシ経由で送信する (Notion専用) */
 async function externalApi(targetUrl, method, authDetails, body) { 
     
-    // GETリクエストにbodyが含まれていたら警告し、無視する
-    if (method === 'GET' && body !== null) {
-        console.warn('警告: externalApiがGETリクエストでbodyを受け取りました。Toggl Reports APIの仕様により無視されます。');
-        body = null;
-    }
-
-    // authDetailsのtokenKey, tokenValueをプロキシに送る
     const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
+        // Notion認証情報
         tokenKey: authDetails.tokenKey,      
         tokenValue: authDetails.tokenValue,  
         notionVersion: authDetails.notionVersion, 
@@ -288,7 +280,7 @@ async function externalApi(targetUrl, method, authDetails, body) {
     return res.status === 204 ? null : res.json();
 }
 
-// --- Notion API ---
+// --- Notion API (プロキシ経由) ---
 
 /** Notion APIへのリクエストを処理する */
 async function notionApi(endpoint, method = 'GET', body = null) {
@@ -315,28 +307,20 @@ async function notionApi(endpoint, method = 'GET', body = null) {
     }
 }
 
-// --- Toggl API ---
+// --- Toggl API (直接コール) ---
 
-/** Toggl API用の認証詳細を生成する */
-function getTogglAuthDetails() {
-    // KPIレポートはプロキシ回避のため、この関数は Track API v9 (Notion/Toggl Start/Stop) 用にトークンを渡すシンプルな形式に戻す
-    return {
-        tokenKey: 'togglApiToken',
-        tokenValue: settings.togglApiToken,
-        notionVersion: ''
-    };
-}
+// getTogglAuthDetails は不要になりました (認証は直接ヘッダーに埋め込まれるため)
 
 
 /** Togglで新しい計測を開始する (Track API v9) */
 async function startToggl(title, tags) {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-        throw new Error('Toggl設定（トークンとワークスペースID）が不完全です。');
+        throw new Error('Toggl設定不完全');
     }
     
     const wid = settings.togglWorkspaceId;
-    const targetUrl = `${TOGGL_V9_BASE_URL}/time_entries`;
-
+    const url = `${TOGGL_V9_BASE_URL}/time_entries`;
+    
     const body = {
         workspace_id: parseInt(wid),
         description: title,
@@ -345,23 +329,44 @@ async function startToggl(title, tags) {
         duration: -1, // -1は計測中を意味します
         tags: tags
     };
-    // Track API v9 (POST) は認証が異なるため、従来のtokenKeyで送る
-    const authDetails = getTogglAuthDetails();
-    return await externalApi(targetUrl, 'POST', authDetails, body);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            // クライアントで Basic 認証ヘッダーを生成
+            'Authorization': `Basic ${btoa(`${settings.togglApiToken}:api_token`)}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) throw new Error(`Toggl ${response.status}`);
+    return await response.json();
 }
+
 
 /** Togglで計測を停止する (Track API v9) */
 async function stopToggl(entryId) {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-        throw new Error('Toggl設定（トークンとワークスペースID）が不完全です。');
+        throw new Error('Toggl設定不完全');
     }
     
     const wid = settings.togglWorkspaceId;
-    const targetUrl = `${TOGGL_V9_BASE_URL}/workspaces/${wid}/time_entries/${entryId}/stop`;
+    const url = `${TOGGL_V9_BASE_URL}/workspaces/${wid}/time_entries/${entryId}/stop`;
     
-    // Track API v9 (PATCH) は認証が異なるため、従来のtokenKeyで送る
-    const authDetails = getTogglAuthDetails();
-    return await externalApi(targetUrl, 'PATCH', authDetails, null);
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            // クライアントで Basic 認証ヘッダーを生成
+            'Authorization': `Basic ${btoa(`${settings.togglApiToken}:api_token`)}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    // Toggl V9の停止APIは200 OKまたは204 No Contentを返す場合がある
+    if (!response.ok) throw new Error(`Toggl ${response.status}`);
+    // Bodyがない可能性もあるため、ここではレスポンス成功のみを返す
+    return response.ok;
 }
 
 
@@ -723,8 +728,7 @@ async function startTask(task) {
         if (cat) tags.push(cat);
         depts.forEach(d => tags.push(d));
 
-        // 1. Toggl計測開始
-        // ここでタスクIDもTogglに記録するロジックを将来追加可能
+        // 1. Toggl計測開始 (直接コール)
         const togglEntry = await startToggl(task.title, tags);
         task.togglEntryId = togglEntry.id;
         
@@ -778,7 +782,7 @@ async function stopTask(isComplete) {
     const durationMinutes = Math.round(durationSeconds / 60);
 
     try {
-        // 1. Toggl計測停止
+        // 1. Toggl計測停止 (直接コール)
         await stopToggl(task.togglEntryId);
         
         // 2. Notionページを更新
