@@ -1,11 +1,10 @@
-// app.js 全文 (最終版13: KPIレポートを Toggl Reports API v2 の POST + JSON Body 形式に修正)
+// app.js 全文 (最終版16: KPIレポートのプロキシ回避と直接Toggl APIコール適用)
 
 // ★★★ 定数とグローバル設定 ★★★
+// NOTE: PROXY_URL は Notion用として保持
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
-// Toggl Reports API v2 のベースURL
-const TOGGL_REPORTS_V2_BASE_URL = 'https://api.track.toggl.com/reports/api/v2';
-
+// NOTE: Toggl Reports APIは使用しないため、Reports URL定義は不要になりました
 
 const settings = {
     notionToken: '',
@@ -266,8 +265,8 @@ async function externalApi(targetUrl, method, authDetails, body) {
     const proxyPayload = {
         targetUrl: targetUrl,
         method: method,
-        tokenKey: authDetails.tokenKey,      // 'notionToken', 'togglApiToken', or 'Authorization' (for custom header)
-        tokenValue: authDetails.tokenValue,  // トークン値 or 'Basic <Base64>'
+        tokenKey: authDetails.tokenKey,      
+        tokenValue: authDetails.tokenValue,  
         notionVersion: authDetails.notionVersion, 
         body: body 
     };
@@ -320,12 +319,10 @@ async function notionApi(endpoint, method = 'GET', body = null) {
 
 /** Toggl API用の認証詳細を生成する */
 function getTogglAuthDetails() {
-    // ★★★ Reports APIに必要な Basic 認証ヘッダーをクライアント側で生成する回避策 ★★★
-    // Basic認証: base64(API_TOKEN:api_token)
-    const auth = btoa(`${settings.togglApiToken}:api_token`);
+    // KPIレポートはプロキシ回避のため、この関数は Track API v9 (Notion/Toggl Start/Stop) 用にトークンを渡すシンプルな形式に戻す
     return {
-        tokenKey: 'Authorization', // プロキシにAuthorizationヘッダーとして転送を要求
-        tokenValue: `Basic ${auth}`,
+        tokenKey: 'togglApiToken',
+        tokenValue: settings.togglApiToken,
         notionVersion: ''
     };
 }
@@ -349,11 +346,7 @@ async function startToggl(title, tags) {
         tags: tags
     };
     // Track API v9 (POST) は認証が異なるため、従来のtokenKeyで送る
-    const authDetails = {
-        tokenKey: 'togglApiToken',
-        tokenValue: settings.togglApiToken,
-        notionVersion: '' 
-    };
+    const authDetails = getTogglAuthDetails();
     return await externalApi(targetUrl, 'POST', authDetails, body);
 }
 
@@ -367,11 +360,7 @@ async function stopToggl(entryId) {
     const targetUrl = `${TOGGL_V9_BASE_URL}/workspaces/${wid}/time_entries/${entryId}/stop`;
     
     // Track API v9 (PATCH) は認証が異なるため、従来のtokenKeyで送る
-    const authDetails = {
-        tokenKey: 'togglApiToken',
-        tokenValue: settings.togglApiToken,
-        notionVersion: '' 
-    };
+    const authDetails = getTogglAuthDetails();
     return await externalApi(targetUrl, 'PATCH', authDetails, null);
 }
 
@@ -982,66 +971,75 @@ function calculateReportDates(period) {
     const startDateYMD = formatYMD(start);
     const endDateYMD = formatYMD(end);
     
-    // Reports API v2 が要求する YYYY-MM-DD 形式のみを返す
+    // YYYY-MM-DD 形式のみを返す
     return { 
         start: startDateYMD, 
         end: endDateYMD
     };
 }
 
+
+/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">Toggl設定不完全</p>';
+        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
         return;
     }
     
     const { start, end } = calculateReportDates(dom.reportPeriodSelect.value);
-    dom.kpiResultsContainer.innerHTML = `集計中: ${start}〜${end}...`;
-    
-    try {
-        // ★★★ UNIX timestamp（秒）で変換 ★★★
-        const { start, end } = calculateReportDates(dom.reportPeriodSelect.value);
-        console.log('📅 raw dates:', start, end);  // "2025-12-08" "2025-12-14"
+    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v9 Direct Call)...</p>`;
         
+    try {
+        // ★★★ プロキシ完全回避：直接Toggl APIコール ★★★
+        // since/untilをUNIX秒 (Time Entries v9の仕様) に変換し、整数として渡す
         const since = Math.floor(new Date(start + 'T00:00:00Z') / 1000);
         const until = Math.floor(new Date(end + 'T23:59:59Z') / 1000);
-        console.log('🔢 since type:', typeof since, since);  // number 1733961600
-        console.log('🔢 until type:', typeof until, until);  // number 1734547199
-        console.log('🌐 full URL:', `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`);
         
         const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`;
         
-        // ★★★ startTogglと同じ認証（動作確定） ★★★
-        const authDetails = {
-            tokenKey: 'togglApiToken',
-            tokenValue: settings.togglApiToken,
-            notionVersion: ''
-        };
+        console.log('🔢 Direct API:', url);
         
-        const entries = await externalApi(url, 'GET', authDetails, null);
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                // クライアント側で Basic 認証ヘッダーを生成
+                'Authorization': `Basic ${btoa(`${settings.togglApiToken}:api_token`)}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            // Toggl APIからのエラーレスポンスを表示
+            throw new Error(`Toggl API ${response.status}: ${await response.text()}`);
+        }
+        
+        const entries = await response.json();
         
         // ★★★ クライアント集計 ★★★
         const categoryTimes = {};
         let totalMs = 0;
         
         entries.forEach(entry => {
-            const duration = Math.abs(entry.duration || 0);  // 秒単位（負値は現在進行中）
+            // durationが-1の場合は計測中なのでスキップ。絶対値を取って秒単位にする
+            const durationSeconds = Math.abs(entry.duration || 0); 
+            const durationMs = durationSeconds * 1000;
             const tags = entry.tags || [];
-            totalMs += duration * 1000;
+            totalMs += durationMs;
             
             tags.forEach(tag => {
-                categoryTimes[tag] = (categoryTimes[tag] || 0) + duration * 1000;
+                categoryTimes[tag] = (categoryTimes[tag] || 0) + durationMs;
             });
         });
         
-        dom.reportTotalTime.textContent = `総時間: ${formatTime(totalMs)} (${entries.length}件)`;
+        // 表示
+        dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalMs)} (${entries.length}件)`;
         
         if (Object.keys(categoryTimes).length === 0) {
-            dom.kpiResultsContainer.innerHTML = '<p>タグなしタスクのみ</p>';
+            dom.kpiResultsContainer.innerHTML = '<p>この期間のタスクはすべてタグなしです。</p>';
             return;
         }
         
-        // 時間降順で表示
+        // カテゴリ一覧（時間降順）
         let html = '<ul class="task-list">';
         Object.entries(categoryTimes)
             .sort(([,a], [,b]) => b - a)
@@ -1052,9 +1050,11 @@ async function fetchKpiReport() {
         html += '</ul>';
         dom.kpiResultsContainer.innerHTML = html;
         
+        showNotification('✅ KPIレポート取得成功！');
+            
     } catch(e) {
         dom.kpiResultsContainer.innerHTML = `<p style="color:red;">${e.message}</p>`;
-        console.error(e);
+        console.error('KPI Error:', e);
     }
 }
 
