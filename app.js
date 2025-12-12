@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: 通知機能とUX改善を適用)
+// app.js 全文 (最終版: 通知機能とUX改善、ラジオボタンを適用)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -566,17 +566,19 @@ async function renderNewTaskForm() {
     try {
         const props = await getDbProperties(dbId);
         
-        // カテゴリ (Select) のレンダリング
+        // カテゴリ (Select) のレンダリング -> ★★★ ラジオボタンに変更 ★★★
         if (props.category) {
             dom.newCatContainer.innerHTML = `
                 <div class="form-group">
-                    <label for="newCatSelect">${props.category.name}:</label>
-                    <select id="newCatSelect" class="input-field">
-                        <option value="">(未選択)</option>
+                    <label>${props.category.name}:</label>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
                         ${props.category.selectOptions.map(opt => 
-                            `<option value="${opt.id}">${opt.name}</option>`
+                            `<label style="display: flex; align-items: center;">
+                                <input type="radio" name="newCatSelect" class="cat-radio" value="${opt.id}" style="margin-right: 5px;">
+                                ${opt.name}
+                            </label>`
                         ).join('')}
-                    </select>
+                    </div>
                 </div>
             `;
         } else { clearElement(dom.newCatContainer); }
@@ -623,10 +625,10 @@ async function handleStartNewTask() {
             },
         };
         
-        // 2. カテゴリ (Select)
-        const catSelect = document.getElementById('newCatSelect');
-        if (props.category && catSelect && catSelect.value) {
-            properties[props.category.name] = { select: { id: catSelect.value } };
+        // 2. カテゴリ (Select) -> ★★★ ラジオボタンから値を取得するように修正 ★★★
+        const selectedCatRadio = document.querySelector('input[name="newCatSelect"]:checked');
+        if (props.category && selectedCatRadio) {
+            properties[props.category.name] = { select: { id: selectedCatRadio.value } };
         }
 
         // 3. 部門 (Multi-select)
