@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: KPIレポート 日付フォーマット修正 + 計測時間累計統合 + UXタブ修正)
+// app.js 全文 (最終版3: KPIレポート 日付フォーマット最終修正 + 計測時間累計統合 + UXタブ修正)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -915,20 +915,22 @@ function calculateReportDates(period) {
         end.setDate(start.getDate() + 6);
     } else if (period === 'current_month') {
         start.setDate(1); // 今月の1日に設定
+        end.setMonth(now.getMonth() + 1, 0); // 今月の最終日に設定
     } else if (period === 'last_month') {
         start.setMonth(now.getMonth() - 1, 1); // 先月の1日に設定
-        end.setMonth(now.getMonth(), 0); // 今月の0日目 = 先月の最終日
+        end.setMonth(now.getMonth(), 0); // 先月の最終日に設定
     }
     
-    // 時間部分を正確に設定
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-    
-    // Date.prototype.toISOString() は常にUTCで返す (Togglが要求する形式)
+    // toISOString()でUTCに変換されるため、日付部分 (YYYY-MM-DD) のみを取得
+    const formatYMD = (date) => date.toISOString().split('T')[0];
 
+    const startDateYMD = formatYMD(start);
+    const endDateYMD = formatYMD(end);
+    
+    // Toggl Reports API v3 が要求する厳密な形式に文字列で結合 (UTC $00:00:00Z$ と $23:59:59Z$)
     return { 
-        start: start.toISOString(),
-        end: end.toISOString()
+        start: startDateYMD + 'T00:00:00Z', 
+        end: endDateYMD + 'T23:59:59Z'
     };
 }
 
@@ -944,6 +946,7 @@ async function fetchKpiReport() {
     const { start, end } = calculateReportDates(period);
     const wid = settings.togglWorkspaceId;
 
+    // YYYY-MM-DD の部分のみを抽出して表示
     dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start.substring(0, 10)} 〜 ${end.substring(0, 10)}<br>集計中...</p>`;
 
     try {
