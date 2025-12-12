@@ -993,47 +993,68 @@ function calculateReportDates(period) {
 /** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
 async function fetchKpiReport() {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">エラー: Toggl設定（トークンまたはワークスペースID）が不完全です。設定画面を確認してください。</p>';
+        dom.kpiResultsContainer.innerHTML = '<p style="color: red;">Toggl設定不完全</p>';
         return;
     }
     
-    const period = dom.reportPeriodSelect.value;
-    // start, end は YYYY-MM-DD 形式
-    const { start, end } = calculateReportDates(period);
-    const wid = settings.togglWorkspaceId;
+    const { start, end } = calculateReportDates(dom.reportPeriodSelect.value);
+    dom.kpiResultsContainer.innerHTML = `集計中: ${start}〜${end}...`;
     
-    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中 (v2 POST)...</p>`;
-        
     try {
-        // ★★★ 修正箇所: Reports v2 Summary は POST + JSON body を使用する ★★★
-        const body = {
-            since: start,            // YYYY-MM-DD 形式
-            until: end,              // YYYY-MM-DD 形式
-            workspace_id: wid,
-            grouping: 'tags',
-            user_agent: 'NotionTogglTimer' // v2では必須
+        // ★★★ Track API v9: シンプルなGET（既存認証で動作確定）★★★
+        const since = `${start}T00:00:00Z`;
+        const until = `${end}T23:59:59Z`;
+        
+        const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`;
+        
+        // ★★★ startTogglと同じ認証（動作済み）★★★
+        const authDetails = {
+            tokenKey: 'togglApiToken',
+            tokenValue: settings.togglApiToken,
+            notionVersion: ''
         };
         
-        const url = `${TOGGL_REPORTS_V2_BASE_URL}/summary`;
+        const entries = await externalApi(url, 'GET', authDetails, null);
         
-        // POSTリクエストとして externalApi を呼び出す
-        const data = await externalApi(
-            url, 
-            'POST', 
-            getTogglAuthDetails(), 
-            body // 👈 JSON bodyでPOST
-        );
-
-        // 簡易表示（詳細集計は後回し）
-        dom.reportTotalTime.textContent = `総時間: ${formatTime(data.total_grand || 0)}`;
-        // 生のJSONレスポンスをそのまま表示することで、認証と通信が成功したかを確認する
-        dom.kpiResultsContainer.innerHTML = `<h3>Toggl API 生レスポンス</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
-
+        // ★★★ クライアント側でタグ集計 ★★★
+        const categoryTimes = {};
+        let totalMs = 0;
+        
+        entries.forEach(entry => {
+            const duration = entry.duration || 0;  // 秒単位
+            const tags = entry.tags || [];
+            totalMs += duration * 1000;
+            
+            tags.forEach(tag => {
+                categoryTimes[tag] = (categoryTimes[tag] || 0) + duration * 1000;
+            });
+        });
+        
+        // 表示
+        dom.reportTotalTime.textContent = `総時間: ${formatTime(totalMs)}`;
+        
+        if (Object.keys(categoryTimes).length === 0) {
+            dom.kpiResultsContainer.innerHTML = '<p>この期間のタスクなし</p>';
+            return;
+        }
+        
+        // カテゴリ一覧（時間降順）
+        let html = '<ul class="task-list">';
+        Object.entries(categoryTimes)
+            .sort(([,a], [,b]) => b - a)
+            .forEach(([tag, ms]) => {
+                const pct = totalMs ? ((ms / totalMs) * 100).toFixed(1) : 0;
+                html += `<li>${tag}: ${formatTime(ms)} <strong>(${pct}%)</strong></li>`;
+            });
+        html += '</ul>';
+        dom.kpiResultsContainer.innerHTML = html;
+        
     } catch(e) {
-        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">レポートエラー: ${e.message}</p>`;
-        console.error("KPIレポートエラー:", e);
+        dom.kpiResultsContainer.innerHTML = `<p style="color:red;">${e.message}</p>`;
+        console.error(e);
     }
 }
+
 
 
 /** KPIレポートの表示/非表示を切り替える */
