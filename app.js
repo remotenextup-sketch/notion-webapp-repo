@@ -1,3 +1,49 @@
+// ==========================================
+// 🔒 SAFETY PATCH: Toggl直叩き完全防止 & デバッグ可視化
+// ==========================================
+
+// fetch をラップして Toggl直叩きを即検知・即停止
+(() => {
+    const originalFetch = window.fetch;
+
+    window.fetch = function (input, init = {}) {
+        try {
+            const url =
+                typeof input === 'string'
+                    ? input
+                    : input instanceof Request
+                    ? input.url
+                    : '';
+
+            // ❌ Toggl API をブラウザから直接叩こうとしたら即止める
+            if (url.includes('api.track.toggl.com')) {
+                console.error('🚨 BLOCKED: Direct Toggl API call detected', {
+                    url,
+                    stack: new Error().stack
+                });
+
+                throw new Error(
+                    'Direct Toggl API call blocked. Use externalTogglApi() via proxy.'
+                );
+            }
+
+            // ✅ proxy 経由通信はログだけ出す（確認用）
+            if (url.includes('/api/proxy')) {
+                console.log('🟢 Proxy fetch:', {
+                    url,
+                    method: init?.method || 'GET'
+                });
+            }
+        } catch (e) {
+            console.error('Fetch wrapper error:', e);
+            throw e;
+        }
+
+        return originalFetch(input, init);
+    };
+})();
+
+
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
 
