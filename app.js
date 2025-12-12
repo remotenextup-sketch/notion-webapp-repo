@@ -1001,13 +1001,13 @@ async function fetchKpiReport() {
     dom.kpiResultsContainer.innerHTML = `集計中: ${start}〜${end}...`;
     
     try {
-        // ★★★ Track API v9: シンプルなGET（既存認証で動作確定）★★★
-        const since = `${start}T00:00:00Z`;
-        const until = `${end}T23:59:59Z`;
+        // ★★★ UNIX timestamp（秒）で変換 ★★★
+        const since = Math.floor(new Date(start + 'T00:00:00Z') / 1000);
+        const until = Math.floor(new Date(end + 'T23:59:59Z') / 1000);
         
         const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`;
         
-        // ★★★ startTogglと同じ認証（動作済み）★★★
+        // ★★★ startTogglと同じ認証（動作確定） ★★★
         const authDetails = {
             tokenKey: 'togglApiToken',
             tokenValue: settings.togglApiToken,
@@ -1016,12 +1016,12 @@ async function fetchKpiReport() {
         
         const entries = await externalApi(url, 'GET', authDetails, null);
         
-        // ★★★ クライアント側でタグ集計 ★★★
+        // ★★★ クライアント集計 ★★★
         const categoryTimes = {};
         let totalMs = 0;
         
         entries.forEach(entry => {
-            const duration = entry.duration || 0;  // 秒単位
+            const duration = Math.abs(entry.duration || 0);  // 秒単位（負値は現在進行中）
             const tags = entry.tags || [];
             totalMs += duration * 1000;
             
@@ -1030,21 +1030,20 @@ async function fetchKpiReport() {
             });
         });
         
-        // 表示
-        dom.reportTotalTime.textContent = `総時間: ${formatTime(totalMs)}`;
+        dom.reportTotalTime.textContent = `総時間: ${formatTime(totalMs)} (${entries.length}件)`;
         
         if (Object.keys(categoryTimes).length === 0) {
-            dom.kpiResultsContainer.innerHTML = '<p>この期間のタスクなし</p>';
+            dom.kpiResultsContainer.innerHTML = '<p>タグなしタスクのみ</p>';
             return;
         }
         
-        // カテゴリ一覧（時間降順）
+        // 時間降順で表示
         let html = '<ul class="task-list">';
         Object.entries(categoryTimes)
             .sort(([,a], [,b]) => b - a)
             .forEach(([tag, ms]) => {
                 const pct = totalMs ? ((ms / totalMs) * 100).toFixed(1) : 0;
-                html += `<li>${tag}: ${formatTime(ms)} <strong>(${pct}%)</strong></li>`;
+                html += `<li><strong>${tag}</strong>: ${formatTime(ms)} <span style="color:#007bff">(${pct}%)</span></li>`;
             });
         html += '</ul>';
         dom.kpiResultsContainer.innerHTML = html;
@@ -1054,7 +1053,6 @@ async function fetchKpiReport() {
         console.error(e);
     }
 }
-
 
 
 /** KPIレポートの表示/非表示を切り替える */
