@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: 通知機能とUX改善、ラジオボタンを適用)
+// app.js 全文 (最終版: 通知機能とUX改善、ラジオボタン、KPIレポートを適用)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -57,7 +57,15 @@ const dom = {
     startNewTask: document.getElementById('startNewTask'),
     existingTaskTab: document.getElementById('existingTaskTab'),
     newTaskTab: document.getElementById('newTaskTab'),
-    taskSelectionSection: document.getElementById('taskSelectionSection')
+    taskSelectionSection: document.getElementById('taskSelectionSection'),
+    
+    // KPIレポート要素 ★★★ 追加 ★★★
+    showKpiReport: document.getElementById('showKpiReport'),
+    kpiReportTab: document.getElementById('kpiReportTab'),
+    reportPeriodSelect: document.getElementById('reportPeriodSelect'),
+    fetchKpiButton: document.getElementById('fetchKpiButton'),
+    reportTotalTime: document.getElementById('reportTotalTime'),
+    kpiResultsContainer: document.getElementById('kpiResultsContainer')
 };
 
 // ==========================================
@@ -538,15 +546,20 @@ function switchTab(event) {
 
     dom.startExistingTask.classList.remove('active');
     dom.startNewTask.classList.remove('active');
+    dom.showKpiReport.classList.remove('active'); // ★★★ 追加 ★★★
     event.target.classList.add('active');
+
+    dom.existingTaskTab.classList.add('hidden');
+    dom.newTaskTab.classList.add('hidden');
+    dom.kpiReportTab.classList.add('hidden'); // ★★★ 追加 ★★★
 
     if (target === 'existing') {
         dom.existingTaskTab.classList.remove('hidden');
-        dom.newTaskTab.classList.add('hidden');
-    } else {
-        dom.existingTaskTab.classList.add('hidden');
+    } else if (target === 'new') {
         dom.newTaskTab.classList.remove('hidden');
         renderNewTaskForm(); 
+    } else if (target === 'kpi') { // ★★★ 追加 ★★★
+        dom.kpiReportTab.classList.remove('hidden');
     }
 }
 
@@ -772,7 +785,7 @@ async function stopTask(isComplete) {
         }
 
 
-        // 実際にNotionにPATCHリクエストを送信
+        // 実際にNotionに PATCH リクエストを送信
         if (Object.keys(patchBody.properties).length > 0) {
             await notionApi(`/pages/${task.id}`, 'PATCH', patchBody);
         }
@@ -856,7 +869,145 @@ function clearElement(element) {
 
 
 // ==========================================
-// 7. 初期ロード
+// 7. KPIレポートロジック ★★★ 追加 ★★★
+// ==========================================
+
+/** Togglレポート用の開始日と終了日 (ISO形式) を計算する (月曜始まり) */
+function calculateReportDates(period) {
+    const now = new Date();
+    const start = new Date(now);
+    const end = new Date(now);
+
+    const currentDay = start.getDay(); // 0=日曜, 1=月曜, ...
+    
+    // 日本の週次 (月曜始まり) に対応: 0(日)の場合は -6, 1(月)の場合は -0, 2(火)の場合は -1, ...
+    const diffToMonday = (currentDay === 0 ? 6 : currentDay - 1); 
+
+    if (period === 'current_week') {
+        start.setDate(now.getDate() - diffToMonday); // 今週の月曜日に設定
+        end.setHours(23, 59, 59, 999); // 終了日は今日の終わりまで
+    } else if (period === 'last_week') {
+        start.setDate(now.getDate() - diffToMonday - 7); 
+        end.setDate(start.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+    } else if (period === 'current_month') {
+        start.setDate(1); // 今月の1日に設定
+        end.setMonth(now.getMonth() + 1, 0); // 来月の0日目 = 今月の最終日
+        end.setHours(23, 59, 59, 999);
+    } else if (period === 'last_month') {
+        start.setMonth(now.getMonth() - 1, 1); // 先月の1日に設定
+        end.setMonth(now.getMonth(), 0); // 今月の0日目 = 先月の最終日
+        end.setHours(23, 59, 59, 999);
+    }
+    
+    // 時間部分をリセット (開始日は00:00:00)
+    start.setHours(0, 0, 0, 0);
+    
+    // DateオブジェクトをYYYY-MM-DD形式に変換
+    const format = (date) => date.toISOString().split('T')[0];
+
+    return { 
+        start: format(start),
+        end: format(end)
+    };
+}
+
+
+/** Toggl Reports APIを呼び出し、カテゴリ別に集計する */
+async function fetchKpiReport() {
+    if (!settings.togglApiToken || !settings.togglWorkspaceId || !settings.humanUserId) {
+        alert('Toggl設定またはNotionユーザーIDが不完全です。設定画面を確認してください。');
+        return;
+    }
+
+    const period = dom.reportPeriodSelect.value;
+    const { start, end } = calculateReportDates(period);
+    const wid = settings.togglWorkspaceId;
+
+    dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
+
+    try {
+        // Toggl Reports API (v9 /search/time_entries) を使用して期間内の全エントリを取得
+        const reportUrl = `/time_entries/search`;
+        
+        const body = {
+            start_date: start,
+            end_date: end,
+            workspace_ids: [parseInt(wid)],
+            user_ids: [parseInt(settings.humanUserId)], // 自分だけのデータに絞り込む
+        };
+        
+        const allEntries = await togglApi(reportUrl, 'POST', body);
+        
+        if (!allEntries || allEntries.length === 0) {
+            dom.kpiResultsContainer.innerHTML = '<p>この期間に計測されたタスクはありません。</p>';
+            dom.reportTotalTime.textContent = '総計測時間: 00:00:00';
+            return;
+        }
+
+        // --- ローカル集計ロジック ---
+        const categoryTimes = {};
+        let totalDurationMs = 0;
+        const knownCategories = ['思考', '作業', '教育']; // Notionで設定したカテゴリと一致させる必要あり
+
+        for (const entry of allEntries) {
+            // duration は秒単位で返される。計測中は -1
+            if (entry.duration <= 0) continue; 
+            
+            const durationMs = entry.duration * 1000;
+            totalDurationMs += durationMs;
+
+            let assignedCategory = 'その他';
+            
+            // タグからカテゴリを特定
+            if (entry.tags && entry.tags.length > 0) {
+                for (const tag of entry.tags) {
+                    if (knownCategories.includes(tag)) {
+                        assignedCategory = tag;
+                        break; 
+                    }
+                }
+            }
+            
+            categoryTimes[assignedCategory] = (categoryTimes[assignedCategory] || 0) + durationMs;
+        }
+
+        // --- 結果のレンダリング ---
+        dom.reportTotalTime.textContent = `総計測時間: ${formatTime(totalDurationMs)}`;
+        
+        let html = '<ul class="task-list">';
+        
+        const sortedCategories = Object.keys(categoryTimes).sort((a, b) => categoryTimes[b] - categoryTimes[a]);
+
+        sortedCategories.forEach(cat => {
+            const ms = categoryTimes[cat];
+            const percentage = totalDurationMs > 0 ? ((ms / totalDurationMs) * 100).toFixed(1) : 0;
+            
+            html += `
+                <li>
+                    <span>${cat}:</span>
+                    <span>
+                        ${formatTime(ms)} 
+                        <span style="font-weight: bold; color: ${percentage > 30 ? '#007bff' : 'green'}; margin-left: 10px;">
+                            (${percentage}%)
+                        </span>
+                    </span>
+                </li>
+            `;
+        });
+
+        html += '</ul>';
+        dom.kpiResultsContainer.innerHTML = html;
+
+    } catch (e) {
+        console.error("KPIレポートエラー:", e);
+        dom.kpiResultsContainer.innerHTML = `<p style="color: red;">レポート集計中にエラーが発生しました: ${e.message}</p>`;
+    }
+}
+
+
+// ==========================================
+// 8. 初期ロード
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -872,6 +1023,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // タブ切り替え
     dom.startExistingTask.addEventListener('click', switchTab);
     dom.startNewTask.addEventListener('click', switchTab);
+    dom.showKpiReport.addEventListener('click', switchTab); // ★★★ 追加 ★★★
+    
+    // KPIレポート集計ボタン
+    dom.fetchKpiButton.addEventListener('click', fetchKpiReport); // ★★★ 追加 ★★★
     
     // 新規タスク開始ボタン
     document.getElementById('startNewTaskButton').addEventListener('click', handleStartNewTask);
