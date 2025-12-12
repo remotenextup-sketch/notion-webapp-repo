@@ -1,4 +1,4 @@
-// app.js 全文 (最終版: Toggl API呼び出しを externalApi に統一し、405エラーを解消)
+// app.js 全文 (最終版: KPIレポートのURL修正済み + UXタブ分離修正)
 
 // ★★★ 定数とグローバル設定 ★★★
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; 
@@ -540,12 +540,13 @@ function switchTab(event) {
     dom.startNewTask.classList.remove('active');
     event.target.classList.add('active');
 
+    // ★★★ 修正箇所: どちらか一方のみを表示するように変更 ★★★
     if (target === 'existing') {
         dom.existingTaskTab.classList.remove('hidden');
-        dom.newTaskTab.classList.add('hidden');
+        dom.newTaskTab.classList.add('hidden'); 
     } else {
-        dom.existingTaskTab.classList.remove('hidden');
-        dom.newTaskTab.classList.remove('hidden');
+        dom.existingTaskTab.classList.add('hidden'); // 既存タスクタブを非表示に
+        dom.newTaskTab.classList.remove('hidden'); 
         renderNewTaskForm(); 
     }
 }
@@ -744,7 +745,7 @@ async function stopTask(isComplete) {
 
     const task = settings.currentRunningTask;
     const logText = dom.thinkingLogInput.value.trim();
-    const duration = Date.now() - settings.startTime;
+    const duration = Date.now() - settings.startTime; // 経過時間（ミリ秒）
 
     try {
         // 1. Toggl計測停止
@@ -772,7 +773,8 @@ async function stopTask(isComplete) {
             console.warn("Relationログプロパティへの書き込みは未実装です。");
         }
 
-
+        // ★★★ 注記：ここに計測時間（累計または単発）をNotionに書き込むロジックを将来追加する ★★★
+        
         // 実際にNotionに PATCH リクエストを送信
         if (Object.keys(patchBody.properties).length > 0) {
             await notionApi(`/pages/${task.id}`, 'PATCH', patchBody);
@@ -915,7 +917,7 @@ async function fetchKpiReport() {
     dom.kpiResultsContainer.innerHTML = `<p>レポート期間: ${start} 〜 ${end}<br>集計中...</p>`;
 
     try {
-        // ★★★ Reports API v3 のフルURLを直接構築し、externalApiを呼び出す ★★★
+        // Reports API v3 のフルURLを直接構築
         const targetUrl = `https://api.track.toggl.com/reports/api/v3/workspace/${wid}/search/time_entries`; 
         
         const body = {
@@ -925,7 +927,7 @@ async function fetchKpiReport() {
             user_ids: [settings.humanUserId],
         };
         
-        // externalApiを直接呼び出すことで、URLの二重付与を防ぐ
+        // externalApiを直接呼び出す
         const allEntries = await externalApi(targetUrl, 'POST', getTogglAuthDetails(), body); 
         
         if (!allEntries || allEntries.length === 0) {
@@ -1043,6 +1045,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (settings.notionToken) {
         await fetchDatabaseList();
+        
+        // 最初のロード時には「既存タスク」タブを選択状態にする
+        dom.startExistingTask.click(); 
+        
         loadTasks(); 
     } else {
         showSettings();
