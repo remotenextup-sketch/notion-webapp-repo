@@ -1109,7 +1109,7 @@ async function fetchKpiReport() {
   const { startDate, endDate } = calculateReportDates(period);
 
   const url =
-    `https://api.track.toggl.com/reports/api/v3/workspace/${settings.togglWorkspaceId}/summary`;
+    `https://api.track.toggl.com/reports/api/v3/workspaces/${settings.togglWorkspaceId}/summary`;
 
   const body = {
     start_date: startDate.toISOString().split('T')[0],
