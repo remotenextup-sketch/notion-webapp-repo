@@ -1113,12 +1113,16 @@ async function fetchKpiReport() {
     since: startDate.toISOString().split('T')[0],
     until: endDate.toISOString().split('T')[0],
     grouping: 'tags',
-    subgrouping: 'none'
+    subgrouping: 'none',
+
+    // ★★★ これが必須 ★★★
+    user_agent: 'notion-toggl-webapp'
   });
 
-  const url = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
+  const url =
+    `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
 
-  const res = await externalTogglApi(url, 'GET'); // ← GETに戻す
+  const res = await externalTogglApi(url, 'GET');
 
   let totalMs = 0;
   clearElement(dom.kpiResultsContainer);
@@ -1146,6 +1150,7 @@ async function fetchKpiReport() {
 
   showNotification('KPI取得完了');
 }
+
 
 // =====================================================
 // Init
