@@ -637,35 +637,38 @@ function renderTaskList(tasks, dbId, props) {
 
 /** タブを切り替える (HTML側の data-target に依存) */
 function switchTab(event) {
-    const target = event.currentTarget.dataset.target; // 'existing', 'new', 'report' のいずれか
-    
-    // NULLチェックの徹底
+    const target = event.currentTarget.dataset.target;
+
     if (dom.startExistingTask) dom.startExistingTask.classList.remove('active');
     if (dom.startNewTask) dom.startNewTask.classList.remove('active');
-    if (dom.toggleKpiReportBtn) dom.toggleKpiReportBtn.classList.remove('active'); 
-    
+    if (dom.toggleKpiReportBtn) dom.toggleKpiReportBtn.classList.remove('active');
+
     if (event.currentTarget) event.currentTarget.classList.add('active');
 
-    // タスク選択/作成セクションとKPIレポートセクションの表示を切り替える
     if (target === 'report') {
-        if (dom.taskSelectionSection) dom.taskSelectionSection.classList.add('hidden');
+        // 🔥 ここが重要
+        if (dom.existingTaskTab) dom.existingTaskTab.classList.add('hidden');
+        if (dom.newTaskTab) dom.newTaskTab.classList.add('hidden');
         if (dom.kpiReportTab) dom.kpiReportTab.classList.remove('hidden');
-        if (dom.kpiResultsContainer) clearElement(dom.kpiResultsContainer); // レポートタブに切り替えたら結果をクリア
-    } else {
-        if (dom.taskSelectionSection) dom.taskSelectionSection.classList.remove('hidden');
-        if (dom.kpiReportTab) dom.kpiReportTab.classList.add('hidden');
+        return;
+    }
 
-        // タスク選択タブと新規作成タブの切り替え
-        if (target === 'existing') {
-            if (dom.existingTaskTab) dom.existingTaskTab.classList.remove('hidden');
-            if (dom.newTaskTab) dom.newTaskTab.classList.add('hidden'); 
-        } else if (target === 'new') {
-            if (dom.existingTaskTab) dom.existingTaskTab.classList.add('hidden'); 
-            if (dom.newTaskTab) dom.newTaskTab.classList.remove('hidden'); 
-            renderNewTaskForm(); 
-        }
+    // KPI以外
+    if (dom.kpiReportTab) dom.kpiReportTab.classList.add('hidden');
+    if (dom.taskSelectionSection) dom.taskSelectionSection.classList.remove('hidden');
+
+    if (target === 'existing') {
+        if (dom.existingTaskTab) dom.existingTaskTab.classList.remove('hidden');
+        if (dom.newTaskTab) dom.newTaskTab.classList.add('hidden');
+    }
+
+    if (target === 'new') {
+        if (dom.existingTaskTab) dom.existingTaskTab.classList.add('hidden');
+        if (dom.newTaskTab) dom.newTaskTab.classList.remove('hidden');
+        renderNewTaskForm();
     }
 }
+
 
 /** 新規タスクフォームをレンダリング (安全化) */
 async function renderNewTaskForm() {
