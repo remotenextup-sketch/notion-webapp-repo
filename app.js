@@ -1119,7 +1119,7 @@ async function fetchKpiReport() {
   const { startDate, endDate } = calculateReportDates(period);
 
   const params = new URLSearchParams({
-    user_agent: 'notion-toggl-timer@example.com',
+    user_agent: 'a.kogure6321@gmail.com',
     workspace_id: settings.togglWorkspaceId,
     since: startDate.toISOString().split('T')[0],
     until: endDate.toISOString().split('T')[0],
