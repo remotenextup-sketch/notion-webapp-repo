@@ -1099,83 +1099,62 @@ function calculateReportDates(period) {
   return { startDate: start, endDate: end };
 }
 
-async function fetchKpiReport() {
+async function fetchKpiReport_DIRECT() {
   if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-    alert('Toggl設定が未入力です');
-    return;
+    throw new Error('Toggl API Token / Workspace ID が未設定です');
   }
-
-  // ===============================
-  // 🔧 切替スイッチ（困ったら true）
-  // ===============================
-  const USE_DIRECT_FETCH = false;
 
   const period = dom.reportPeriodSelect?.value || 'current_week';
   const { startDate, endDate } = calculateReportDates(period);
 
-  // ===============================
-  // Reports API v2 は GET + query
-  // ===============================
   const params = new URLSearchParams({
-    user_agent: 'notion-toggl-kpi-app', // 必須
-    workspace_id: String(settings.togglWorkspaceId), // 必須
-    since: startDate.toISOString().split('T')[0],
-    until: endDate.toISOString().split('T')[0],
+    user_agent: 'notion-toggl-timer@example.com', // ← 形式が大事（メールっぽければOK）
+    workspace_id: String(settings.togglWorkspaceId),
+    since: startDate.toISOString().slice(0, 10),
+    until: endDate.toISOString().slice(0, 10),
     grouping: 'tags'
   });
 
-  const url =
-    `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
+  const url = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
 
-  let res;
+  console.log('📡 Toggl v2 summary GET:', url);
 
-  try {
-    if (USE_DIRECT_FETCH) {
-      // ============================================
-      // 🟢 最終手段：proxy完全バイパス（GET専用）
-      // ============================================
-      const r = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Basic ${btoa(
-            settings.togglApiToken + ':api_token'
-          )}`
-        }
-      });
-
-      if (!r.ok) {
-        const t = await r.text();
-        throw new Error(`Toggl API Error (${r.status}): ${t}`);
-      }
-
-      res = await r.json();
-    } else {
-      // ============================================
-      // 🧠 正攻法：proxy経由（推奨）
-      // ============================================
-      res = await externalTogglApi(url, 'GET');
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      // ✅ Content-Type は絶対に付けない
+      Authorization: `Basic ${btoa(settings.togglApiToken + ':api_token')}`
     }
-  } catch (e) {
-    console.error('KPI fetch error:', e);
-    alert(`KPI取得エラー: ${e.message}`);
-    return;
+  });
+
+  // ===== デバッグ強化（ここ超重要） =====
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`❌ Toggl ${res.status}:`, errorText);
+    throw new Error(`Toggl API ${res.status}: ${errorText.slice(0, 300)}`);
   }
 
-  // ===============================
-  // 集計・描画
-  // ===============================
+  const data = await res.json();
+
+  console.log(
+    '✅ Toggl v2 success:',
+    data.total_count,
+    'records'
+  );
+
+  // ====== 表示処理 ======
+  let totalMs = 0;
   clearElement(dom.kpiResultsContainer);
 
-  if (!res?.data || res.data.length === 0) {
+  if (!data.data || data.data.length === 0) {
     dom.kpiResultsContainer.innerHTML = '<p>データがありません</p>';
     dom.reportTotalTime.textContent = '';
     return;
   }
 
-  let totalMs = 0;
   const ul = document.createElement('ul');
 
-  res.data.forEach(row => {
+  data.data.forEach(row => {
     const tag = row.title?.tag || '(no tag)';
     const ms = row.time || 0;
     totalMs += ms;
@@ -1190,8 +1169,6 @@ async function fetchKpiReport() {
 
   showNotification('KPI取得完了');
 }
-
-
 
 // =====================================================
 // Init
