@@ -996,53 +996,48 @@ function switchTab(event) {
   const target = event?.currentTarget?.dataset?.target;
   if (!target) return;
 
-  // --- active状態リセット ---
+  // active解除
   dom.startExistingTask?.classList.remove('active');
   dom.startNewTask?.classList.remove('active');
   dom.toggleKpiReportBtn?.classList.remove('active');
   event.currentTarget.classList.add('active');
 
-  // =========================
-  // KPI レポートタブ
-  // =========================
+  // 一旦すべて「確実に消す」
+  dom.taskSelectionSection?.classList.add('hidden');
+  dom.existingTaskTab?.classList.add('hidden');
+  dom.newTaskTab?.classList.add('hidden');
+  dom.kpiReportTab?.classList.add('hidden');
+
+  // 🔑 displayをJS側で強制リセット（白飛び防止）
+  if (dom.taskSelectionSection) dom.taskSelectionSection.style.display = '';
+  if (dom.kpiReportTab) dom.kpiReportTab.style.display = '';
+
+  // =====================
+  // KPI
+  // =====================
   if (target === 'report') {
-    // 他の表示はすべて確実に隠す
-    dom.existingTaskTab?.classList.add('hidden');
-    dom.newTaskTab?.classList.add('hidden');
-    dom.taskSelectionSection?.classList.add('hidden');
-
-    // KPIだけ表示
     dom.kpiReportTab?.classList.remove('hidden');
+    dom.kpiReportTab.style.display = 'block';
 
-    // 初期表示を明示（真っ白防止）
     if (dom.kpiResultsContainer) {
       dom.kpiResultsContainer.innerHTML =
         '<p>期間を選択して「KPI取得」を押してください</p>';
     }
-    if (dom.reportTotalTime) {
-      dom.reportTotalTime.textContent = '';
-    }
-
+    if (dom.reportTotalTime) dom.reportTotalTime.textContent = '';
     return;
   }
 
-  // =========================
-  // 既存 / 新規 タスク側
-  // =========================
-
-  // KPIは必ず閉じる
-  dom.kpiReportTab?.classList.add('hidden');
-
-  // タスク選択エリアを表示
+  // =====================
+  // 既存 / 新規
+  // =====================
   dom.taskSelectionSection?.classList.remove('hidden');
+  dom.taskSelectionSection.style.display = 'block';
 
   if (target === 'existing') {
     dom.existingTaskTab?.classList.remove('hidden');
-    dom.newTaskTab?.classList.add('hidden');
   }
 
   if (target === 'new') {
-    dom.existingTaskTab?.classList.add('hidden');
     dom.newTaskTab?.classList.remove('hidden');
     renderNewTaskForm();
   }
