@@ -7,11 +7,10 @@
 
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: system-ui, sans-serif;
       margin: 0;
       background: #f4f4f4;
     }
-
     .app {
       max-width: 900px;
       margin: 0 auto;
@@ -20,7 +19,6 @@
       padding: 20px;
       box-sizing: border-box;
     }
-
     header {
       display: flex;
       justify-content: space-between;
@@ -28,16 +26,7 @@
       border-bottom: 2px solid #ddd;
       padding-bottom: 10px;
     }
-
-    h1 {
-      margin: 0;
-      font-size: 20px;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
+    .hidden { display: none !important; }
     .btn {
       padding: 8px 14px;
       border-radius: 6px;
@@ -45,12 +34,10 @@
       cursor: pointer;
       font-weight: 600;
     }
-
-    .primary { background: #2563eb; color: #fff; }
-    .secondary { background: #6b7280; color: #fff; }
-    .danger { background: #dc2626; color: #fff; }
-    .green { background: #16a34a; color: #fff; }
-
+    .primary { background:#2563eb; color:#fff; }
+    .secondary { background:#6b7280; color:#fff; }
+    .danger { background:#dc2626; color:#fff; }
+    .green { background:#16a34a; color:#fff; }
     .input {
       width: 100%;
       padding: 8px;
@@ -59,52 +46,22 @@
       border: 1px solid #ccc;
       box-sizing: border-box;
     }
-
     .task-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid #eee;
+      display:flex;
+      justify-content:space-between;
+      padding:8px 0;
+      border-bottom:1px solid #eee;
     }
-
     #running {
-      background: #fde68a;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-      text-align: center;
+      background:#fde68a;
+      padding:15px;
+      border-radius:8px;
+      margin-bottom:15px;
+      text-align:center;
     }
-
     #timer {
-      font-size: 28px;
-      font-weight: bold;
-    }
-
-    .tabs {
-      display: flex;
-      margin-top: 10px;
-    }
-
-    .tab {
-      flex: 1;
-      padding: 10px;
-      background: #e5e7eb;
-      border: 1px solid #ccc;
-      cursor: pointer;
-    }
-
-    .tab.active {
-      background: #2563eb;
-      color: #fff;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
-    }
-
-    small {
-      color: #555;
+      font-size:28px;
+      font-weight:bold;
     }
   </style>
 </head>
@@ -112,83 +69,62 @@
 <body>
 <div class="app">
 
-  <header>
-    <h1>Notion Toggl Timer</h1>
-    <button id="openSettings" class="btn secondary">設定</button>
-  </header>
+<header>
+  <h1>Notion Toggl Timer</h1>
+  <button id="openSettings" class="btn secondary">設定</button>
+</header>
 
-  <!-- ================= MAIN ================= -->
-  <div id="mainView">
+<!-- ================= MAIN ================= -->
+<div id="mainView">
 
-    <div id="running" class="hidden">
-      <div id="runningTitle"></div>
-      <div id="timer">00:00:00</div>
+  <div id="running" class="hidden">
+    <div id="runningTitle"></div>
+    <div id="timer">00:00:00</div>
 
-      <textarea
-        id="thinkingLog"
-        class="input"
-        rows="3"
-        placeholder="思考ログ（自動で時系列追記されます）"
-      ></textarea>
+    <textarea id="thinkingLog" class="input" rows="3"
+      placeholder="思考ログ（自動で時系列追記）"></textarea>
 
-      <button id="stopBtn" class="btn primary">停止</button>
-      <button id="completeBtn" class="btn danger">完了</button>
-    </div>
-
-    <div class="form-group">
-      <select id="dbSelect" class="input"></select>
-      <button id="reloadBtn" class="btn secondary">再読込</button>
-    </div>
-
-    <div class="tabs">
-      <button id="tabExisting" class="tab active">既存タスク</button>
-      <button id="tabNew" class="tab">新規タスク</button>
-    </div>
-
-    <div id="existingTab">
-      <div id="taskList"></div>
-    </div>
-
-    <div id="newTab" class="hidden">
-      <input id="newTitle" class="input" placeholder="新規タスク名"/>
-      <button id="createBtn" class="btn green">作成して開始</button>
-    </div>
-
+    <button id="stopBtn" class="btn primary">停止</button>
+    <button id="completeBtn" class="btn danger">完了</button>
   </div>
 
-  <!-- ================= SETTINGS ================= -->
-  <div id="settingsView" class="hidden">
-    <h2>設定</h2>
+  <select id="dbSelect" class="input"></select>
+  <button id="reloadBtn" class="btn secondary">Notion再読込</button>
 
-    <div class="form-group">
-      <label>Notion API Token</label>
-      <input id="notionToken" class="input" placeholder="secret_xxx"/>
-    </div>
+  <div id="taskList"></div>
 
-    <div class="form-group">
-      <label>Notion User ID（任意）</label>
-      <input id="notionUserId" class="input"/>
-    </div>
+  <hr>
 
-    <div class="form-group">
-      <label>Notion データベース</label>
-      <div id="dbConfigs"></div>
-      <button id="addDb" class="btn secondary">DB追加</button>
-    </div>
+  <h3>新規タスク</h3>
+  <input id="newTitle" class="input" placeholder="タスク名">
 
-    <div class="form-group">
-      <label>Toggl API Token</label>
-      <input id="togglToken" class="input"/>
-    </div>
+  <input id="newCategory" class="input"
+    placeholder="カテゴリ（例：作業 / 改善）">
 
-    <div class="form-group">
-      <label>Toggl Workspace ID</label>
-      <input id="togglWid" class="input"/>
-    </div>
+  <input id="newDepartment" class="input"
+    placeholder="部門（複数可：Amazon,改善 など）">
 
-    <button id="saveSettings" class="btn primary">保存</button>
-    <button id="closeSettings" class="btn secondary">閉じる</button>
-  </div>
+  <button id="createBtn" class="btn green">作成して開始</button>
+
+</div>
+
+<!-- ================= SETTINGS ================= -->
+<div id="settingsView" class="hidden">
+  <h2>設定</h2>
+
+  <input id="notionToken" class="input" placeholder="Notion API Token">
+  <input id="notionUserId" class="input" placeholder="Notion User ID（任意）">
+
+  <h3>Notion データベース</h3>
+  <div id="dbConfigs"></div>
+  <button id="addDb" class="btn secondary">DB追加</button>
+
+  <input id="togglToken" class="input" placeholder="Toggl API Token">
+  <input id="togglWid" class="input" placeholder="Toggl Workspace ID">
+
+  <button id="saveSettings" class="btn primary">保存</button>
+  <button id="closeSettings" class="btn secondary">閉じる</button>
+</div>
 
 </div>
 
