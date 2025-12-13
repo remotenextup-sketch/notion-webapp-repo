@@ -1,68 +1,150 @@
-module.exports = async function(req, res) {
+const NOTION_SECRET = process.env.NOTION_SECRET;
+
+module.exports = async (req, res) => {
+  console.log('🔥 PROXY VERSION 2025-12-13 FINAL', req.method);
+
+  // =====================================================
+  // CORS
+  // =====================================================
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  
-  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
-  if (req.method === 'GET') { res.json({ status: 'Proxy OK!' }); return; }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PATCH');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Notion-Version'
+  );
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // =====================================================
+  // GET / POST 両対応（Proxy自体は常に受ける）
+  // =====================================================
+  const payload =
+    req.method === 'GET'
+      ? req.query
+      : req.body || {};
+
+  const {
+    targetUrl,
+    method,
+    tokenKey,
+    tokenValue,
+    notionVersion,
+    body
+  } = payload;
+
+  if (!targetUrl || !method || !tokenKey) {
+    return res.status(400).json({
+      message: 'Missing targetUrl, method, or tokenKey'
+    });
+  }
+
+  // =====================================================
+  // ★ Toggl API Passthrough（Reports API 分岐あり）
+  // =====================================================
+  if (targetUrl.includes('api.track.toggl.com')) {
+    console.log('[Proxy] Toggl passthrough:', method, targetUrl);
+
+    if (!tokenValue) {
+      return res.status(401).json({
+        message: 'Toggl token missing'
+      });
+    }
+
+    const authHeader =
+      'Basic ' +
+      Buffer.from(`${tokenValue}:api_token`).toString('base64');
+
+    const isReportsApi = targetUrl.includes('/reports/api/');
+
+    const fetchOptions = {
+      method,
+      headers: {
+        Authorization: authHeader
+      }
+    };
+
+    // ---------- body処理 ----------
+    if (method !== 'GET' && method !== 'HEAD' && body) {
+      if (isReportsApi) {
+        // 🔴 Reports API は application/x-www-form-urlencoded 必須
+        fetchOptions.headers['Content-Type'] =
+          'application/x-www-form-urlencoded';
+        fetchOptions.body = new URLSearchParams(body).toString();
+      } else {
+        // 🟢 通常の Toggl API
+        fetchOptions.headers['Content-Type'] = 'application/json';
+        fetchOptions.body = JSON.stringify(body);
+      }
+    }
+
+    const togglRes = await fetch(targetUrl, fetchOptions);
+    const text = await togglRes.text();
+
+    if (togglRes.status === 204) {
+      return res.status(204).end();
+    }
+
+    try {
+      return res.status(togglRes.status).json(JSON.parse(text));
+    } catch {
+      return res.status(togglRes.status).json({ message: text });
+    }
+  }
+
+  // =====================================================
+  // ★ Notion API
+  // =====================================================
+  let token = '';
+
+  if (tokenKey === 'notionToken') {
+    token = NOTION_SECRET || tokenValue;
+  } else {
+    token = tokenValue;
+  }
+
+  if (!token) {
+    return res.status(401).json({
+      message: `Authorization token missing for ${tokenKey}`
+    });
+  }
+
+  if (!targetUrl.includes('api.notion.com')) {
+    return res.status(400).json({
+      message: 'Unsupported target API'
+    });
+  }
 
   try {
-    const body = req.body || {};
-    
-    // Notion API
-    if (body.tokenKey === 'notionToken') {
-      const headers = {
-        'Authorization': `Bearer ${body.tokenValue}`,
-        'Content-Type': 'application/json',
-        'Notion-Version': '2022-06-28'
-      };
-      const upstream = await fetch(body.targetUrl, {
-        method: body.method || 'GET',
-        headers,
-        body: body.body ? JSON.stringify(body.body) : undefined
-      });
-      
-      // ✅ 1回だけtext() → JSON.parse
-      const text = await upstream.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-      res.status(upstream.status).json(data);
-      return;
-    }
-    
-    // Toggl API（修正版）
-    if (body.tokenKey === 'togglApiToken') {
-      const basicAuth = Buffer.from(`${body.tokenValue}:api_token`).toString('base64');
-      const headers = {
-        'Authorization': `Basic ${basicAuth}`,
+    const apiRes = await fetch(targetUrl, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Notion-Version': notionVersion || '2022-06-28',
         'Content-Type': 'application/json'
-      };
-      
-      const upstream = await fetch(body.targetUrl, {
-        method: body.method || 'GET',
-        headers,
-        body: body.body ? JSON.stringify(body.body) : undefined
-      });
-      
-      // ✅ 1回だけtext() → JSON.parse
-      const text = await upstream.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-      res.status(upstream.status).json(data);
-      return;
+      },
+      body:
+        method !== 'GET' && method !== 'HEAD' && body
+          ? JSON.stringify(body)
+          : undefined
+    });
+
+    if (apiRes.status === 204) {
+      return res.status(204).end();
     }
-    
-    res.status(400).json({ error: 'Invalid tokenKey' });
+
+    const text = await apiRes.text();
+
+    try {
+      return res.status(apiRes.status).json(JSON.parse(text));
+    } catch {
+      return res.status(apiRes.status).json({ message: text });
+    }
   } catch (err) {
-    console.error('Proxy error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Proxy internal error:', err);
+    return res.status(500).json({
+      message: 'Internal Proxy Error'
+    });
   }
 };
