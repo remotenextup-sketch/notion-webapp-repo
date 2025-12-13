@@ -37,6 +37,10 @@
       align-items: center;
     }
 
+    h2 {
+      margin-top: 0;
+    }
+
     .hidden {
       display: none !important;
     }
@@ -44,17 +48,29 @@
     /* =====================
        フォーム系
     ===================== */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .form-help {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 6px;
+    }
+
     .input-field {
       width: 100%;
       padding: 8px;
-      margin-bottom: 10px;
       box-sizing: border-box;
       border: 1px solid #ccc;
       border-radius: 4px;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
+      font-size: 14px;
     }
 
     /* =====================
@@ -159,7 +175,7 @@
         id="thinkingLogInput"
         class="input-field"
         rows="3"
-        placeholder="思考ログ"
+        placeholder="作業中に考えたこと・メモを自由に入力"
       ></textarea>
 
       <button id="stopTaskButton" class="btn btn-primary">停止</button>
@@ -175,18 +191,10 @@
       </div>
 
       <div class="tab-container">
-        <button
-          id="startExistingTask"
-          class="tab-btn active"
-          data-target="existing"
-        >
+        <button id="startExistingTask" class="tab-btn active" data-target="existing">
           既存タスク
         </button>
-        <button
-          id="startNewTask"
-          class="tab-btn"
-          data-target="new"
-        >
+        <button id="startNewTask" class="tab-btn" data-target="new">
           新規タスク
         </button>
       </div>
@@ -196,13 +204,14 @@
       </div>
 
       <div id="newTaskTab" class="hidden">
-        <input
-          id="newTaskTitle"
-          class="input-field"
-          placeholder="タスク名"
-        >
+        <div class="form-group">
+          <label for="newTaskTitle">タスク名</label>
+          <input id="newTaskTitle" class="input-field" placeholder="例：記事執筆、企画レビュー">
+        </div>
+
         <div id="newCatContainer"></div>
         <div id="newDeptContainer"></div>
+
         <button id="startNewTaskButton" class="btn btn-green">開始</button>
       </div>
 
@@ -213,14 +222,46 @@
   <div id="settingsView" class="hidden">
     <h2>設定</h2>
 
-    <input id="confNotionToken" class="input-field" placeholder="Notion Token">
-    <input id="confNotionUserId" class="input-field" placeholder="Notion User ID">
+    <div class="form-group">
+      <label for="confNotionToken">Notion API トークン</label>
+      <div class="form-help">
+        Notionの「内部インテグレーション」で発行したトークンを入力してください
+      </div>
+      <input id="confNotionToken" class="input-field" placeholder="secret_xxxxx">
+    </div>
 
-    <div id="dbConfigContainer"></div>
-    <button id="addDbConfig" class="btn btn-secondary">DB追加</button>
+    <div class="form-group">
+      <label for="confNotionUserId">Notion ユーザーID（任意）</label>
+      <div class="form-help">
+        タスクの担当者を自動で自分に設定したい場合のみ入力
+      </div>
+      <input id="confNotionUserId" class="input-field" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </div>
 
-    <input id="confTogglToken" class="input-field" placeholder="Toggl Token">
-    <input id="confTogglWid" class="input-field" placeholder="Workspace ID">
+    <div class="form-group">
+      <label>タスク用データベース</label>
+      <div class="form-help">
+        計測対象にするNotionデータベースを登録します
+      </div>
+      <div id="dbConfigContainer"></div>
+      <button id="addDbConfig" class="btn btn-secondary">DB追加</button>
+    </div>
+
+    <div class="form-group">
+      <label for="confTogglToken">Toggl API トークン</label>
+      <div class="form-help">
+        Toggl Track のプロフィール画面から取得できます
+      </div>
+      <input id="confTogglToken" class="input-field" placeholder="xxxxxxxxxxxxxxxx">
+    </div>
+
+    <div class="form-group">
+      <label for="confTogglWid">Toggl Workspace ID</label>
+      <div class="form-help">
+        計測に使用するワークスペースID（数字）
+      </div>
+      <input id="confTogglWid" class="input-field" placeholder="12345678">
+    </div>
 
     <button id="saveConfig" class="btn btn-primary">保存</button>
     <button id="cancelConfig" class="btn btn-secondary">閉じる</button>
