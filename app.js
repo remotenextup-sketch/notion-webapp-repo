@@ -271,10 +271,19 @@ function handleSaveSettings() {
 
     settings.notionDatabases = newDbConfigs;
 
-    if (settings.notionDatabases.length === 0) {
-        alert("データベース設定が一つも入力されていません。"); // 処理中断のためalertを保持
-        return; 
-    }
+   if (settings.notionDatabases.length === 0) {
+    alert("データベース設定が一つも入力されていません。設定は保存されましたが、DB連携は行われません。");
+}
+
+// 🔽 ここは必ず通す
+saveSettings();
+hideSettings();
+
+// 🔽 DBがあるときだけ実行
+if (settings.notionDatabases.length > 0) {
+    fetchDatabaseList();
+    loadTasks();
+}
 
     if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value.trim();
     if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value.trim(); 
