@@ -996,30 +996,58 @@ function switchTab(event) {
   const target = event?.currentTarget?.dataset?.target;
   if (!target) return;
 
+  // --- active状態リセット ---
   dom.startExistingTask?.classList.remove('active');
   dom.startNewTask?.classList.remove('active');
   dom.toggleKpiReportBtn?.classList.remove('active');
   event.currentTarget.classList.add('active');
 
+  // =========================
+  // KPI レポートタブ
+  // =========================
   if (target === 'report') {
+    // 他の表示はすべて確実に隠す
+    dom.existingTaskTab?.classList.add('hidden');
+    dom.newTaskTab?.classList.add('hidden');
     dom.taskSelectionSection?.classList.add('hidden');
+
+    // KPIだけ表示
     dom.kpiReportTab?.classList.remove('hidden');
-    if (dom.kpiResultsContainer) clearElement(dom.kpiResultsContainer);
+
+    // 初期表示を明示（真っ白防止）
+    if (dom.kpiResultsContainer) {
+      dom.kpiResultsContainer.innerHTML =
+        '<p>期間を選択して「KPI取得」を押してください</p>';
+    }
+    if (dom.reportTotalTime) {
+      dom.reportTotalTime.textContent = '';
+    }
+
     return;
   }
 
+  // =========================
+  // 既存 / 新規 タスク側
+  // =========================
+
+  // KPIは必ず閉じる
   dom.kpiReportTab?.classList.add('hidden');
+
+  // タスク選択エリアを表示
   dom.taskSelectionSection?.classList.remove('hidden');
 
   if (target === 'existing') {
     dom.existingTaskTab?.classList.remove('hidden');
     dom.newTaskTab?.classList.add('hidden');
-  } else if (target === 'new') {
+  }
+
+  if (target === 'new') {
     dom.existingTaskTab?.classList.add('hidden');
     dom.newTaskTab?.classList.remove('hidden');
     renderNewTaskForm();
   }
 }
+
 
 // =====================================================
 // KPI（Toggl V9 time_entries 期間取得 → tags集計）
