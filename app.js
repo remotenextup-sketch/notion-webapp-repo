@@ -111,7 +111,7 @@ function renderDbConfigForms() {
 // =====================================================
 // 保存処理
 // =====================================================
-function handleSaveSettings() {
+async function handleSaveSettings() {
   settings.notionToken = dom.confNotionToken.value.trim();
   settings.humanUserId = dom.confNotionUserId.value.trim();
   settings.togglApiToken = dom.confTogglToken.value.trim();
@@ -132,6 +132,14 @@ function handleSaveSettings() {
 
   dom.settingsView.classList.add('hidden');
   dom.mainView.classList.remove('hidden');
+
+  // 🔽 DB切替時のイベント（1回だけでOK）
+  dom.taskDbFilter?.removeEventListener('change', loadTasks);
+  dom.taskDbFilter?.addEventListener('change', loadTasks);
+
+  // 🔽 ここが「今まで呼ばれてなかった本体」
+  await fetchDatabaseList();
+  await loadTasks();
 }
 
 // =====================================================
