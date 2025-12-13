@@ -1105,26 +1105,65 @@ async function fetchKpiReport() {
     return;
   }
 
+  // ===============================
+  // 🔧 切替スイッチ（困ったら true）
+  // ===============================
+  const USE_DIRECT_FETCH = false;
+
   const period = dom.reportPeriodSelect?.value || 'current_week';
   const { startDate, endDate } = calculateReportDates(period);
 
+  // ===============================
+  // Reports API v2 は GET + query
+  // ===============================
   const params = new URLSearchParams({
-    workspace_id: settings.togglWorkspaceId,
+    user_agent: 'notion-toggl-kpi-app', // 必須
+    workspace_id: String(settings.togglWorkspaceId), // 必須
     since: startDate.toISOString().split('T')[0],
     until: endDate.toISOString().split('T')[0],
-    grouping: 'tags',
-    subgrouping: 'none',
-
-    // ★★★ これが必須 ★★★
-    user_agent: 'notion-toggl-webapp'
+    grouping: 'tags'
   });
 
   const url =
     `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
 
-  const res = await externalTogglApi(url, 'GET');
+  let res;
 
-  let totalMs = 0;
+  try {
+    if (USE_DIRECT_FETCH) {
+      // ============================================
+      // 🟢 最終手段：proxy完全バイパス（GET専用）
+      // ============================================
+      const r = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${btoa(
+            settings.togglApiToken + ':api_token'
+          )}`
+        }
+      });
+
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`Toggl API Error (${r.status}): ${t}`);
+      }
+
+      res = await r.json();
+    } else {
+      // ============================================
+      // 🧠 正攻法：proxy経由（推奨）
+      // ============================================
+      res = await externalTogglApi(url, 'GET');
+    }
+  } catch (e) {
+    console.error('KPI fetch error:', e);
+    alert(`KPI取得エラー: ${e.message}`);
+    return;
+  }
+
+  // ===============================
+  // 集計・描画
+  // ===============================
   clearElement(dom.kpiResultsContainer);
 
   if (!res?.data || res.data.length === 0) {
@@ -1133,6 +1172,7 @@ async function fetchKpiReport() {
     return;
   }
 
+  let totalMs = 0;
   const ul = document.createElement('ul');
 
   res.data.forEach(row => {
@@ -1150,6 +1190,7 @@ async function fetchKpiReport() {
 
   showNotification('KPI取得完了');
 }
+
 
 
 // =====================================================
