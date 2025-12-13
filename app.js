@@ -1,19 +1,6 @@
-// =====================================================
-// 🔒 SAFETY PATCH（最終・安定版）
-// 目的:
-//  - Toggl API の直叩きを完全ブロック
-//  - Proxy 経由のみ通信を許可
-//  - fetch が存在しない環境でも壊れない
-//  - this / bind 事故を防止
-// =====================================================
 (() => {
-  // fetch が存在しない環境では何もしない（安全策）
-  if (typeof window.fetch !== 'function') {
-    console.warn('⚠️ SAFETY PATCH: fetch is not available. Skipped.');
-    return;
-  }
+  if (typeof window.fetch !== 'function') return;
 
-  // 元の fetch を安全に保持（bind 必須）
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = function (input, init = {}) {
@@ -24,21 +11,24 @@
         ? input.url
         : '';
 
-    // 🚨 Toggl API 直叩きは即ブロック
-    if (url && url.includes('api.track.toggl.com')) {
+    // 🚨 Toggl直叩きは「proxy以外」だけブロック
+    if (
+      url &&
+      url.includes('api.track.toggl.com') &&
+      !url.includes('/api/proxy')
+    ) {
       console.error('🚨 BLOCKED: Direct Toggl API call detected', url);
       throw new Error('Direct Toggl API call blocked. Use proxy.');
     }
 
-    // 🟢 Proxy 経由はログ表示（デバッグ用）
     if (url && url.includes('/api/proxy')) {
       console.log('🟢 Proxy fetch:', init?.method || 'POST', url);
     }
 
-    // それ以外は通常の fetch
     return originalFetch(input, init);
   };
 })();
+
 
 // =====================================================
 // 定数・設定
