@@ -186,7 +186,13 @@ async function startToggl(title) {
 }
 
 async function stopToggl(entryId) {
-  const url = `${TOGGL_V9_BASE}/time_entries/${entryId}/stop`;
+  const wid = settings.togglWorkspaceId;
+
+  if (!wid) {
+    throw new Error('Toggl workspace_id is missing');
+  }
+
+  const url = `${TOGGL_V9_BASE}/workspaces/${wid}/time_entries/${entryId}/stop`;
 
   return externalApi(
     url,
@@ -197,6 +203,7 @@ async function stopToggl(entryId) {
     }
   );
 }
+
 
 // =====================================================
 // タスク開始 / 停止
@@ -222,6 +229,7 @@ async function handleStopTask() {
   const entryId = settings.currentRunningTask?.togglEntryId;
   if (!entryId) return;
 
+ 
   await stopToggl(entryId);
 
   settings.currentRunningTask = null;
