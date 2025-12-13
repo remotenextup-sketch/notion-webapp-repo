@@ -1,5 +1,11 @@
+// =====================================================
+// 🔒 SAFETY PATCH（最終・誤爆防止版）
+// =====================================================
 (() => {
-  if (typeof window.fetch !== 'function') return;
+  if (typeof window.fetch !== 'function') {
+    console.warn('⚠️ SAFETY PATCH: fetch is not available. Skipped.');
+    return;
+  }
 
   const originalFetch = window.fetch.bind(window);
 
@@ -11,7 +17,7 @@
         ? input.url
         : '';
 
-    // 🚨 Toggl直叩きは「proxy以外」だけブロック
+    // 🚨 Toggl API 直叩きは「proxy以外」のみブロック
     if (
       url &&
       url.includes('api.track.toggl.com') &&
@@ -21,6 +27,7 @@
       throw new Error('Direct Toggl API call blocked. Use proxy.');
     }
 
+    // 🟢 Proxy 経由はログ表示
     if (url && url.includes('/api/proxy')) {
       console.log('🟢 Proxy fetch:', init?.method || 'POST', url);
     }
@@ -28,6 +35,7 @@
     return originalFetch(input, init);
   };
 })();
+
 
 
 // =====================================================
