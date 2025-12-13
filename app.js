@@ -1088,13 +1088,14 @@ async function fetchKpiReport() {
     if (dom.reportTotalTime) dom.reportTotalTime.textContent = '計算中...';
 
     try {
-        // Toggl V9 Time Entries APIを使用
-        const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?since=${since}&until=${until}`;
-        
-        console.log('🔢 Toggl V9 Time Entries via Proxy:', url);
-        
-        // externalTogglApi を使用してプロキシ経由でCORS回避
-        const response = await externalTogglApi(url); 
+        const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/search`;
+
+        const body = {
+         start_date: startDate.toISOString(),
+         end_date: endDate.toISOString()
+         };
+
+        const response = await externalTogglApi(url, 'POST', body);
 
         const categoryTimes = {}; 
         let totalMs = 0;
