@@ -132,29 +132,6 @@
       font-size:2em;
       font-weight:bold;
     }
-
-    /* =====================
-       KPI
-    ===================== */
-    #kpiReportTab {
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      margin-top: 15px;
-      width: 100%;
-      min-height: 300px;
-      box-sizing: border-box;
-    }
-
-    .toggle-btn {
-      width: 100%;
-      margin-top: 15px;
-      padding: 10px;
-      background: #e9ecef;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      cursor: pointer;
-    }
   </style>
 </head>
 
@@ -178,8 +155,12 @@
       <h2 id="runningTaskTitle"></h2>
       <div id="runningTimer">00:00:00</div>
 
-      <textarea id="thinkingLogInput" class="input-field" rows="3"
-        placeholder="思考ログ"></textarea>
+      <textarea
+        id="thinkingLogInput"
+        class="input-field"
+        rows="3"
+        placeholder="思考ログ"
+      ></textarea>
 
       <button id="stopTaskButton" class="btn btn-primary">停止</button>
       <button id="completeTaskButton" class="btn btn-danger">完了</button>
@@ -194,10 +175,18 @@
       </div>
 
       <div class="tab-container">
-        <button id="startExistingTask" class="tab-btn active" data-target="existing">
+        <button
+          id="startExistingTask"
+          class="tab-btn active"
+          data-target="existing"
+        >
           既存タスク
         </button>
-        <button id="startNewTask" class="tab-btn" data-target="new">
+        <button
+          id="startNewTask"
+          class="tab-btn"
+          data-target="new"
+        >
           新規タスク
         </button>
       </div>
@@ -207,31 +196,14 @@
       </div>
 
       <div id="newTaskTab" class="hidden">
-        <input id="newTaskTitle" class="input-field" placeholder="タスク名">
+        <input
+          id="newTaskTitle"
+          class="input-field"
+          placeholder="タスク名"
+        >
         <div id="newCatContainer"></div>
         <div id="newDeptContainer"></div>
         <button id="startNewTaskButton" class="btn btn-green">開始</button>
-      </div>
-
-      <button id="toggleKpiReportBtn" class="toggle-btn" data-target="report">
-        KPIレポート
-      </button>
-
-      <!-- KPI -->
-      <div id="kpiReportTab" class="hidden">
-        <h2>カテゴリ別 工数</h2>
-
-        <select id="reportPeriodSelect" class="input-field" style="max-width:200px">
-          <option value="current_week">今週</option>
-          <option value="last_week">先週</option>
-          <option value="current_month">今月</option>
-          <option value="last_month">先月</option>
-        </select>
-
-        <button id="fetchKpiButton" class="btn btn-secondary">集計</button>
-
-        <div id="reportTotalTime"></div>
-        <div id="kpiResultsContainer"></div>
       </div>
 
     </section>
