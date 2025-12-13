@@ -1,281 +1,261 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notion Toggl Timer</title>
-    <style>
-        /* 基本的なスタイル */
-        body {
-            font-family: sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-        }
-        .app-container {
-            width: 100%;
-            max-width: 600px;
-            background-color: white;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            min-height: 100vh; /* 画面の高さに合わせる */
-        }
-        h1 {
-            border-bottom: 2px solid #ccc;
-            padding-bottom: 10px;
-            margin-top: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .hidden {
-            display: none !important;
-        }
-        .input-field {
-            width: 100%;
-            padding: 8px;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        .btn {
-            padding: 10px 15px;
-            border: none;
-            cursor: pointer;
-            border-radius: 4px;
-            font-weight: bold;
-            margin-right: 10px;
-        }
-        .btn-primary {
-            background-color: #007bff;
-            color: white;
-        }
-        .btn-secondary {
-            background-color: #6c757d;
-            color: white;
-        }
-        .btn-green {
-            background-color: #28a745;
-            color: white;
-        }
-        .btn-danger {
-            background-color: #dc3545;
-            color: white;
-        }
-        
-        /* ★★★ タブデザイン修正: 2ボタン構成に戻す ★★★ */
-        .tab-container {
-            display: flex;
-            justify-content: center; /* 中央寄せ */
-            margin-bottom: 15px;
-        }
-        .tab-btn {
-            background-color: #e9ecef;
-            color: #495057;
-            border: 1px solid #ccc;
-            padding: 10px 25px;
-            cursor: pointer;
-            margin: 0 -1px 0 0; /* ボタン間の隙間をなくす */
-            border-radius: 0;
-            flex-grow: 1; 
-            max-width: 50%; /* 2つのボタンで均等に分割 */
-        }
-        .tab-btn.active {
-            background-color: #007bff;
-            color: white;
-            border-color: #007bff;
-            z-index: 1;
-        }
-        #startExistingTask {
-            border-radius: 4px 0 0 4px;
-        }
-        #startNewTask {
-            border-radius: 0 4px 4px 0;
-        }
-        /* ★★★ タブデザイン修正 終わり ★★★ */
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notion Toggl Timer</title>
 
-        /* タスク一覧 */
-        .task-list {
-            list-style: none;
-            padding: 0;
-        }
-        .task-list li {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-        }
-        .task-list li:last-child {
-            border-bottom: none;
-        }
-        .assignee {
-            font-size: 0.8em;
-            color: #6c757d;
-            margin-left: 5px;
-        }
+  <style>
+    /* =====================
+       基本レイアウト
+    ===================== */
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      min-height: 100vh;
+    }
 
-        /* 実行中タスク */
-        #runningTaskContainer {
-            background-color: #ffc107;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            color: #343a40;
-            text-align: center;
-        }
-        #runningTimer {
-            font-size: 2em;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        
-        /* レポート表示/非表示トグル用のスタイル */
-        .toggle-btn {
-            width: 100%;
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #e9ecef;
-            color: #495057;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-    </style>
+    .app-container {
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+      background-color: #fff;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,.1);
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      border-bottom: 2px solid #ccc;
+      padding-bottom: 10px;
+      margin-top: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* =====================
+       フォーム系
+    ===================== */
+    .input-field {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    /* =====================
+       ボタン
+    ===================== */
+    .btn {
+      padding: 10px 15px;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    .btn-primary { background:#007bff; color:#fff; }
+    .btn-secondary { background:#6c757d; color:#fff; }
+    .btn-green { background:#28a745; color:#fff; }
+    .btn-danger { background:#dc3545; color:#fff; }
+
+    /* =====================
+       タブ
+    ===================== */
+    .tab-container {
+      display: flex;
+      margin-bottom: 15px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      background:#e9ecef;
+      border:1px solid #ccc;
+      padding:10px;
+      cursor:pointer;
+    }
+
+    .tab-btn.active {
+      background:#007bff;
+      color:#fff;
+      border-color:#007bff;
+    }
+
+    #startExistingTask {
+      border-radius:4px 0 0 4px;
+    }
+    #startNewTask {
+      border-radius:0 4px 4px 0;
+    }
+
+    /* =====================
+       タスク一覧
+    ===================== */
+    .task-list {
+      list-style:none;
+      padding:0;
+      margin:0;
+    }
+    .task-list li {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:10px;
+      border-bottom:1px solid #eee;
+    }
+
+    /* =====================
+       実行中タスク
+    ===================== */
+    #runningTaskContainer {
+      background:#ffc107;
+      padding:15px;
+      border-radius:5px;
+      margin-bottom:20px;
+      text-align:center;
+    }
+    #runningTimer {
+      font-size:2em;
+      font-weight:bold;
+    }
+
+    /* =====================
+       KPI
+    ===================== */
+    #kpiReportTab {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-top: 15px;
+      width: 100%;
+      min-height: 300px;
+      box-sizing: border-box;
+    }
+
+    .toggle-btn {
+      width: 100%;
+      margin-top: 15px;
+      padding: 10px;
+      background: #e9ecef;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
 </head>
+
 <body>
-    <div class="app-container">
-        <header>
-            <h1>
-                Notion Timer
-                <button id="toggleSettings" class="btn btn-secondary" style="font-size: 0.8em;">設定</button>
-            </h1>
-        </header>
 
-        <div id="mainView" style="display: flex; flex-direction: column; flex-grow: 1; min-height: calc(100vh - 80px);">
+<div class="app-container">
 
-            <section id="runningTaskContainer" class="hidden">
-                <p>現在実行中のタスク:</p>
-                <h2 id="runningTaskTitle"></h2>
-                <div id="runningTimer">00:00:00</div>
-                
-                <div class="form-group">
-                    <textarea id="thinkingLogInput" class="input-field" rows="3" placeholder="今日の思考ログやメモを残す..."></textarea>
-                </div>
+  <header>
+    <h1>
+      Notion Timer
+      <button id="toggleSettings" class="btn btn-secondary">設定</button>
+    </h1>
+  </header>
 
-                <div>
-                    <button id="stopTaskButton" class="btn btn-primary">停止 (作業中断)</button>
-                    <button id="completeTaskButton" class="btn btn-danger">完了 (作業終了)</button>
-                </div>
-            </section>
+  <!-- ================= MAIN ================= -->
+  <div id="mainView">
 
-            <section id="taskSelectionSection" style="display: flex; flex-direction: column; flex-grow: 1;">
-                
-                <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-                    <select id="taskDbFilter" class="input-field" style="flex-grow: 1; margin-right: 10px; margin-bottom: 0;">
-                        <option value="">データベースを選択</option>
-                    </select>
-                    <button id="reloadTasks" class="btn btn-secondary">リロード</button>
-                </div>
+    <!-- 実行中 -->
+    <section id="runningTaskContainer" class="hidden">
+      <p>現在実行中のタスク</p>
+      <h2 id="runningTaskTitle"></h2>
+      <div id="runningTimer">00:00:00</div>
 
-                <div class="tab-container">
-                    <button id="startExistingTask" class="tab-btn active" data-target="existing">既存タスク</button>
-                    <button id="startNewTask" class="tab-btn" data-target="new">新規タスク開始</button>
-                </div>
+      <textarea id="thinkingLogInput" class="input-field" rows="3"
+        placeholder="思考ログ"></textarea>
 
-                <div id="existingTaskTab" style="display: flex; flex-direction: column; flex-grow: 1;">
-                    <h2>進行中のタスク</h2>
-                    <div id="taskListContainer" style="overflow-y: auto; flex-grow: 1; border: 1px solid #ddd; padding: 10px;">
-                        <p>タスク一覧がここに表示されます。</p>
-                    </div>
-                </div>
+      <button id="stopTaskButton" class="btn btn-primary">停止</button>
+      <button id="completeTaskButton" class="btn btn-danger">完了</button>
+    </section>
 
-                <div id="newTaskTab" class="hidden">
-                    <h2>新規タスクの作成</h2>
-                    <p id="targetDbDisplay" style="font-style: italic;"></p>
-                    <form id="newTaskForm">
-                        <div class="form-group">
-                            <label for="newTaskTitle">タスク名:</label>
-                            <input type="text" id="newTaskTitle" class="input-field" required>
-                        </div>
+    <!-- タスク選択 -->
+    <section id="taskSelectionSection">
 
-                        <div id="newCatContainer"></div>
-                        <div id="newDeptContainer"></div>
+      <div style="display:flex; gap:10px;">
+        <select id="taskDbFilter" class="input-field"></select>
+        <button id="reloadTasks" class="btn btn-secondary">リロード</button>
+      </div>
 
-                        <button type="button" id="startNewTaskButton" class="btn btn-green" style="width: 100%;">
-                            作成して計測開始
-                        </button>
-                    </form>
-                </div>
-                
-                <button id="toggleKpiReportBtn" class="toggle-btn" data-target="report">KPIレポートを表示/非表示</button>
-                
-                <div id="kpiReportTab" class="hidden" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-top: 15px;">
-                    <h2>カテゴリ別 工数レポート</h2>
-                    <div style="margin-bottom: 15px; display: flex; align-items: center;">
-                        <label for="reportPeriodSelect">期間:</label>
-                        <select id="reportPeriodSelect" class="input-field" style="width: auto; display: inline-block; flex-grow: 0; margin-left: 10px; margin-bottom: 0;">
-                            <option value="current_week">今週</option>
-                            <option value="last_week">先週</option>
-                            <option value="current_month">今月</option>
-                            <option value="last_month">先月</option>
-                        </select>
-                        <button id="fetchKpiButton" class="btn btn-secondary" style="margin-left: 10px;">集計を更新</button>
-                    </div>
-                    
-                    <h3>集計結果</h3>
-                    <div id="reportTotalTime" style="font-weight: bold; margin-bottom: 15px;">総計測時間: -</div>
-                    <div id="kpiResultsContainer">
-                        <p>集計ボタンを押してください。</p>
-                    </div>
-                </div>
-            </section>
-        </div>
+      <div class="tab-container">
+        <button id="startExistingTask" class="tab-btn active" data-target="existing">
+          既存タスク
+        </button>
+        <button id="startNewTask" class="tab-btn" data-target="new">
+          新規タスク
+        </button>
+      </div>
 
-        <div id="settingsView" class="hidden">
-            <h2>設定</h2>
-            
-            <h3>Notion連携</h3>
-            <div class="form-group">
-                <label for="confNotionToken">インテグレーションSecret Token:</label>
-                <input type="password" id="confNotionToken" class="input-field">
-            </div>
-            <div class="form-group">
-                <label for="confNotionUserId">自分のNotionユーザーID (32桁):</label>
-                <input type="text" id="confNotionUserId" class="input-field" placeholder="タスク割り当てに使用">
-            </div>
-            
-            <hr>
-            <h3>データベース設定</h3>
-            <div id="dbConfigContainer">
-                </div>
-            <button id="addDbConfig" class="btn btn-secondary" style="margin-bottom: 20px;">+ データベースを追加</button>
+      <div id="existingTaskTab">
+        <div id="taskListContainer"></div>
+      </div>
 
-            <hr>
-            <h3>Toggl連携</h3>
-            <div class="form-group">
-                <label for="confTogglToken">Toggl APIトークン:</label>
-                <input type="password" id="confTogglToken" class="input-field">
-            </div>
-            <div class="form-group">
-                <label for="confTogglWid">Toggl Workspace ID:</label>
-                <input type="text" id="confTogglWid" class="input-field">
-            </div>
+      <div id="newTaskTab" class="hidden">
+        <input id="newTaskTitle" class="input-field" placeholder="タスク名">
+        <div id="newCatContainer"></div>
+        <div id="newDeptContainer"></div>
+        <button id="startNewTaskButton" class="btn btn-green">開始</button>
+      </div>
 
-            <div style="margin-top: 20px;">
-                <button id="saveConfig" class="btn btn-primary">設定を保存</button>
-                <button id="cancelConfig" class="btn btn-secondary">閉じる</button>
-            </div>
-        </div>
-    </div>
-    
-    <script src="app.js"></script>
+      <button id="toggleKpiReportBtn" class="toggle-btn" data-target="report">
+        KPIレポート
+      </button>
+
+      <!-- KPI -->
+      <div id="kpiReportTab" class="hidden">
+        <h2>カテゴリ別 工数</h2>
+
+        <select id="reportPeriodSelect" class="input-field" style="max-width:200px">
+          <option value="current_week">今週</option>
+          <option value="last_week">先週</option>
+          <option value="current_month">今月</option>
+          <option value="last_month">先月</option>
+        </select>
+
+        <button id="fetchKpiButton" class="btn btn-secondary">集計</button>
+
+        <div id="reportTotalTime"></div>
+        <div id="kpiResultsContainer"></div>
+      </div>
+
+    </section>
+  </div>
+
+  <!-- ================= SETTINGS ================= -->
+  <div id="settingsView" class="hidden">
+    <h2>設定</h2>
+
+    <input id="confNotionToken" class="input-field" placeholder="Notion Token">
+    <input id="confNotionUserId" class="input-field" placeholder="Notion User ID">
+
+    <div id="dbConfigContainer"></div>
+    <button id="addDbConfig" class="btn btn-secondary">DB追加</button>
+
+    <input id="confTogglToken" class="input-field" placeholder="Toggl Token">
+    <input id="confTogglWid" class="input-field" placeholder="Workspace ID">
+
+    <button id="saveConfig" class="btn btn-primary">保存</button>
+    <button id="cancelConfig" class="btn btn-secondary">閉じる</button>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
