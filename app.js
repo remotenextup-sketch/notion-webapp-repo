@@ -1108,48 +1108,66 @@ async function fetchKpiReport() {
   const period = dom.reportPeriodSelect?.value || 'current_week';
   const { startDate, endDate } = calculateReportDates(period);
 
+  const since = Math.floor(startDate.getTime() / 1000);
+  const until = Math.floor(endDate.getTime() / 1000);
+
   const url =
-    `https://api.track.toggl.com/reports/api/v3/workspaces/${settings.togglWorkspaceId}/summary`;
+    `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries` +
+    `?since=${since}&until=${until}`;
 
-  const body = {
-    start_date: startDate.toISOString().split('T')[0],
-    end_date: endDate.toISOString().split('T')[0],
-    grouping: 'tags',
-    subgrouping: 'none'
-  };
+  console.log('🟢 KPI fetch url:', url);
 
-  const res = await externalTogglApi(url, 'POST', body);
-
-  const rows = res?.groups || [];
-  let totalMs = 0;
-
-  clearElement(dom.kpiResultsContainer);
-
-  if (rows.length === 0) {
-    dom.kpiResultsContainer.innerHTML = '<p>該当期間のデータがありません。</p>';
-    dom.reportTotalTime.textContent = '';
+  let entries;
+  try {
+    entries = await externalTogglApi(url, 'GET');
+  } catch (e) {
+    console.error(e);
+    alert(`KPI取得失敗: ${e.message}`);
     return;
   }
 
-  const ul = document.createElement('ul');
-  ul.style.listStyle = 'none';
-  ul.style.padding = '0';
+  let totalMs = 0;
+  const byTag = {};
 
-  rows.forEach(r => {
-    const tag = r.title || '(no tag)';
-    const ms = r.time || 0;
-    totalMs += ms;
+  (entries || []).forEach(e => {
+    if (e.duration > 0) {
+      const ms = e.duration * 1000;
+      totalMs += ms;
 
-    const li = document.createElement('li');
-    li.textContent = `${tag}：${formatTime(ms)}`;
-    ul.appendChild(li);
+      const tags = Array.isArray(e.tags) && e.tags.length > 0
+        ? e.tags
+        : ['(タグなし)'];
+
+      tags.forEach(tag => {
+        byTag[tag] = (byTag[tag] || 0) + ms;
+      });
+    }
   });
 
-  dom.kpiResultsContainer.appendChild(ul);
-  dom.reportTotalTime.textContent = `合計：${formatTime(totalMs)}`;
+  // 表示
+  if (dom.reportTotalTime) {
+    dom.reportTotalTime.textContent = `総時間: ${formatTime(totalMs)}`;
+  }
 
-  showNotification('KPI集計完了');
+  if (!totalMs) {
+    dom.kpiResultsContainer.innerHTML = '<p>対象期間の計測データはありません。</p>';
+    return;
+  }
+
+  let html = '<ul class="task-list">';
+  Object.entries(byTag)
+    .sort(([, a], [, b]) => b - a)
+    .forEach(([tag, ms]) => {
+      const pct = ((ms / totalMs) * 100).toFixed(1);
+      html += `<li><strong>${tag}</strong>: ${formatTime(ms)} (${pct}%)</li>`;
+    });
+  html += '</ul>';
+
+  dom.kpiResultsContainer.innerHTML = html;
+
+  showNotification('✅ KPI取得完了');
 }
+
 
 // =====================================================
 // Init
