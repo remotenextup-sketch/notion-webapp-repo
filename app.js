@@ -31,7 +31,7 @@ console.log('🔥 APP.JS PROXY BUILD 2025-12-13 FULL');
 // =====================================================
 // 定数・設定
 // =====================================================
-const PROXY_URL = '/api/proxy';
+const PROXY_URL =  'https://company-notion-toggl-api.vercel.app/api/proxy';
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
 
 const STATUS_INCOMPLETE = ['未着手', '進行中'];
