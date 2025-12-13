@@ -1,7 +1,7 @@
 console.log('🔥 APP.JS PROXY BUILD 2025-12-12 FINAL');
 
 // =====================================================
-// 🔒 fetch ガード（Toggl直叩き防止）
+// 🔒 SAFETY PATCH: Toggl直叩き完全防止 & デバッグ可視化
 // =====================================================
 (() => {
   const originalFetch = window.fetch;
@@ -14,7 +14,7 @@ console.log('🔥 APP.JS PROXY BUILD 2025-12-12 FINAL');
         : '';
 
     if (url.includes('api.track.toggl.com')) {
-      console.error('🚨 Direct Toggl API call blocked:', url);
+      console.error('🚨 BLOCKED: Direct Toggl API call detected', url);
       throw new Error('Direct Toggl API call blocked. Use proxy.');
     }
 
@@ -44,8 +44,11 @@ const settings = {
   timerInterval: null
 };
 
+const dbPropertiesCache = {};
+let dom = null;
+
 // =====================================================
-// 汎用ユーティリティ
+// Utility
 // =====================================================
 function formatTime(ms) {
   const s = Math.floor(ms / 1000);
@@ -55,41 +58,138 @@ function formatTime(ms) {
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
 }
 
-function showNotification(msg, ms = 3000) {
-  alert(msg);
+function showNotification(message, duration = 3000) {
+  let n = document.getElementById('appNotification');
+  if (!n) {
+    n = document.createElement('div');
+    n.id = 'appNotification';
+    n.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #4CAF50;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 6px;
+      z-index: 9999;
+      opacity: 0;
+      transition: opacity .3s;
+    `;
+    document.body.appendChild(n);
+  }
+  n.textContent = message;
+  n.style.opacity = '1';
+  clearTimeout(n._timer);
+  n._timer = setTimeout(() => (n.style.opacity = '0'), duration);
+}
+
+function clearElement(el) {
+  if (el) el.innerHTML = '';
 }
 
 // =====================================================
-// 🧠 Proxy 経由 API（ここが最重要）
+// DOM取得
+// =====================================================
+function getDomElements() {
+  return {
+    mainView: document.getElementById('mainView'),
+    settingsView: document.getElementById('settingsView'),
+
+    confNotionToken: document.getElementById('confNotionToken'),
+    confNotionUserId: document.getElementById('confNotionUserId'),
+    confTogglToken: document.getElementById('confTogglToken'),
+    confTogglWid: document.getElementById('confTogglWid'),
+
+    dbConfigContainer: document.getElementById('dbConfigContainer'),
+    addDbConfigButton: document.getElementById('addDbConfig'),
+
+    saveConfigButton: document.getElementById('saveConfig'),
+    toggleSettingsButton: document.getElementById('toggleSettings'),
+    cancelConfigButton: document.getElementById('cancelConfig'),
+
+    taskDbFilter: document.getElementById('taskDbFilter'),
+    taskListContainer: document.getElementById('taskListContainer'),
+    reloadTasksButton: document.getElementById('reloadTasks'),
+
+    runningTaskContainer: document.getElementById('runningTaskContainer'),
+    runningTaskTitle: document.getElementById('runningTaskTitle'),
+    runningTimer: document.getElementById('runningTimer'),
+    thinkingLogInput: document.getElementById('thinkingLogInput'),
+
+    stopTaskButton: document.getElementById('stopTaskButton'),
+    completeTaskButton: document.getElementById('completeTaskButton'),
+
+    newTaskForm: document.getElementById('newTaskForm'),
+    newTaskTitle: document.getElementById('newTaskTitle'),
+    newCatContainer: document.getElementById('newCatContainer'),
+    newDeptContainer: document.getElementById('newDeptContainer'),
+    targetDbDisplay: document.getElementById('targetDbDisplay'),
+    startNewTaskButton: document.getElementById('startNewTaskButton'),
+
+    startExistingTask: document.getElementById('startExistingTask'),
+    startNewTask: document.getElementById('startNewTask'),
+    existingTaskTab: document.getElementById('existingTaskTab'),
+    newTaskTab: document.getElementById('newTaskTab'),
+    taskSelectionSection: document.getElementById('taskSelectionSection'),
+
+    toggleKpiReportBtn: document.getElementById('toggleKpiReportBtn'),
+    kpiReportTab: document.getElementById('kpiReportTab'),
+    reportPeriodSelect: document.getElementById('reportPeriodSelect'),
+    fetchKpiButton: document.getElementById('fetchKpiButton'),
+    reportTotalTime: document.getElementById('reportTotalTime'),
+    kpiResultsContainer: document.getElementById('kpiResultsContainer')
+  };
+}
+
+// =====================================================
+// Settings
+// =====================================================
+function loadSettings() {
+  settings.notionToken = localStorage.getItem('notionToken') || '';
+  settings.humanUserId = localStorage.getItem('humanUserId') || '';
+  settings.togglApiToken = localStorage.getItem('togglApiToken') || '';
+  settings.togglWorkspaceId = localStorage.getItem('togglWorkspaceId') || '';
+  try {
+    settings.notionDatabases = JSON.parse(localStorage.getItem('notionDatabases') || '[]');
+  } catch {
+    settings.notionDatabases = [];
+  }
+}
+
+function saveSettings() {
+  localStorage.setItem('notionToken', settings.notionToken);
+  localStorage.setItem('humanUserId', settings.humanUserId);
+  localStorage.setItem('togglApiToken', settings.togglApiToken);
+  localStorage.setItem('togglWorkspaceId', settings.togglWorkspaceId);
+  localStorage.setItem('notionDatabases', JSON.stringify(settings.notionDatabases));
+}
+
+// =====================================================
+// Proxy API
 // =====================================================
 async function externalApi(targetUrl, method, auth, body = null) {
-  const payload = {
-    targetUrl,
-    method,
-    tokenKey: auth.tokenKey,
-    tokenValue: auth.tokenValue,
-    notionVersion: auth.notionVersion,
-    body
-  };
-
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      targetUrl,
+      method,
+      tokenKey: auth.tokenKey,
+      tokenValue: auth.tokenValue,
+      notionVersion: auth.notionVersion,
+      body
+    })
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: 'Proxy Error' }));
-    throw new Error(`API Error (${res.status}): ${err.message}`);
+    const e = await res.json().catch(() => ({ message: 'Proxy Error' }));
+    throw new Error(`API Error (${res.status}): ${e.message}`);
   }
-
   return res.status === 204 ? null : res.json();
 }
 
-// =====================================================
-// Notion API
-// =====================================================
-async function notionApi(endpoint, method = 'GET', body = null) {
+function notionApi(endpoint, method = 'GET', body = null) {
   return externalApi(
     `https://api.notion.com/v1${endpoint}`,
     method,
@@ -102,12 +202,9 @@ async function notionApi(endpoint, method = 'GET', body = null) {
   );
 }
 
-// =====================================================
-// Toggl API（必ず method を渡す）
-// =====================================================
-async function externalTogglApi(targetUrl, method = 'GET', body = null) {
+function externalTogglApi(url, method = 'GET', body = null) {
   return externalApi(
-    targetUrl,
+    url,
     method,
     {
       tokenKey: 'togglApiToken',
@@ -119,7 +216,7 @@ async function externalTogglApi(targetUrl, method = 'GET', body = null) {
 }
 
 // =====================================================
-// KPI レポート（405対策済）
+// KPI
 // =====================================================
 async function fetchKpiReport() {
   if (!settings.togglApiToken || !settings.togglWorkspaceId) {
@@ -133,12 +230,10 @@ async function fetchKpiReport() {
 
   const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/search`;
 
-  const body = {
+  const entries = await externalTogglApi(url, 'POST', {
     start_date: start.toISOString(),
     end_date: end.toISOString()
-  };
-
-  const entries = await externalTogglApi(url, 'POST', body);
+  });
 
   let total = 0;
   const byTag = {};
@@ -158,19 +253,21 @@ async function fetchKpiReport() {
 }
 
 // =====================================================
-// 初期化
+// Init
 // =====================================================
-function loadSettings() {
-  settings.notionToken = localStorage.getItem('notionToken') || '';
-  settings.togglApiToken = localStorage.getItem('togglApiToken') || '';
-  settings.togglWorkspaceId = localStorage.getItem('togglWorkspaceId') || '';
-}
-
 function init() {
+  dom = getDomElements();
   loadSettings();
-  document
-    .getElementById('fetchKpiButton')
-    ?.addEventListener('click', fetchKpiReport);
+
+  dom.fetchKpiButton?.addEventListener('click', fetchKpiReport);
+  dom.toggleSettingsButton?.addEventListener('click', () => {
+    dom.settingsView.classList.remove('hidden');
+    dom.mainView.classList.add('hidden');
+  });
+  dom.cancelConfigButton?.addEventListener('click', () => {
+    dom.settingsView.classList.add('hidden');
+    dom.mainView.classList.remove('hidden');
+  });
 }
 
 init();
