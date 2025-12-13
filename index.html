@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Notion Timer</title>
+  <title>Notion Toggl Timer</title>
 
   <style>
     body {
@@ -11,52 +11,66 @@
       margin: 0;
       background: #f4f4f4;
     }
-
     .app-container {
       max-width: 900px;
-      margin: 0 auto;
+      margin: auto;
       background: #fff;
-      padding: 20px;
       min-height: 100vh;
+      padding: 20px;
+      box-sizing: border-box;
     }
-
-    .hidden { display: none !important; }
+    .hidden { display: none; }
 
     h1 {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 2px solid #ddd;
-      padding-bottom: 10px;
+      margin-top: 0;
     }
 
     .btn {
-      padding: 8px 14px;
+      padding: 8px 12px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
       font-weight: bold;
     }
-
     .btn-primary { background: #007bff; color: #fff; }
     .btn-secondary { background: #6c757d; color: #fff; }
+    .btn-green { background: #28a745; color: #fff; }
 
     .input-field {
       width: 100%;
       padding: 8px;
-      margin-bottom: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      margin-bottom: 10px;
+      box-sizing: border-box;
     }
 
-    .task-list {
+    .tab-container {
+      display: flex;
+      margin: 10px 0;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background: #eee;
+    }
+    .tab-btn.active {
+      background: #007bff;
+      color: #fff;
+    }
+
+    ul.task-list {
       list-style: none;
       padding: 0;
     }
-
-    .task-list li {
+    ul.task-list li {
       padding: 10px;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
     }
   </style>
 </head>
@@ -69,33 +83,43 @@
     <button id="toggleSettings" class="btn btn-secondary">設定</button>
   </h1>
 
-  <!-- ================= MAIN ================= -->
+  <!-- MAIN -->
   <div id="mainView">
 
-    <div style="display:flex; gap:10px; margin-bottom:10px;">
+    <section id="taskSelectionSection">
       <select id="taskDbFilter" class="input-field"></select>
       <button id="reloadTasks" class="btn btn-secondary">再読込</button>
-    </div>
 
-    <ul id="taskListContainer" class="task-list"></ul>
+      <div class="tab-container">
+        <button id="startExistingTask" class="tab-btn active" data-target="existing">
+          既存タスク
+        </button>
+        <button id="startNewTask" class="tab-btn" data-target="new">
+          新規タスク
+        </button>
+      </div>
+
+      <div id="existingTaskTab">
+        <div id="taskListContainer"></div>
+      </div>
+
+      <div id="newTaskTab" class="hidden">
+        <input id="newTaskTitle" class="input-field" placeholder="新規タスク名">
+        <button id="startNewTaskButton" class="btn btn-green">開始</button>
+      </div>
+    </section>
+
   </div>
 
-  <!-- ================= SETTINGS ================= -->
+  <!-- SETTINGS -->
   <div id="settingsView" class="hidden">
-
     <h2>設定</h2>
 
-    <label>Notion API Token</label>
-    <input id="confNotionToken" class="input-field" placeholder="secret_xxx"/>
+    <input id="confNotionToken" class="input-field" placeholder="Notion API Token">
+    <input id="confNotionUserId" class="input-field" placeholder="Notion User ID（任意）">
 
-    <label>Notion User ID（任意）</label>
-    <input id="confNotionUserId" class="input-field"/>
-
-    <h3>タスクDB</h3>
     <div id="dbConfigContainer"></div>
     <button id="addDbConfig" class="btn btn-secondary">DB追加</button>
-
-    <hr/>
 
     <button id="saveConfig" class="btn btn-primary">保存</button>
     <button id="cancelConfig" class="btn btn-secondary">閉じる</button>
