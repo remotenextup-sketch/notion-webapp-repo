@@ -1,7 +1,7 @@
 console.log('🔥 APP.JS PROXY BUILD 2025-12-12 FINAL');
 
 // =====================================================
-// 🔒 SAFETY PATCH: Toggl直叩き完全防止 & デバッグ可視化
+// 🔒 SAFETY PATCH
 // =====================================================
 (() => {
   const originalFetch = window.fetch;
@@ -14,14 +14,8 @@ console.log('🔥 APP.JS PROXY BUILD 2025-12-12 FINAL');
         : '';
 
     if (url.includes('api.track.toggl.com')) {
-      console.error('🚨 BLOCKED: Direct Toggl API call detected', url);
       throw new Error('Direct Toggl API call blocked. Use proxy.');
     }
-
-    if (url.includes('/api/proxy')) {
-      console.log('🟢 Proxy fetch:', init?.method || 'POST', url);
-    }
-
     return originalFetch(input, init);
   };
 })();
@@ -37,55 +31,16 @@ const settings = {
   notionDatabases: [],
   humanUserId: '',
   togglApiToken: '',
-  togglWorkspaceId: '',
-  databases: [],
-  currentRunningTask: null,
-  startTime: null,
-  timerInterval: null
+  togglWorkspaceId: ''
 };
 
-const dbPropertiesCache = {};
 let dom = null;
 
 // =====================================================
 // Utility
 // =====================================================
-function formatTime(ms) {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-}
-
-function showNotification(message, duration = 3000) {
-  let n = document.getElementById('appNotification');
-  if (!n) {
-    n = document.createElement('div');
-    n.id = 'appNotification';
-    n.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #4CAF50;
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 6px;
-      z-index: 9999;
-      opacity: 0;
-      transition: opacity .3s;
-    `;
-    document.body.appendChild(n);
-  }
-  n.textContent = message;
-  n.style.opacity = '1';
-  clearTimeout(n._timer);
-  n._timer = setTimeout(() => (n.style.opacity = '0'), duration);
-}
-
-function clearElement(el) {
-  if (el) el.innerHTML = '';
+function showNotification(msg, ms = 3000) {
+  alert(msg);
 }
 
 // =====================================================
@@ -108,37 +63,7 @@ function getDomElements() {
     toggleSettingsButton: document.getElementById('toggleSettings'),
     cancelConfigButton: document.getElementById('cancelConfig'),
 
-    taskDbFilter: document.getElementById('taskDbFilter'),
-    taskListContainer: document.getElementById('taskListContainer'),
-    reloadTasksButton: document.getElementById('reloadTasks'),
-
-    runningTaskContainer: document.getElementById('runningTaskContainer'),
-    runningTaskTitle: document.getElementById('runningTaskTitle'),
-    runningTimer: document.getElementById('runningTimer'),
-    thinkingLogInput: document.getElementById('thinkingLogInput'),
-
-    stopTaskButton: document.getElementById('stopTaskButton'),
-    completeTaskButton: document.getElementById('completeTaskButton'),
-
-    newTaskForm: document.getElementById('newTaskForm'),
-    newTaskTitle: document.getElementById('newTaskTitle'),
-    newCatContainer: document.getElementById('newCatContainer'),
-    newDeptContainer: document.getElementById('newDeptContainer'),
-    targetDbDisplay: document.getElementById('targetDbDisplay'),
-    startNewTaskButton: document.getElementById('startNewTaskButton'),
-
-    startExistingTask: document.getElementById('startExistingTask'),
-    startNewTask: document.getElementById('startNewTask'),
-    existingTaskTab: document.getElementById('existingTaskTab'),
-    newTaskTab: document.getElementById('newTaskTab'),
-    taskSelectionSection: document.getElementById('taskSelectionSection'),
-
-    toggleKpiReportBtn: document.getElementById('toggleKpiReportBtn'),
-    kpiReportTab: document.getElementById('kpiReportTab'),
-    reportPeriodSelect: document.getElementById('reportPeriodSelect'),
-    fetchKpiButton: document.getElementById('fetchKpiButton'),
-    reportTotalTime: document.getElementById('reportTotalTime'),
-    kpiResultsContainer: document.getElementById('kpiResultsContainer')
+    fetchKpiButton: document.getElementById('fetchKpiButton')
   };
 }
 
@@ -150,11 +75,7 @@ function loadSettings() {
   settings.humanUserId = localStorage.getItem('humanUserId') || '';
   settings.togglApiToken = localStorage.getItem('togglApiToken') || '';
   settings.togglWorkspaceId = localStorage.getItem('togglWorkspaceId') || '';
-  try {
-    settings.notionDatabases = JSON.parse(localStorage.getItem('notionDatabases') || '[]');
-  } catch {
-    settings.notionDatabases = [];
-  }
+  settings.notionDatabases = JSON.parse(localStorage.getItem('notionDatabases') || '[]');
 }
 
 function saveSettings() {
@@ -166,7 +87,55 @@ function saveSettings() {
 }
 
 // =====================================================
-// Proxy API
+// 🔧 DB設定フォーム（← 今回の肝）
+// =====================================================
+function renderDbConfigForms() {
+  if (!dom.dbConfigContainer) return;
+  dom.dbConfigContainer.innerHTML = '';
+
+  if (settings.notionDatabases.length === 0) {
+    settings.notionDatabases.push({ name: '', id: '' });
+  }
+
+  settings.notionDatabases.forEach((db, i) => {
+    const row = document.createElement('div');
+    row.style.marginBottom = '8px';
+    row.innerHTML = `
+      <input class="db-name" data-i="${i}" placeholder="DB名" value="${db.name || ''}">
+      <input class="db-id" data-i="${i}" placeholder="DB ID" value="${db.id || ''}">
+    `;
+    dom.dbConfigContainer.appendChild(row);
+  });
+}
+
+// =====================================================
+// 保存処理
+// =====================================================
+function handleSaveSettings() {
+  settings.notionToken = dom.confNotionToken.value.trim();
+  settings.humanUserId = dom.confNotionUserId.value.trim();
+  settings.togglApiToken = dom.confTogglToken.value.trim();
+  settings.togglWorkspaceId = dom.confTogglWid.value.trim();
+
+  const names = document.querySelectorAll('.db-name');
+  const ids = document.querySelectorAll('.db-id');
+
+  settings.notionDatabases = [];
+  names.forEach((n, i) => {
+    const name = n.value.trim();
+    const id = ids[i].value.trim();
+    if (name && id) settings.notionDatabases.push({ name, id });
+  });
+
+  saveSettings();
+  showNotification('設定を保存しました');
+
+  dom.settingsView.classList.add('hidden');
+  dom.mainView.classList.remove('hidden');
+}
+
+// =====================================================
+// KPI
 // =====================================================
 async function externalApi(targetUrl, method, auth, body = null) {
   const res = await fetch(PROXY_URL, {
@@ -181,75 +150,25 @@ async function externalApi(targetUrl, method, auth, body = null) {
       body
     })
   });
-
-  if (!res.ok) {
-    const e = await res.json().catch(() => ({ message: 'Proxy Error' }));
-    throw new Error(`API Error (${res.status}): ${e.message}`);
-  }
-  return res.status === 204 ? null : res.json();
+  if (!res.ok) throw new Error('Proxy error');
+  return res.json();
 }
 
-function notionApi(endpoint, method = 'GET', body = null) {
-  return externalApi(
-    `https://api.notion.com/v1${endpoint}`,
-    method,
-    {
-      tokenKey: 'notionToken',
-      tokenValue: settings.notionToken,
-      notionVersion: '2022-06-28'
-    },
-    body
-  );
+function externalTogglApi(url, method, body) {
+  return externalApi(url, method, {
+    tokenKey: 'togglApiToken',
+    tokenValue: settings.togglApiToken,
+    notionVersion: '2022-06-28'
+  }, body);
 }
 
-function externalTogglApi(url, method = 'GET', body = null) {
-  return externalApi(
-    url,
-    method,
-    {
-      tokenKey: 'togglApiToken',
-      tokenValue: settings.togglApiToken,
-      notionVersion: '2022-06-28'
-    },
-    body
-  );
-}
-
-// =====================================================
-// KPI
-// =====================================================
 async function fetchKpiReport() {
-  if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-    alert('Toggl設定が未入力です');
-    return;
-  }
-
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - 7);
-
   const url = `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/search`;
-
-  const entries = await externalTogglApi(url, 'POST', {
-    start_date: start.toISOString(),
-    end_date: end.toISOString()
+  await externalTogglApi(url, 'POST', {
+    start_date: new Date(Date.now() - 7 * 86400000).toISOString(),
+    end_date: new Date().toISOString()
   });
-
-  let total = 0;
-  const byTag = {};
-
-  entries.forEach(e => {
-    if (e.duration > 0) {
-      const ms = e.duration * 1000;
-      total += ms;
-      (e.tags || ['(no tag)']).forEach(t => {
-        byTag[t] = (byTag[t] || 0) + ms;
-      });
-    }
-  });
-
-  console.log('📊 KPI RESULT', byTag);
-  showNotification(`KPI取得完了：${formatTime(total)}`);
+  showNotification('KPI取得完了');
 }
 
 // =====================================================
@@ -259,15 +178,24 @@ function init() {
   dom = getDomElements();
   loadSettings();
 
-  dom.fetchKpiButton?.addEventListener('click', fetchKpiReport);
   dom.toggleSettingsButton?.addEventListener('click', () => {
+    renderDbConfigForms();           // ← ★これが無かった
     dom.settingsView.classList.remove('hidden');
     dom.mainView.classList.add('hidden');
   });
+
   dom.cancelConfigButton?.addEventListener('click', () => {
     dom.settingsView.classList.add('hidden');
     dom.mainView.classList.remove('hidden');
   });
+
+  dom.saveConfigButton?.addEventListener('click', handleSaveSettings);
+  dom.addDbConfigButton?.addEventListener('click', () => {
+    settings.notionDatabases.push({ name: '', id: '' });
+    renderDbConfigForms();
+  });
+
+  dom.fetchKpiButton?.addEventListener('click', fetchKpiReport);
 }
 
 init();
