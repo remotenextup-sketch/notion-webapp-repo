@@ -1,10 +1,21 @@
-console.log('🔥 APP.JS PROXY BUILD 2025-12-13 FULL');
-
 // =====================================================
-// 🔒 SAFETY PATCH: Toggl直叩き完全防止 & Proxy可視化
+// 🔒 SAFETY PATCH（最終・安定版）
+// 目的:
+//  - Toggl API の直叩きを完全ブロック
+//  - Proxy 経由のみ通信を許可
+//  - fetch が存在しない環境でも壊れない
+//  - this / bind 事故を防止
 // =====================================================
 (() => {
-  const originalFetch = window.fetch;
+  // fetch が存在しない環境では何もしない（安全策）
+  if (typeof window.fetch !== 'function') {
+    console.warn('⚠️ SAFETY PATCH: fetch is not available. Skipped.');
+    return;
+  }
+
+  // 元の fetch を安全に保持（bind 必須）
+  const originalFetch = window.fetch.bind(window);
+
   window.fetch = function (input, init = {}) {
     const url =
       typeof input === 'string'
@@ -13,17 +24,18 @@ console.log('🔥 APP.JS PROXY BUILD 2025-12-13 FULL');
         ? input.url
         : '';
 
-    // Toggl直叩きブロック（必須）
-    if (url.includes('api.track.toggl.com')) {
+    // 🚨 Toggl API 直叩きは即ブロック
+    if (url && url.includes('api.track.toggl.com')) {
       console.error('🚨 BLOCKED: Direct Toggl API call detected', url);
       throw new Error('Direct Toggl API call blocked. Use proxy.');
     }
 
-    // Proxy可視化（デバッグ）
-    if (url.includes('/api/proxy')) {
+    // 🟢 Proxy 経由はログ表示（デバッグ用）
+    if (url && url.includes('/api/proxy')) {
       console.log('🟢 Proxy fetch:', init?.method || 'POST', url);
     }
 
+    // それ以外は通常の fetch
     return originalFetch(input, init);
   };
 })();
