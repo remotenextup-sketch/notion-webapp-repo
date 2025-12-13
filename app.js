@@ -997,84 +997,58 @@ function checkRunningState() {
 // =====================================================
 function switchTab(event) {
   const target = event?.currentTarget?.dataset?.target;
-  if (!target || !dom) return;
+  if (!target) return;
 
-  // -----------------------------
-  // active 状態リセット
-  // -----------------------------
+  // --- active状態リセット ---
   dom.startExistingTask?.classList.remove('active');
   dom.startNewTask?.classList.remove('active');
   dom.toggleKpiReportBtn?.classList.remove('active');
   event.currentTarget.classList.add('active');
 
-  // =====================================================
-  // KPI レポートタブ
-  // =====================================================
+  // ==================================
+  // KPI レポート
+  // ==================================
   if (target === 'report') {
-    // 他タブは完全に隠す
-    dom.existingTaskTab?.classList.add('hidden');
-    dom.newTaskTab?.classList.add('hidden');
-    dom.taskSelectionSection?.classList.add('hidden');
-
-    // KPI表示
+    // KPIだけ表示
     dom.kpiReportTab?.classList.remove('hidden');
 
-    // 🔥 body:flex 対策（白飛び防止）
-    if (dom.kpiReportTab) {
-      dom.kpiReportTab.style.display = 'block';
-      dom.kpiReportTab.style.width = '100%';
-      dom.kpiReportTab.style.maxWidth = '900px';
-      dom.kpiReportTab.style.minHeight = '60vh';
-      dom.kpiReportTab.style.overflowY = 'auto';
-    }
+    // タスク系は隠す
+    dom.existingTaskTab?.classList.add('hidden');
+    dom.newTaskTab?.classList.add('hidden');
 
-    // 初期文言（真っ白防止）
+    // ⚠️ ここ重要：taskSelectionSectionは隠さない
+    // dom.taskSelectionSection?.classList.add('hidden'); ← ❌ 削除
+
+    // 初期表示
     if (dom.kpiResultsContainer) {
       dom.kpiResultsContainer.innerHTML =
-        '<p>期間を選択して「KPI取得」を押してください</p>';
+        '<p>期間を選択して「集計」を押してください</p>';
     }
     if (dom.reportTotalTime) {
       dom.reportTotalTime.textContent = '';
     }
-
     return;
   }
 
-  // =====================================================
-  // 既存 / 新規 タスク側
-  // =====================================================
+  // ==================================
+  // 既存 / 新規 タスク
+  // ==================================
 
-  // KPIは必ず閉じる
+  // KPIは閉じる
   dom.kpiReportTab?.classList.add('hidden');
 
-  // KPI用のスタイルをリセット（重要）
-  if (dom.kpiReportTab) {
-    dom.kpiReportTab.style.minHeight = '';
-    dom.kpiReportTab.style.overflowY = '';
-  }
-
-  // タスク選択エリアを表示
+  // タスク選択は常に表示
   dom.taskSelectionSection?.classList.remove('hidden');
 
-  // -----------------------------
-  // 既存タスク
-  // -----------------------------
   if (target === 'existing') {
     dom.existingTaskTab?.classList.remove('hidden');
     dom.newTaskTab?.classList.add('hidden');
   }
 
-  // -----------------------------
-  // 新規タスク
-  // -----------------------------
   if (target === 'new') {
     dom.existingTaskTab?.classList.add('hidden');
     dom.newTaskTab?.classList.remove('hidden');
-
-    // 新規フォーム再描画
-    if (typeof renderNewTaskForm === 'function') {
-      renderNewTaskForm();
-    }
+    renderNewTaskForm();
   }
 }
 
