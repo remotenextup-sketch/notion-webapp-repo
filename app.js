@@ -1099,7 +1099,7 @@ function calculateReportDates(period) {
   return { startDate: start, endDate: end };
 }
 
-async function fetchKpiReport_DIRECT() {
+async function fetchKpiReport() {
   if (!settings.togglApiToken || !settings.togglWorkspaceId) {
     throw new Error('Toggl API Token / Workspace ID が未設定です');
   }
