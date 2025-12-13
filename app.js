@@ -1105,36 +1105,50 @@ async function fetchKpiReport() {
     return;
   }
 
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - 7);
-
-  const params = new URLSearchParams({
-    start_date: start.toISOString(),
-    end_date: end.toISOString()
-  });
+  const period = dom.reportPeriodSelect?.value || 'current_week';
+  const { startDate, endDate } = calculateReportDates(period);
 
   const url =
-    `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries?${params.toString()}`;
+    `https://api.track.toggl.com/reports/api/v3/workspace/${settings.togglWorkspaceId}/summary`;
 
-  // 🔴 GET に変更（bodyなし）
-  const entries = await externalTogglApi(url, 'GET');
+  const body = {
+    start_date: startDate.toISOString().split('T')[0],
+    end_date: endDate.toISOString().split('T')[0],
+    grouping: 'tags',
+    subgrouping: 'none'
+  };
 
-  let total = 0;
-  const byTag = {};
+  const res = await externalTogglApi(url, 'POST', body);
 
-  entries.forEach(e => {
-    if (e.duration > 0) {
-      const ms = e.duration * 1000;
-      total += ms;
-      (e.tags || ['(no tag)']).forEach(t => {
-        byTag[t] = (byTag[t] || 0) + ms;
-      });
-    }
+  const rows = res?.groups || [];
+  let totalMs = 0;
+
+  clearElement(dom.kpiResultsContainer);
+
+  if (rows.length === 0) {
+    dom.kpiResultsContainer.innerHTML = '<p>該当期間のデータがありません。</p>';
+    dom.reportTotalTime.textContent = '';
+    return;
+  }
+
+  const ul = document.createElement('ul');
+  ul.style.listStyle = 'none';
+  ul.style.padding = '0';
+
+  rows.forEach(r => {
+    const tag = r.title || '(no tag)';
+    const ms = r.time || 0;
+    totalMs += ms;
+
+    const li = document.createElement('li');
+    li.textContent = `${tag}：${formatTime(ms)}`;
+    ul.appendChild(li);
   });
 
-  console.log('📊 KPI RESULT', byTag);
-  showNotification(`KPI取得完了：${formatTime(total)}`);
+  dom.kpiResultsContainer.appendChild(ul);
+  dom.reportTotalTime.textContent = `合計：${formatTime(totalMs)}`;
+
+  showNotification('KPI集計完了');
 }
 
 // =====================================================
