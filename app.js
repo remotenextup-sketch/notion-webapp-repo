@@ -1108,17 +1108,17 @@ async function fetchKpiReport() {
   const period = dom.reportPeriodSelect?.value || 'current_week';
   const { startDate, endDate } = calculateReportDates(period);
 
-  const url = 'https://api.track.toggl.com/reports/api/v2/summary';
-
-  const body = {
-    workspace_id: Number(settings.togglWorkspaceId),
+  const params = new URLSearchParams({
+    workspace_id: settings.togglWorkspaceId,
     since: startDate.toISOString().split('T')[0],
     until: endDate.toISOString().split('T')[0],
     grouping: 'tags',
     subgrouping: 'none'
-  };
+  });
 
-  const res = await externalTogglApi(url, 'POST', body);
+  const url = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
+
+  const res = await externalTogglApi(url, 'GET');
 
   let totalMs = 0;
   clearElement(dom.kpiResultsContainer);
