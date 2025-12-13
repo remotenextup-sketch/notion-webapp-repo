@@ -2,67 +2,32 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Notion Toggl Timer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      background: #f4f4f4;
-    }
-    .app {
-      max-width: 900px;
-      margin: 0 auto;
-      background: #fff;
-      min-height: 100vh;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid #ddd;
-      padding-bottom: 10px;
-    }
-    .hidden { display: none !important; }
-    .btn {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-weight: 600;
-    }
+    body { font-family: system-ui, sans-serif; background:#f4f4f4; margin:0; }
+    .app { max-width:900px; margin:auto; background:#fff; min-height:100vh; padding:20px; }
+    .hidden { display:none !important; }
+
+    header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #ddd; padding-bottom:10px; }
+
+    .btn { padding:8px 14px; border-radius:6px; border:none; cursor:pointer; font-weight:600; }
     .primary { background:#2563eb; color:#fff; }
     .secondary { background:#6b7280; color:#fff; }
-    .danger { background:#dc2626; color:#fff; }
     .green { background:#16a34a; color:#fff; }
-    .input {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 10px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-    }
-    .task-row {
-      display:flex;
-      justify-content:space-between;
-      padding:8px 0;
-      border-bottom:1px solid #eee;
-    }
-    #running {
-      background:#fde68a;
-      padding:15px;
-      border-radius:8px;
-      margin-bottom:15px;
-      text-align:center;
-    }
-    #timer {
-      font-size:28px;
-      font-weight:bold;
-    }
+    .danger { background:#dc2626; color:#fff; }
+
+    .input { width:100%; padding:8px; margin-bottom:10px; border-radius:6px; border:1px solid #ccc; }
+
+    .tabs { display:flex; margin-top:15px; }
+    .tab { flex:1; padding:10px; cursor:pointer; background:#e5e7eb; text-align:center; }
+    .tab.active { background:#2563eb; color:#fff; }
+
+    .task-row { display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:8px 0; }
+
+    fieldset { border:1px solid #ccc; border-radius:6px; padding:10px; margin-bottom:10px; }
+    legend { font-weight:600; }
   </style>
 </head>
 
@@ -77,54 +42,40 @@
 <!-- ================= MAIN ================= -->
 <div id="mainView">
 
-  <div id="running" class="hidden">
-    <div id="runningTitle"></div>
-    <div id="timer">00:00:00</div>
-
-    <textarea id="thinkingLog" class="input" rows="3"
-      placeholder="思考ログ（自動で時系列追記）"></textarea>
-
-    <button id="stopBtn" class="btn primary">停止</button>
-    <button id="completeBtn" class="btn danger">完了</button>
+  <!-- タブ -->
+  <div class="tabs">
+    <div id="tabExisting" class="tab active">既存タスク</div>
+    <div id="tabNew" class="tab">新規タスク</div>
   </div>
 
-  <select id="dbSelect" class="input"></select>
-  <button id="reloadBtn" class="btn secondary">Notion再読込</button>
+  <!-- ===== 既存タスク ===== -->
+  <section id="existingSection">
+    <select id="dbSelect" class="input"></select>
+    <button id="reloadBtn" class="btn secondary">Notion再読込</button>
+    <div id="taskList"></div>
+  </section>
 
-  <div id="taskList"></div>
+  <!-- ===== 新規タスク ===== -->
+  <section id="newSection" class="hidden">
 
-  <hr>
+    <input id="newTitle" class="input" placeholder="タスク名（必須）">
 
-  <h3>新規タスク</h3>
-  <input id="newTitle" class="input" placeholder="タスク名">
+    <fieldset>
+      <legend>カテゴリ（必須）</legend>
+      <label><input type="radio" name="category" value="作業"> 作業</label><br>
+      <label><input type="radio" name="category" value="改善"> 改善</label><br>
+      <label><input type="radio" name="category" value="思考"> 思考</label>
+    </fieldset>
 
-  <input id="newCategory" class="input"
-    placeholder="カテゴリ（例：作業 / 改善）">
+    <fieldset>
+      <legend>部門（複数選択可）</legend>
+      <label><input type="checkbox" class="dept" value="Amazon"> Amazon</label><br>
+      <label><input type="checkbox" class="dept" value="楽天"> 楽天</label><br>
+      <label><input type="checkbox" class="dept" value="改善"> 改善</label>
+    </fieldset>
 
-  <input id="newDepartment" class="input"
-    placeholder="部門（複数可：Amazon,改善 など）">
-
-  <button id="createBtn" class="btn green">作成して開始</button>
-
-</div>
-
-<!-- ================= SETTINGS ================= -->
-<div id="settingsView" class="hidden">
-  <h2>設定</h2>
-
-  <input id="notionToken" class="input" placeholder="Notion API Token">
-  <input id="notionUserId" class="input" placeholder="Notion User ID（任意）">
-
-  <h3>Notion データベース</h3>
-  <div id="dbConfigs"></div>
-  <button id="addDb" class="btn secondary">DB追加</button>
-
-  <input id="togglToken" class="input" placeholder="Toggl API Token">
-  <input id="togglWid" class="input" placeholder="Toggl Workspace ID">
-
-  <button id="saveSettings" class="btn primary">保存</button>
-  <button id="closeSettings" class="btn secondary">閉じる</button>
-</div>
+    <button id="createBtn" class="btn green">作成して開始</button>
+  </section>
 
 </div>
 
