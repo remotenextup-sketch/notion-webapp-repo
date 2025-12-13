@@ -1,142 +1,97 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>Notion Toggl Timer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
-    body {
-      font-family: sans-serif;
-      background: #f4f4f4;
-      margin: 0;
-    }
-    .app-container {
-      max-width: 900px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
-      min-height: 100vh;
-    }
-    h1 {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .hidden { display: none !important; }
+    body { font-family: sans-serif; background:#f4f4f4; margin:0; }
+    .app { max-width:900px; margin:auto; background:#fff; padding:20px; }
+    .hidden { display:none !important; }
 
-    .form-group {
-      margin-bottom: 18px;
-    }
-    .form-group label {
-      font-weight: bold;
-      display: block;
-      margin-bottom: 6px;
-    }
-    .form-help {
-      font-size: 12px;
-      color: #666;
-      margin-bottom: 6px;
-    }
-    .input-field {
-      width: 100%;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+    h1 { display:flex; justify-content:space-between; }
+
+    .form-group { margin-bottom:16px; }
+    label { font-weight:bold; display:block; margin-bottom:4px; }
+    .help { font-size:12px; color:#666; margin-bottom:6px; }
+
+    input {
+      width:100%;
+      padding:8px;
+      border:1px solid #ccc;
+      border-radius:4px;
     }
 
-    .btn {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: bold;
+    button {
+      padding:10px 14px;
+      border:none;
+      border-radius:4px;
+      cursor:pointer;
+      font-weight:bold;
     }
-    .btn-primary { background: #007bff; color: #fff; }
-    .btn-secondary { background: #6c757d; color: #fff; }
-    .btn-green { background: #28a745; color: #fff; }
-
-    .task-list li {
-      display: flex;
-      justify-content: space-between;
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-    }
+    .primary { background:#007bff; color:#fff; }
+    .secondary { background:#6c757d; color:#fff; }
   </style>
 </head>
 
 <body>
-<div class="app-container">
+<div class="app">
 
-  <header>
-    <h1>
-      Notion Toggl Timer
-      <button id="toggleSettings" class="btn btn-secondary">設定</button>
-    </h1>
-  </header>
+  <h1>
+    Notion Toggl Timer
+    <button id="toggleSettings" class="secondary">設定</button>
+  </h1>
 
-  <!-- ================= MAIN ================= -->
+  <!-- MAIN -->
   <div id="mainView">
-
-    <section>
-      <h2>タスク一覧</h2>
-      <div id="taskListContainer"></div>
-    </section>
-
-    <section style="margin-top:30px;">
-      <h2>新規タスク</h2>
-      <input
-        id="newTaskTitle"
-        class="input-field"
-        placeholder="新しいタスク名"
-      />
-      <br><br>
-      <button id="startNewTaskButton" class="btn btn-green">▶ 打刻開始</button>
-    </section>
-
+    <p>タスクはここに表示されます（後で復活）</p>
   </div>
 
-  <!-- ================= SETTINGS ================= -->
+  <!-- SETTINGS -->
   <div id="settingsView" class="hidden">
     <h2>設定</h2>
 
-    <!-- ===== Notion ===== -->
-    <h3>Notion 設定</h3>
+    <!-- Notion -->
+    <h3>Notion</h3>
 
     <div class="form-group">
       <label>Notion API Token</label>
-      <div class="form-help">secret_xxx から始まるトークン</div>
-      <input id="confNotionToken" class="input-field">
+      <div class="help">secret_xxx</div>
+      <input id="confNotionToken">
     </div>
 
     <div class="form-group">
-      <label>Notion Database ID</label>
-      <div class="form-help">タスクを読み込むDBのID</div>
+      <label>Notion 個人ユーザーID（任意）</label>
+      <div class="help">担当者自動設定したい場合のみ</div>
+      <input id="confNotionUserId">
+    </div>
+
+    <div class="form-group">
+      <label>タスク用データベース</label>
       <div id="dbConfigContainer"></div>
-      <button id="addDbConfig" class="btn btn-secondary">DB追加</button>
+      <button id="addDbConfig" class="secondary">DB追加</button>
     </div>
 
     <hr>
 
-    <!-- ===== Toggl ===== -->
-    <h3>Toggl 設定</h3>
+    <!-- Toggl -->
+    <h3>Toggl</h3>
 
     <div class="form-group">
       <label>Toggl API Token</label>
-      <div class="form-help">Togglプロフィール画面で取得</div>
-      <input id="confTogglToken" class="input-field">
+      <input id="confTogglToken">
     </div>
 
     <div class="form-group">
-      <label>Toggl Workspace ID</label>
-      <div class="form-help">数字のみ</div>
-      <input id="confTogglWid" class="input-field">
+      <label>Workspace ID</label>
+      <input id="confTogglWid">
     </div>
 
     <br>
 
-    <button id="saveConfig" class="btn btn-primary">保存</button>
-    <button id="cancelConfig" class="btn btn-secondary">閉じる</button>
+    <button id="saveConfig" class="primary">保存</button>
+    <button id="cancelConfig" class="secondary">閉じる</button>
   </div>
 
 </div>
