@@ -1,12 +1,6 @@
-// =====================
-// 定数
-// =====================
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy';
 const TOGGL_V9 = 'https://api.track.toggl.com/api/v9';
 
-// =====================
-// 状態
-// =====================
 const state = {
   notionToken: '',
   notionUserId: '',
@@ -18,23 +12,18 @@ const state = {
   timer: null
 };
 
-// =====================
-// DOM
-// =====================
 const dom = {};
 [
   'openSettings','mainView','settingsView','closeSettings','saveSettings',
   'notionToken','notionUserId','togglToken','togglWid',
-  'dbConfigs','addDb','dbSelect','reloadBtn',
-  'taskList','running','runningTitle','timer',
-  'thinkingLog','stopBtn','completeBtn',
-  'tabExisting','tabNew','existingTab','newTab',
-  'newTitle','createBtn'
+  'dbConfigs','addDb','dbSelect','reloadBtn','taskList',
+  'running','runningTitle','timer','thinkingLog',
+  'stopBtn','completeBtn',
+  'newTitle','newCategory','newDepartment','createBtn'
 ].forEach(id => dom[id] = document.getElementById(id));
 
-// =====================
-// Utils
-// =====================
+/* ---------------- Utils ---------------- */
+const log = (...a) => console.log('[APP]', ...a);
 const fmt = ms => {
   const s = Math.floor(ms / 1000);
   const h = String(Math.floor(s / 3600)).padStart(2,'0');
@@ -43,46 +32,44 @@ const fmt = ms => {
   return `${h}:${m}:${sec}`;
 };
 
-// =====================
-// Proxy
-// =====================
-async function api(targetUrl, method='GET', tokenKey, tokenValue, body=null) {
+/* ---------------- Proxy ---------------- */
+async function api(targetUrl, method, tokenKey, tokenValue, body=null) {
   const res = await fetch(PROXY_URL, {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ targetUrl, method, tokenKey, tokenValue, body })
   });
   if (!res.ok) throw new Error(await res.text());
   return res.status === 204 ? null : res.json();
 }
 
-// =====================
-// Settings
-// =====================
+/* ---------------- Settings ---------------- */
 function loadSettings() {
-  Object.assign(state, JSON.parse(localStorage.getItem('settings')||'{}'));
+  Object.assign(state, JSON.parse(localStorage.getItem('settings') || '{}'));
+  dom.notionToken.value = state.notionToken || '';
+  dom.notionUserId.value = state.notionUserId || '';
+  dom.togglToken.value = state.togglToken || '';
+  dom.togglWid.value = state.togglWid || '';
 }
 function saveSettings() {
   localStorage.setItem('settings', JSON.stringify(state));
+  log('設定保存', state);
 }
 
-// =====================
-// UI
-// =====================
+/* ---------------- DB UI ---------------- */
 function renderDbConfigs() {
   dom.dbConfigs.innerHTML = '';
   state.databases.forEach((d,i)=>{
-    const row = document.createElement('div');
-    row.innerHTML = `
+    const row=document.createElement('div');
+    row.innerHTML=`
       <input class="input" placeholder="表示名" value="${d.name}">
       <input class="input" placeholder="DB ID" value="${d.id}">
     `;
-    row.querySelectorAll('input')[0].oninput=e=>d.name=e.target.value;
-    row.querySelectorAll('input')[1].oninput=e=>d.id=e.target.value;
+    row.children[0].oninput=e=>d.name=e.target.value;
+    row.children[1].oninput=e=>d.id=e.target.value;
     dom.dbConfigs.appendChild(row);
   });
 }
-
 function renderDbSelect() {
   dom.dbSelect.innerHTML='';
   state.databases.forEach(d=>{
@@ -92,10 +79,9 @@ function renderDbSelect() {
   });
 }
 
-// =====================
-// Notion
-// =====================
+/* ---------------- Notion ---------------- */
 async function loadTasks() {
+  log('Notion読み込み開始');
   const dbId = dom.dbSelect.value;
   if (!dbId) return;
 
@@ -106,6 +92,11 @@ async function loadTasks() {
 
   const statusProp = Object.entries(db.properties)
     .find(([,p])=>p.type==='status'||p.type==='select');
+
+  if (!statusProp) {
+    alert('ステータスプロパティが見つかりません');
+    return;
+  }
 
   const [statusName,statusDef]=statusProp;
   const type=statusDef.type;
@@ -139,53 +130,61 @@ async function loadTasks() {
     row.appendChild(b);
     dom.taskList.appendChild(row);
   });
+
+  log('Notion取得件数', res.results.length);
 }
 
-// =====================
-// Toggl
-// =====================
+/* ---------------- Toggl ---------------- */
 async function startTask(title) {
+  const cat = dom.newCategory.value.trim();
+  const dept = dom.newDepartment.value
+    .split(',')
+    .map(v=>v.trim())
+    .filter(Boolean);
+
+  const tagPrefix = [
+    ...dept.map(d=>`【${d}】`),
+    cat ? `【${cat}】` : ''
+  ].join('');
+
+  const desc = `${tagPrefix}${title}`;
+
   const res = await api(
     `${TOGGL_V9}/time_entries`,
     'POST','togglApiToken',state.togglToken,
     {
       workspace_id:Number(state.togglWid),
-      description:title,
+      description: desc,
       start:new Date().toISOString(),
       duration:-1,
       created_with:'Notion Timer'
     }
   );
 
-  state.running = res.id;
-  state.startTime = Date.now();
-  dom.runningTitle.textContent = title;
+  state.running=res.id;
+  state.startTime=Date.now();
+  dom.runningTitle.textContent=desc;
   dom.running.classList.remove('hidden');
 
-  state.timer = setInterval(()=>{
-    dom.timer.textContent = fmt(Date.now()-state.startTime);
+  state.timer=setInterval(()=>{
+    dom.timer.textContent=fmt(Date.now()-state.startTime);
   },1000);
 
   saveSettings();
 }
 
-async function stopTask(complete=false) {
+async function stopTask() {
   await api(
     `${TOGGL_V9}/workspaces/${state.togglWid}/time_entries/${state.running}/stop`,
     'PATCH','togglApiToken',state.togglToken
   );
-
   clearInterval(state.timer);
   dom.running.classList.add('hidden');
-
   state.running=null;
-  state.startTime=null;
   saveSettings();
 }
 
-// =====================
-// Events
-// =====================
+/* ---------------- Events ---------------- */
 dom.openSettings.onclick=()=>{
   dom.settingsView.classList.remove('hidden');
   dom.mainView.classList.add('hidden');
@@ -207,34 +206,12 @@ dom.saveSettings.onclick=()=>{
   renderDbSelect();
 };
 dom.reloadBtn.onclick=loadTasks;
-dom.stopBtn.onclick=()=>stopTask(false);
-dom.completeBtn.onclick=()=>stopTask(true);
+dom.stopBtn.onclick=stopTask;
+dom.completeBtn.onclick=stopTask;
+dom.createBtn.onclick=()=>startTask(dom.newTitle.value.trim());
 
-dom.tabExisting.onclick=()=>{
-  dom.tabExisting.classList.add('active');
-  dom.tabNew.classList.remove('active');
-  dom.existingTab.classList.remove('hidden');
-  dom.newTab.classList.add('hidden');
-};
-dom.tabNew.onclick=()=>{
-  dom.tabNew.classList.add('active');
-  dom.tabExisting.classList.remove('active');
-  dom.newTab.classList.remove('hidden');
-  dom.existingTab.classList.add('hidden');
-};
-dom.createBtn.onclick=async()=>{
-  const t=dom.newTitle.value.trim();
-  if(!t)return;
-  dom.newTitle.value='';
-  startTask(t);
-};
-
-// =====================
-// Init
-// =====================
+/* ---------------- Init ---------------- */
 loadSettings();
 renderDbConfigs();
 renderDbSelect();
-if(state.running){
-  dom.running.classList.remove('hidden');
-}
+log('init完了');
