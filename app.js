@@ -130,16 +130,11 @@ async function handleSaveSettings() {
   saveSettings();
   showNotification('設定を保存しました');
 
+  // 画面を戻すだけ
   dom.settingsView.classList.add('hidden');
   dom.mainView.classList.remove('hidden');
 
-  // 🔽 DB切替時のイベント（1回だけでOK）
-  dom.taskDbFilter?.removeEventListener('change', loadTasks);
-  dom.taskDbFilter?.addEventListener('change', loadTasks);
-
-  // 🔽 ここが「今まで呼ばれてなかった本体」
-  await fetchDatabaseList();
-  await loadTasks();
+  // ❌ fetchDatabaseList / loadTasks は呼ばない
 }
 
 // =====================================================
