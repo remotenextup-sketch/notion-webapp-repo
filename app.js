@@ -1101,52 +1101,32 @@ function calculateReportDates(period) {
 
 async function fetchKpiReport() {
   if (!settings.togglApiToken || !settings.togglWorkspaceId) {
-    throw new Error('Toggl API Token / Workspace ID が未設定です');
+    alert('Toggl設定が未入力です');
+    return;
   }
 
   const period = dom.reportPeriodSelect?.value || 'current_week';
   const { startDate, endDate } = calculateReportDates(period);
 
   const params = new URLSearchParams({
-    user_agent: 'notion-toggl-timer@example.com', // ← 形式が大事（メールっぽければOK）
-    workspace_id: String(settings.togglWorkspaceId),
-    since: startDate.toISOString().slice(0, 10),
-    until: endDate.toISOString().slice(0, 10),
-    grouping: 'tags'
+    user_agent: 'notion-toggl-timer@example.com',
+    workspace_id: settings.togglWorkspaceId,
+    since: startDate.toISOString().split('T')[0],
+    until: endDate.toISOString().split('T')[0],
+    grouping: 'tags',
   });
 
-  const url = `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
+  const url =
+    `https://api.track.toggl.com/reports/api/v2/summary?${params.toString()}`;
 
-  console.log('📡 Toggl v2 summary GET:', url);
+  console.log('📡 KPI via PROXY:', url);
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      // ✅ Content-Type は絶対に付けない
-      Authorization: `Basic ${btoa(settings.togglApiToken + ':api_token')}`
-    }
-  });
+  const res = await externalTogglApi(url, 'GET'); // ← ★ここだけ★
 
-  // ===== デバッグ強化（ここ超重要） =====
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error(`❌ Toggl ${res.status}:`, errorText);
-    throw new Error(`Toggl API ${res.status}: ${errorText.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-
-  console.log(
-    '✅ Toggl v2 success:',
-    data.total_count,
-    'records'
-  );
-
-  // ====== 表示処理 ======
   let totalMs = 0;
   clearElement(dom.kpiResultsContainer);
 
-  if (!data.data || data.data.length === 0) {
+  if (!res?.data || res.data.length === 0) {
     dom.kpiResultsContainer.innerHTML = '<p>データがありません</p>';
     dom.reportTotalTime.textContent = '';
     return;
@@ -1154,7 +1134,7 @@ async function fetchKpiReport() {
 
   const ul = document.createElement('ul');
 
-  data.data.forEach(row => {
+  res.data.forEach(row => {
     const tag = row.title?.tag || '(no tag)';
     const ms = row.time || 0;
     totalMs += ms;
@@ -1169,6 +1149,7 @@ async function fetchKpiReport() {
 
   showNotification('KPI取得完了');
 }
+
 
 // =====================================================
 // Init
