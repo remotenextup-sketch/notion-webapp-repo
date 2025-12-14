@@ -23,7 +23,7 @@ const settings = {
     currentRunningTask: null,
     startTime: null,
     timerInterval: null,
-    notificationInterval: null // ★ 継続通知用のインターバル
+    notificationInterval: null // 継続通知用のインターバル
 };
 
 let dom = {};
@@ -96,6 +96,126 @@ function saveSettings() {
         console.error('設定保存エラー:', e);
     }
 }
+
+
+// ================= UI (Render) ================= ★ ここに移動 ★
+
+/**
+ * 設定画面の各種値をDOMに反映させます。
+ */
+function renderSettings() {
+    if (dom.confNotionToken) dom.confNotionToken.value = settings.notionToken;
+    if (dom.confNotionUserId) dom.confNotionUserId.value = settings.humanUserId;
+    if (dom.confTogglToken) dom.confTogglToken.value = settings.togglApiToken;
+    if (dom.confTogglWid) dom.confTogglWid.value = settings.togglWorkspaceId;
+
+    renderDbConfig();
+    renderTaskDbFilter();
+}
+
+/**
+ * データベース設定のDOMをレンダリングします。
+ */
+function renderDbConfig() {
+    if (!dom.dbConfigContainer) return;
+
+    dom.dbConfigContainer.innerHTML = '';
+
+    settings.notionDatabases.forEach((db, index) => {
+        const div = document.createElement('div');
+        div.className = 'db-config-item';
+        div.style.cssText = 'border: 1px solid #ced4da; padding: 10px; margin-bottom: 8px; border-radius: 4px; background: #fff;';
+        div.dataset.index = index;
+
+        div.innerHTML = `
+            <label style="margin-top: 0;">DB名:</label>
+            <input type="text" class="db-name-input" value="${db.name || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;">
+            <label>DB ID:</label>
+            <input type="text" class="db-id-input" value="${db.id || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;">
+            <button class="remove-db btn btn-gray" data-index="${index}" style="float: right;">削除</button>
+            <div style="clear: both;"></div>
+        `;
+
+        div.querySelector('.remove-db').onclick = (e) => {
+            e.preventDefault();
+            const indexToRemove = parseInt(e.target.dataset.index);
+            if (!isNaN(indexToRemove)) {
+                settings.notionDatabases.splice(indexToRemove, 1);
+                renderDbConfig();
+            }
+        };
+
+        dom.dbConfigContainer.appendChild(div);
+    });
+}
+
+/**
+ * メイン画面のタスクDBフィルターをレンダリングします。
+ */
+function renderTaskDbFilter() {
+    if (!dom.taskDbFilter) return;
+
+    dom.taskDbFilter.innerHTML = '';
+    if (settings.notionDatabases.length === 0) {
+        const defaultOption = document.createElement('option');
+        defaultOption.textContent = '設定からDBを追加してください';
+        defaultOption.value = '';
+        dom.taskDbFilter.appendChild(defaultOption);
+        return;
+    }
+
+    settings.notionDatabases.forEach(db => {
+        const option = document.createElement('option');
+        option.value = db.id;
+        option.textContent = db.name || db.id;
+        dom.taskDbFilter.appendChild(option);
+    });
+
+    dom.taskDbFilter.onchange = loadTasks;
+}
+
+/**
+ * 新規タスクフォームにカテゴリと部門の選択肢をレンダリングします。
+ */
+function renderNewTaskForm() {
+    if (dom.newCategoryContainer) {
+        dom.newCategoryContainer.innerHTML = CATEGORIES.map((cat, index) => `
+            <label style="display: inline-flex; align-items: center; margin-top: 0; font-weight: normal;">
+                <input type="radio" name="newCategory" value="${cat}" ${index === 0 ? 'checked' : ''} style="width: auto; margin-right: 5px;"> ${cat}
+            </label>
+        `).join('');
+    }
+
+    if (dom.newDepartmentContainer) {
+        // 部門のチェックボックスを2列に分けて表示
+        const departmentHtml = DEPARTMENTS.map(dept => `
+            <label style="display: inline-flex; align-items: center; width: 48%; margin-right: 2%; font-weight: normal; margin-top: 0;">
+                <input type="checkbox" name="newDepartment" value="${dept}" style="width: auto; margin-right: 5px;"> ${dept}
+            </label>
+        `).join('');
+        
+        dom.newDepartmentContainer.innerHTML = departmentHtml;
+        dom.newDepartmentContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px 0;';
+    }
+}
+
+/**
+ * タブ切り替え処理
+ */
+function switchTab(targetId) {
+    const isExisting = targetId === 'existingTaskTab';
+
+    if(dom.startExistingTask) dom.startExistingTask.classList.toggle('active', isExisting);
+    if(dom.startNewTask) dom.startNewTask.classList.toggle('active', !isExisting);
+
+    if(dom.existingTaskTab) dom.existingTaskTab.classList.toggle('hidden', !isExisting);
+    if(dom.newTaskTab) dom.newTaskTab.classList.toggle('hidden', isExisting);
+
+    if (isExisting) {
+        loadTasks();
+    }
+}
+
 
 // ================= API =================
 async function externalApi(targetUrl, method = 'GET', auth, body = null) {
@@ -190,6 +310,71 @@ function assignHumanProperty() {
     return {};
 }
 
+
+async function loadTasks() {
+    if (!settings.notionToken) {
+        console.warn('Notion token 未設定のためタスク読込を中断');
+        dom.taskListContainer.innerHTML = '<li>Notionトークンを設定してください</li>';
+        return;
+    }
+
+    try {
+        const dbId = dom.taskDbFilter.value;
+        if (!dbId) {
+            dom.taskListContainer.innerHTML = '<li>データベースを選択してください</li>';
+            return;
+        }
+
+        dom.taskListContainer.innerHTML = '読み込み中...';
+
+        const res = await notionApi(`/databases/${dbId}/query`, 'POST', {
+            filter: {
+                or: STATUS_ACTIVE.map(s => ({
+                    property: 'ステータス',
+                    status: { equals: s }
+                }))
+            },
+            // タスク名プロパティでソート
+            sorts: [{
+                property: 'タスク名',
+                direction: 'ascending'
+            }]
+        });
+
+        dom.taskListContainer.innerHTML = '';
+        if (!res.results || res.results.length === 0) {
+            dom.taskListContainer.innerHTML = '<li>該当タスクがありません</li>';
+            return;
+        }
+
+        res.results.forEach(p => {
+            const title = p.properties['タスク名']?.title?.[0]?.plain_text || '無題';
+            const li = document.createElement('li');
+            li.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+            
+            const span = document.createElement('span');
+            span.textContent = title;
+            span.style.flex = '1';
+
+            const btn = document.createElement('button');
+            btn.textContent = '▶ 開始';
+            btn.className = 'btn btn-blue';
+            btn.onclick = () => startTask({
+                id: p.id,
+                title,
+                dbId,
+                properties: p.properties
+            });
+
+            li.append(span, btn);
+            dom.taskListContainer.appendChild(li);
+        });
+    } catch (e) {
+        console.error('タスク読み込みエラー:', e);
+        dom.taskListContainer.innerHTML = `<li style="color: red;">エラー: ${e.message}</li>`;
+    }
+}
+
 /**
  * Togglに時間エントリを作成し、タイマーを開始します。
  */
@@ -276,7 +461,7 @@ async function startNewTask() {
             'ステータス': { status: { name: '進行中' } },
             'カテゴリ': { select: { name: selectedCategory } },
             '部門': { multi_select: selectedDepartments.map(dept => ({ name: dept })) },
-            ...assignHumanProperty() // ★ 担当者情報をプロパティに追加
+            ...assignHumanProperty() // 担当者情報をプロパティに追加
         };
 
         // Notionページ作成
@@ -404,14 +589,14 @@ function stopTask(isComplete) {
     }, 50);
 }
 
-// ================= UI =================
+// ================= UI (Others) =================
 
 /**
  * 数秒間表示される非ブロック型通知を表示します。
  */
 function showNotification(message, duration = 3000) {
     if (!dom.notificationContainer) return;
-    // (省略: DOM通知表示ロジックは変更なし)
+    
     dom.notificationContainer.textContent = message;
     dom.notificationContainer.style.display = 'block';
     
@@ -439,7 +624,7 @@ function updateRunningUI(running) {
         dom.runningTaskTitle.textContent = settings.currentRunningTask.title;
 
         if (settings.timerInterval) clearInterval(settings.timerInterval);
-        if (settings.notificationInterval) clearInterval(settings.notificationInterval); // ★ 通知タイマー停止
+        if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
 
         // 経過時間タイマー
         settings.timerInterval = setInterval(() => {
@@ -455,15 +640,14 @@ function updateRunningUI(running) {
             }
         }, 1000);
         
-        // ★ 継続通知タイマー開始
-        // 最初の通知は30分後
+        // 継続通知タイマー開始
         settings.notificationInterval = setInterval(notifyOngoingTask, NOTIFICATION_INTERVAL_MS);
         
 
     } else {
         // 停止後の処理
         if (settings.timerInterval) clearInterval(settings.timerInterval);
-        if (settings.notificationInterval) clearInterval(settings.notificationInterval); // ★ 通知タイマー停止
+        if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
         
         settings.timerInterval = null;
         settings.notificationInterval = null;
@@ -474,19 +658,18 @@ function updateRunningUI(running) {
     }
 }
 
-// ... (renderSettings, renderDbConfig, renderTaskDbFilter, renderNewTaskForm, switchTab は変更なし)
 
 // ================= Init =================
 function init() {
     try {
         dom = getDom();
         loadSettings();
-        renderSettings();
+        renderSettings(); // ★ 呼び出し前に定義されるように移動
         
-        // ★ デスクトップ通知の許可を求める
+        // デスクトップ通知の許可を求める
         requestNotificationPermission();
 
-        // イベントハンドラ設定 (省略)
+        // イベントハンドラ設定
         if (dom.toggleSettings) {
             dom.toggleSettings.onclick = () => {
                 renderSettings();
@@ -530,7 +713,7 @@ function init() {
             };
         }
 
-        // タブ切り替えイベント (省略)
+        // タブ切り替えイベント
         if (dom.startExistingTask) {
             dom.startExistingTask.onclick = () => switchTab('existingTaskTab');
         }
