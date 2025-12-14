@@ -22,6 +22,7 @@ const settings = {
 };
 
 let dom = {};
+let isStopping = false; // ★ 停止処理の実行フラグ
 
 // ================= DOM =================
 function getDom() {
@@ -59,7 +60,7 @@ function getDom() {
         thinkingLogInput: document.getElementById('thinkingLogInput'),
         stopTaskButton: document.getElementById('stopTaskButton'),
         completeTaskButton: document.getElementById('completeTaskButton'),
-        notificationContainer: document.getElementById('notificationContainer') // ★ 追加: 通知コンテナのDOM取得
+        notificationContainer: document.getElementById('notificationContainer') 
     };
 }
 
@@ -298,58 +299,52 @@ async function startNewTask() {
 }
 
 /**
- * 実行中のタスクを停止します。
+ * 停止処理（API実行）をバックグラウンドで行う非同期関数。
  */
-async function stopTask(isComplete) {
-    if (!settings.currentRunningTask) return;
-
+async function executeStopAndLog(task, log, isComplete) {
+    if (isStopping) return;
+    isStopping = true;
+    
     try {
-        const t = settings.currentRunningTask;
-        const log = dom.thinkingLogInput.value.trim();
-        const notionPatches = {};
-
         // 1. Toggl停止
         try {
             await togglApi(
-                `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}/stop`,
+                `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${task.togglEntryId}/stop`,
                 'PATCH'
             );
         } catch (e) {
-            // エラーハンドリング: "Time entry already stopped" の場合は無視して続行 (409 Conflict対応)
             if (e.message && e.message.includes("Time entry already stopped")) {
-                console.warn('Toggl警告: タイムエントリは既に停止済みでした。クライアントの状態を修正します。');
+                console.warn('Toggl警告: タイムエントリは既に停止済みでした。');
             } else {
-                // 予期せぬエラーは再スローし、タスク全体の停止を中断
+                // 予期せぬエラーは通知
+                showNotification(`エラー: ${e.message} (Toggl API)`, 5000);
                 throw e;
             }
         }
 
-        // 2. 思考ログ保存 (★ 修正: 累計追記ロジックに変更)
+        const notionPatches = {};
+        
+        // 2. 思考ログ保存
         if (log) {
             // Notionから最新のページ情報を取得
-            const currentPage = await notionApi(`/pages/${t.id}`, 'GET');
+            const currentPage = await notionApi(`/pages/${task.id}`, 'GET');
             const existingLogProp = currentPage.properties['思考ログ']?.rich_text;
             
             let existingText = '';
             if (existingLogProp && existingLogProp.length > 0) {
                 // 既存の rich_text 配列からプレーンテキストを結合
                 existingText = existingLogProp.map(rt => rt.plain_text).join('');
-                // 最初のログでない場合、改行で区切られていることを保証
                 if (existingText.length > 0 && !existingText.endsWith('\n')) {
                     existingText += '\n';
                 }
             }
             
-            // タイムスタンプ生成 (例: [2025/12/14 12:16:11])
+            // タイムスタンプ生成
             const now = new Date().toLocaleString('ja-JP', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
                 hour12: false
-            }).replace(/\//g, '/'); // 意図的に日付区切りを保持
+            }).replace(/\//g, '/');
 
             const newLogEntry = `\n[${now}]\n${log}`;
             const updatedLogContent = existingText + newLogEntry;
@@ -368,23 +363,46 @@ async function stopTask(isComplete) {
 
         // 4. Notionページ更新 (ログとステータス)
         if (Object.keys(notionPatches).length > 0) {
-            await notionApi(`/pages/${t.id}`, 'PATCH', { properties: notionPatches });
+            await notionApi(`/pages/${task.id}`, 'PATCH', { properties: notionPatches });
+            showNotification('Notionにログとステータスを反映しました。', 2000); // Notion反映完了通知
         }
 
-        // 5. 設定クリア
+    } catch (e) {
+        console.error('バックグラウンド停止処理エラー:', e);
+        showNotification(`エラー: タスク停止・ログ反映に失敗しました。詳細をコンソールで確認してください。`, 5000);
+    } finally {
+        // 処理完了後の後始末 (成功/失敗にかかわらず実行)
         settings.currentRunningTask = null;
         settings.startTime = null;
         saveSettings();
-        updateRunningUI(false);
-        loadTasks(); // 完了・停止後にタスクリストを再読込
-
-        // 6. 通知表示 (★ 追加)
-        const action = isComplete ? '完了' : '一時停止';
-        showNotification(`タスクを${action}し、Notionに反映しました。`, 3000);
-    } catch (e) {
-        console.error('タスク停止エラー:', e);
-        alert(`タスク停止エラー: ${e.message}`);
+        isStopping = false;
     }
+}
+
+
+/**
+ * 実行中のタスクを停止します。
+ * (ボタンクリック直後に実行されるフロントエンド担当の関数)
+ */
+function stopTask(isComplete) {
+    if (!settings.currentRunningTask || isStopping) return;
+
+    const t = settings.currentRunningTask;
+    const log = dom.thinkingLogInput.value.trim();
+    const action = isComplete ? '完了' : '一時停止';
+
+    // 1. フロントエンドを即座に更新 (不安解消)
+    updateRunningUI(false);
+    
+    // 2. ユーザーへ通知
+    showNotification(`タスクを${action}しました。Notion/Togglに反映中...`, 3000);
+    
+    // 3. バックグラウンドでAPI処理を実行
+    // ※ UI更新後に実行するため、わずかに遅延させる
+    setTimeout(() => {
+        executeStopAndLog(t, log, isComplete);
+    }, 50); // 50msの遅延
+
 }
 
 // ================= UI =================
@@ -440,6 +458,7 @@ function updateRunningUI(running) {
             }
         }, 1000);
     } else {
+        // 停止後の処理
         if (settings.timerInterval) {
             clearInterval(settings.timerInterval);
             settings.timerInterval = null;
