@@ -31,6 +31,7 @@
         }
 
         h2 { color: #333; margin-top: 20px; }
+        h3 { color: #333; font-size: 1.1em; margin-top: 20px; } /* 通知設定用に追加 */
         
         /* ボタン */
         .btn {
@@ -182,6 +183,11 @@
             opacity: 0;
             transition: opacity 0.3s ease; /* フェードイン・アウト用のトランジション */
         }
+        
+        /* 設定画面内のチェックボックス調整 */
+        #confEnableOngoingNotification {
+            width: auto !important; /* width: 100%を上書き */
+        }
 
     </style>
 </head>
@@ -213,6 +219,13 @@
     <label>Toggl Workspace ID</label>
     <input id="confTogglWid" type="text" placeholder="ワークスペースID（数字）" />
 
+    <br>
+    <h3>通知設定</h3>
+    <label style="display: flex; align-items: center; margin-top: 12px;">
+        <input type="checkbox" id="confEnableOngoingNotification" style="margin-right: 10px; margin-top: 0;"> 
+        タスク継続確認通知（30分ごと）を有効にする
+    </label>
+    
     <br><br>
     <button id="saveConfig" class="btn btn-green">保存</button>
     <button id="cancelConfig" class="btn btn-gray">閉じる</button>
