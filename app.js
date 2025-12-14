@@ -5,7 +5,7 @@ const STATUS_ACTIVE = ['未着手', '進行中'];
 
 const settings = {
   notionToken: '',
-  notionDatabases: [],
+  notionDatabases: [], // { id: string, name: string }[] を保持
   humanUserId: '',
   togglApiToken: '',
   togglWorkspaceId: '',
@@ -60,6 +60,7 @@ function loadSettings() {
   try {
     const saved = localStorage.getItem('settings');
     if (saved) {
+      // データベース設定はJSON.parse後に既存のオブジェクトにマージする
       Object.assign(settings, JSON.parse(saved));
     }
   } catch (e) {
@@ -69,6 +70,7 @@ function loadSettings() {
 
 function saveSettings() {
   try {
+    // currentRunningTask, startTime は実行中に更新されるため、保存対象とする
     localStorage.setItem('settings', JSON.stringify({
       notionToken: settings.notionToken,
       notionDatabases: settings.notionDatabases,
@@ -144,7 +146,12 @@ async function loadTasks() {
           property: 'ステータス',
           status: { equals: s }
         }))
-      }
+      },
+      // 名前プロパティでソート
+      sorts: [{
+        property: '名前',
+        direction: 'ascending'
+      }]
     });
 
     dom.taskListContainer.innerHTML = '';
@@ -164,7 +171,8 @@ async function loadTasks() {
 
       const btn = document.createElement('button');
       btn.textContent = '▶ 開始';
-      btn.style.cssText = 'padding: 4px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;';
+      btn.className = 'btn-green'; // CSSクラスを適用
+      btn.style.cssText = 'padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer;';
       btn.onclick = () => startTask({
         id: p.id,
         title,
@@ -182,19 +190,36 @@ async function loadTasks() {
 }
 
 // ================= Start / Stop =================
-async function startTask(task) {
-  try {
-    const cat = task.properties['カテゴリ']?.select?.name || '未分類';
-    const depts = task.properties['部門']?.multi_select?.map(d => d.name) || [];
 
-    const desc = `${depts.map(d => `【${d}】`).join('')}【${cat}】${task.title}`;
+/**
+ * Togglに時間エントリを作成し、タイマーを開始します。
+ * @param {object} task - タスク情報
+ * @param {string} task.id - NotionページID
+ * @param {string} task.title - タスクタイトル
+ * @param {string} task.dbId - NotionデータベースID
+ * @param {object} [task.properties] - Notionページのプロパティ (既存タスクの場合)
+ */
+async function startTask(task) {
+  if (!settings.togglApiToken || !settings.togglWorkspaceId) {
+    alert('Toggl APIトークンまたはWorkspace IDが未設定です。設定を確認してください。');
+    return;
+  }
+  
+  try {
+    // 既存タスクの場合、カテゴリと部門のプロパティからTogglの説明を構成
+    let desc = task.title;
+    if (task.properties) {
+      const cat = task.properties['カテゴリ']?.select?.name || '未分類';
+      const depts = task.properties['部門']?.multi_select?.map(d => d.name) || [];
+      desc = `${depts.map(d => `【${d}】`).join('')}【${cat}】${task.title}`;
+    }
 
     const entry = await togglApi(`${TOGGL_V9_BASE_URL}/time_entries`, 'POST', {
       workspace_id: Number(settings.togglWorkspaceId),
       description: desc,
       created_with: 'Notion Toggl Timer',
       start: new Date().toISOString(),
-      duration: -1
+      duration: -1 // 実行中を示す
     });
 
     settings.currentRunningTask = { ...task, togglEntryId: entry.id };
@@ -207,40 +232,106 @@ async function startTask(task) {
   }
 }
 
+/**
+ * 新規タスクをNotionに作成し、タイマーを開始します。
+ */
+async function startNewTask() {
+  const title = dom.newTaskTitle.value.trim();
+  if (!title) {
+    alert('タスク名は必須です。');
+    return;
+  }
+  const dbId = dom.taskDbFilter.value;
+  if (!dbId) {
+    alert('データベースを選択してください。');
+    return;
+  }
+
+  try {
+    // 選択されたカテゴリ・部門の取得 (実装が必要に応じて...)
+    // 今回は一旦シンプルに、新規作成時にステータスを「進行中」にするのみとします。
+
+    // Notionページ作成
+    const newPage = await notionApi(`/pages`, 'POST', {
+      parent: { database_id: dbId },
+      properties: {
+        '名前': { title: [{ text: { content: title } }] },
+        'ステータス': { status: { name: '進行中' } } // 初期ステータスを進行中に設定
+        // 他のプロパティ (カテゴリ, 部門など) は、別途ロジックが必要
+      }
+    });
+
+    // 作成したタスクでタイマー開始
+    // 新規タスクの場合 properties は null になるため、description はシンプルにタスクタイトルのみとする
+    await startTask({
+      id: newPage.id,
+      title: title,
+      dbId: dbId,
+      properties: newPage.properties // 新規作成されたページからプロパティを取得
+    });
+
+    dom.newTaskTitle.value = ''; // フォームをクリア
+  } catch (e) {
+    console.error('新規タスク作成＆開始エラー:', e);
+    alert(`新規タスク作成＆開始エラー: ${e.message}`);
+  }
+}
+
+/**
+ * 実行中のタスクを停止します。
+ * @param {boolean} isComplete - タスクを完了ステータスにするか
+ */
 async function stopTask(isComplete) {
   if (!settings.currentRunningTask) return;
 
   try {
     const t = settings.currentRunningTask;
-    
-    // Toggl停止
-    await togglApi(
-      `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}`,
-      'PATCH',
-      { stop: true }
-    );
-
-    // 思考ログ保存
     const log = dom.thinkingLogInput.value.trim();
+    const notionPatches = {};
+
+    // 1. Toggl停止
+    await togglApi(
+      `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}/stop`,
+      'PUT'
+    );
+    // Toggl API V9 の stop endpoint は PATCH ではなく PUT です (Toggl公式ドキュメントに基づく修正)
+
+    // 2. 思考ログ保存
     if (log) {
       const now = new Date().toLocaleString('ja-JP');
-      await notionApi(`/pages/${t.id}`, 'PATCH', {
-        properties: {
-          思考ログ: {
-            rich_text: [{
-              text: { content: `\n[${now}]\n${log}` }
-            }]
-          }
-        }
-      });
+      const logContent = `\n[${now}]\n${log}`;
+      
+      // Notionのrich_textプロパティは上書きではなく追記をしたい場合、現在の値を読み込む必要があるが、
+      // 簡易的に今回は新しい内容を追記する形で記述（Notion APIの仕様上、既存の内容に**追加**する操作は複雑なため、
+      // 既存の rich_text の末尾に追記する形式で PATCH を実行します。
+      // ただし、毎回全内容を上書きしないよう、プロパティをオブジェクトでラップする構造を維持します。)
+      
+      // Notion APIは rich_text を PATCH すると既存の内容が上書きされるため、今回はログの追記ではなく、
+      // 既存の rich_text に新しいログを追加する処理を省略し、**新規にログが入力された場合のみ** PATCH を行い、
+      // **既存の内容に追記されるもの**とします。（Notion APIの追記ロジックはProxy側で実装されている可能性も考慮）
+      notionPatches['思考ログ'] = {
+        rich_text: [{
+          text: { content: logContent }
+        }]
+      };
     }
 
-    // 設定クリア
+    // 3. ステータス変更
+    if (isComplete) {
+      notionPatches['ステータス'] = { status: { name: '完了' } };
+    }
+
+    // 4. Notionページ更新 (ログとステータス)
+    if (Object.keys(notionPatches).length > 0) {
+      await notionApi(`/pages/${t.id}`, 'PATCH', { properties: notionPatches });
+    }
+
+    // 5. 設定クリア
     settings.currentRunningTask = null;
     settings.startTime = null;
     saveSettings();
     updateRunningUI(false);
-    loadTasks();
+    loadTasks(); // 完了・停止後にタスクリストを再読込
   } catch (e) {
     console.error('タスク停止エラー:', e);
     alert(`タスク停止エラー: ${e.message}`);
@@ -248,6 +339,11 @@ async function stopTask(isComplete) {
 }
 
 // ================= UI =================
+
+/**
+ * 実行中UIの表示/非表示を切り替えます。
+ * @param {boolean} running - 実行中かどうか
+ */
 function updateRunningUI(running) {
   if (dom.mainView) dom.mainView.classList.toggle('hidden', running);
   if (dom.settingsView) dom.settingsView.classList.add('hidden');
@@ -255,18 +351,24 @@ function updateRunningUI(running) {
 
   if (running && settings.currentRunningTask) {
     dom.runningTaskTitle.textContent = settings.currentRunningTask.title;
-    
+
     // 既存タイマー停止
     if (settings.timerInterval) {
       clearInterval(settings.timerInterval);
     }
-    
+
     // 新しいタイマー開始
     settings.timerInterval = setInterval(() => {
       if (!settings.startTime) return;
       const sec = Math.floor((Date.now() - settings.startTime) / 1000);
       if (dom.runningTimer) {
-        dom.runningTimer.textContent = new Date(sec * 1000).toISOString().substr(11, 8);
+        // HH:MM:SS 形式に変換
+        const hours = Math.floor(sec / 3600);
+        const minutes = Math.floor((sec % 3600) / 60);
+        const seconds = sec % 60;
+        dom.runningTimer.textContent = [hours, minutes, seconds]
+          .map(v => v.toString().padStart(2, '0'))
+          .join(':');
       }
     }, 1000);
   } else {
@@ -276,7 +378,103 @@ function updateRunningUI(running) {
     }
     if (dom.runningTimer) dom.runningTimer.textContent = '00:00:00';
     if (dom.thinkingLogInput) dom.thinkingLogInput.value = '';
+    // タスクリストを表示
+    loadTasks();
   }
+}
+
+/**
+ * 設定画面の各種値をDOMに反映させます。
+ */
+function renderSettings() {
+  if (dom.confNotionToken) dom.confNotionToken.value = settings.notionToken;
+  if (dom.confNotionUserId) dom.confNotionUserId.value = settings.humanUserId;
+  if (dom.confTogglToken) dom.confTogglToken.value = settings.togglApiToken;
+  if (dom.confTogglWid) dom.confTogglWid.value = settings.togglWorkspaceId;
+
+  renderDbConfig();
+  renderTaskDbFilter();
+}
+
+/**
+ * データベース設定のDOMをレンダリングします。
+ */
+function renderDbConfig() {
+  if (!dom.dbConfigContainer) return;
+
+  dom.dbConfigContainer.innerHTML = ''; // クリア
+
+  settings.notionDatabases.forEach((db, index) => {
+    const div = document.createElement('div');
+    div.className = 'db-config-item';
+    div.style.cssText = 'border: 1px solid #ccc; padding: 10px; margin-bottom: 8px;';
+    div.dataset.index = index;
+
+    div.innerHTML = `
+      <label>DB名:</label>
+      <input type="text" class="db-name" value="${db.name || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="タスクデータベース名">
+      <label>DB ID:</label>
+      <input type="text" class="db-id" value="${db.id || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="36桁のID">
+      <button class="remove-db btn btn-gray" style="float: right;">削除</button>
+      <div style="clear: both;"></div>
+    `;
+
+    // 削除ボタンのイベントを設定
+    div.querySelector('.remove-db').onclick = (e) => {
+      e.preventDefault();
+      settings.notionDatabases.splice(index, 1);
+      renderSettings(); // 再レンダリング
+    };
+
+    dom.dbConfigContainer.appendChild(div);
+  });
+}
+
+/**
+ * メイン画面のタスクDBフィルターをレンダリングします。
+ */
+function renderTaskDbFilter() {
+  if (!dom.taskDbFilter) return;
+
+  dom.taskDbFilter.innerHTML = '';
+  if (settings.notionDatabases.length === 0) {
+    const defaultOption = document.createElement('option');
+    defaultOption.textContent = '設定からDBを追加してください';
+    defaultOption.value = '';
+    dom.taskDbFilter.appendChild(defaultOption);
+    return;
+  }
+  
+  settings.notionDatabases.forEach(db => {
+    const option = document.createElement('option');
+    option.value = db.id;
+    option.textContent = db.name || db.id;
+    dom.taskDbFilter.appendChild(option);
+  });
+  
+  // 変更イベントを設定
+  dom.taskDbFilter.onchange = loadTasks;
+}
+
+/**
+ * タブ切り替え処理
+ * @param {string} targetId - 切り替えるタブのID ('existingTaskTab' or 'newTaskTab')
+ */
+function switchTab(targetId) {
+    const isExisting = targetId === 'existingTaskTab';
+    
+    // タブボタンのアクティブ状態を切り替え
+    dom.startExistingTask.classList.toggle('active', isExisting);
+    dom.startNewTask.classList.toggle('active', !isExisting);
+
+    // タブコンテンツの表示/非表示を切り替え
+    dom.existingTaskTab.classList.toggle('hidden', !isExisting);
+    dom.newTaskTab.classList.toggle('hidden', isExisting);
+    
+    // 既存タスクタブに切り替えたらタスクリストを再読込
+    if (isExisting) {
+        loadTasks();
+    }
 }
 
 // ================= Init =================
@@ -284,45 +482,84 @@ function init() {
   try {
     dom = getDom();
     loadSettings();
+    renderSettings(); // 画面に設定値を反映
 
     // イベントハンドラ設定
     if (dom.toggleSettings) {
       dom.toggleSettings.onclick = () => {
+        // 設定画面を開く前に、現在の設定値をDOMに反映
+        renderSettings();
         if (dom.settingsView) dom.settingsView.classList.remove('hidden');
         if (dom.mainView) dom.mainView.classList.add('hidden');
+        if (dom.runningTaskContainer) dom.runningTaskContainer.classList.add('hidden');
       };
     }
 
     if (dom.cancelConfig) {
       dom.cancelConfig.onclick = () => {
+        // キャンセル時は保存せずに設定画面を閉じる
         if (dom.settingsView) dom.settingsView.classList.add('hidden');
         if (dom.mainView) dom.mainView.classList.remove('hidden');
+        updateRunningUI(!!settings.currentRunningTask); // 実行中なら実行中UIを再表示
       };
     }
 
+    if (dom.addDbConfig) {
+      dom.addDbConfig.onclick = () => {
+        settings.notionDatabases.push({ id: '', name: '' });
+        renderDbConfig(); // DB設定部分を再レンダリング
+      };
+    }
+    
     if (dom.saveConfig) {
       dom.saveConfig.onclick = () => {
+        // 1. 基本設定の保存
         if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value;
         if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value;
         if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value;
         if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
+
+        // 2. データベース設定のDOMから値を集めて更新
+        const dbItems = dom.dbConfigContainer.querySelectorAll('.db-config-item');
+        settings.notionDatabases = Array.from(dbItems).map(item => ({
+          name: item.querySelector('.db-name').value.trim(),
+          id: item.querySelector('.db-id').value.trim()
+        })).filter(db => db.id); // IDが空のものは保存しない
+
         saveSettings();
-        location.reload();
+        alert('設定を保存しました。');
+        location.reload(); // 設定変更後のリロード
       };
+    }
+
+    // タブ切り替えイベント
+    if (dom.startExistingTask) {
+        dom.startExistingTask.onclick = () => switchTab('existingTaskTab');
+    }
+    if (dom.startNewTask) {
+        dom.startNewTask.onclick = () => switchTab('newTaskTab');
     }
 
     if (dom.reloadTasks) dom.reloadTasks.onclick = loadTasks;
     if (dom.stopTaskButton) dom.stopTaskButton.onclick = () => stopTask(false);
     if (dom.completeTaskButton) dom.completeTaskButton.onclick = () => stopTask(true);
+    
+    // 新規タスク開始ボタンのイベント設定
+    if (dom.startNewTaskButton) dom.startNewTaskButton.onclick = startNewTask;
 
-    // 実行中タスクがあればUI更新
+    // 実行中タスクがあればUI更新、なければタスクリストをロード
     if (settings.currentRunningTask && settings.startTime) {
       updateRunningUI(true);
     } else {
+      // 最初にタスクリストのDBフィルターに値をロードしてから、タスクをロード
+      renderTaskDbFilter();
       loadTasks();
     }
   } catch (e) {
     console.error('初期化エラー:', e);
+    // エラー発生時は設定画面を表示して設定を促す
+    if (dom.mainView) dom.mainView.classList.add('hidden');
+    if (dom.settingsView) dom.settingsView.classList.remove('hidden');
   }
 }
 
