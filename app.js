@@ -86,7 +86,8 @@ function loadSettings() {
             if (typeof settings.enableInactiveNotification !== 'boolean') {
                 settings.enableInactiveNotification = true;
             }
-            if (typeof settings.lastStopTime !== 'number') {
+            // lastStopTimeはnullまたはnumber
+            if (typeof settings.lastStopTime !== 'number' && settings.lastStopTime !== null) {
                 settings.lastStopTime = null;
             }
         }
@@ -463,7 +464,7 @@ async function startTask(task) {
         }
         
         if (Object.keys(patches).length > 0) {
-             await notionApi(`/pages/${task.id}`, 'PATCH', { properties: patches });
+              await notionApi(`/pages/${task.id}`, 'PATCH', { properties: patches });
         }
 
 
@@ -806,7 +807,7 @@ function init() {
             renderNewTaskForm();
             switchTab('existingTaskTab');
             
-            // アプリ起動時に未計測チェックを開始
+            // アプリ起動時に未計測チェックを開始 (updateRunningUI(false) 内で実行)
             updateRunningUI(false); 
         }
     } catch (e) {
