@@ -14,10 +14,9 @@
             color: #333;
             line-height: 1.6;
             font-size: 16px; 
-            /* ★ 追加: bodyに中央寄せのスタイルは適用しない */
         }
         
-        /* ★ 新規追加: コンテンツ全体を制限し、中央に配置するコンテナ */
+        /* コンテンツ全体を制限し、中央に配置するコンテナ */
         #appContainer {
             max-width: 600px; /* PCでの最大幅を600pxに設定 */
             margin: 0 auto; /* 中央寄せ */
@@ -27,17 +26,14 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05); /* 影を追加 */
         }
         
-        /* ★ 修正: bodyのpaddingはappContainer外になるため、appHeaderとコンテンツにpaddingを追加 */
         #appHeader, #settingsView, #mainView, #runningTaskContainer {
             padding: 0 16px; 
         }
         
-        /* ★ 修正: Tabは幅いっぱいを使うため、パディングを調整 */
         .tab {
             margin: 16px 0 0;
             padding: 0 16px;
         }
-        /* ★ 修正: Tabコンテンツのパディング */
         #existingTaskTab, #newTaskTab {
             padding: 0 16px 16px;
         }
@@ -61,7 +57,6 @@
             font-size: 1.6em; 
         }
 
-        /* 以下、その他のスタイルは変更なし */
         h2 { color: #333; margin-top: 20px; }
         h3 { color: #333; font-size: 1.1em; margin-top: 20px; }
         
@@ -104,7 +99,6 @@
         textarea { height: 100px; resize: vertical; }
 
         /* タブ */
-        .tab { display: flex; margin: 16px 0 0; }
         .tab button {
             flex: 1;
             padding: 12px;
@@ -179,7 +173,6 @@
             gap: 20px;
             margin-top: 8px;
         }
-        /* NewDepartmentContainerのスタイルはapp.jsで上書きされるため、ここでは既存スタイルを維持 */
         #newDepartmentContainer label {
             display: block;
             width: 48%;
@@ -239,9 +232,6 @@
 <div id="settingsView" class="hidden">
     <h2>設定</h2>
 
-    <label>Notion API Token (Integration Token)</label>
-    <input id="confNotionToken" type="text" placeholder="secret_..." />
-
     <label>Notion User ID（任意 - 自身のID）</label>
     <input id="confNotionUserId" type="text" placeholder="xxxx-xxxx-..." />
 
@@ -287,7 +277,7 @@
 
     <div id="existingTaskTab">
         <ul id="taskListContainer">
-            <li>Notionトークンを設定してください</li>
+            <li>設定を完了してタスクを読み込んでください...</li>
         </ul>
     </div>
 
