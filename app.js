@@ -2,129 +2,121 @@
 // 定数
 // =====================================================
 const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy';
-const NOTION_API_BASE = 'https://api.notion.com/v1';
-const TOGGL_V9_BASE = 'https://api.track.toggl.com/api/v9';
-
-const STATUS_TARGET = ['未着手', '進行中'];
+const TOGGL_BASE = 'https://api.track.toggl.com/api/v9';
 
 // =====================================================
 // 状態
 // =====================================================
-const state = {
-  settings: {
-    notionToken: '',
-    notionDatabases: [],
-    togglToken: '',
-    togglWorkspaceId: ''
-  },
-  currentTask: null,
-  startTime: null
+const settings = {
+  notionToken: '',
+  notionDatabases: [],
+  humanUserId: '',
+  togglApiToken: '',
+  togglWorkspaceId: '',
+  databases: [],
+  currentRunningTask: null,
+  startTime: null,
+  timerInterval: null
 };
 
-let dom = {};
+const dbPropertiesCache = {};
+let dom;
 
 // =====================================================
-// DOM取得
+// DOM
 // =====================================================
 function getDom() {
   return {
-    // main
     mainView: document.getElementById('mainView'),
+    settingsView: document.getElementById('settingsView'),
+    toggleSettings: document.getElementById('toggleSettings'),
+    cancelConfig: document.getElementById('cancelConfig'),
+    saveConfig: document.getElementById('saveConfig'),
+    addDbConfig: document.getElementById('addDbConfig'),
 
-    // tabs
-    tabExisting: document.getElementById('tabExisting'),
-    tabNew: document.getElementById('tabNew'),
-    existingSection: document.getElementById('existingSection'),
-    newSection: document.getElementById('newSection'),
+    confNotionToken: document.getElementById('confNotionToken'),
+    confNotionUserId: document.getElementById('confNotionUserId'),
+    confTogglToken: document.getElementById('confTogglToken'),
+    confTogglWid: document.getElementById('confTogglWid'),
+    dbConfigContainer: document.getElementById('dbConfigContainer'),
 
-    // existing
-    dbSelect: document.getElementById('dbSelect'),
-    reloadBtn: document.getElementById('reloadBtn'),
-    taskList: document.getElementById('taskList'),
+    taskDbFilter: document.getElementById('taskDbFilter'),
+    reloadTasks: document.getElementById('reloadTasks'),
+    taskListContainer: document.getElementById('taskListContainer'),
 
-    // new
-    newTitle: document.getElementById('newTitle'),
-    createBtn: document.getElementById('createBtn'),
+    startExistingTask: document.getElementById('startExistingTask'),
+    startNewTask: document.getElementById('startNewTask'),
+    existingTaskTab: document.getElementById('existingTaskTab'),
+    newTaskTab: document.getElementById('newTaskTab'),
 
-    // settings
-    openSettings: document.getElementById('openSettings')
+    newTaskTitle: document.getElementById('newTaskTitle'),
+    newCatContainer: document.getElementById('newCatContainer'),
+    newDeptContainer: document.getElementById('newDeptContainer'),
+    startNewTaskButton: document.getElementById('startNewTaskButton'),
+
+    runningTaskContainer: document.getElementById('runningTaskContainer'),
+    runningTaskTitle: document.getElementById('runningTaskTitle'),
+    runningTimer: document.getElementById('runningTimer'),
+    thinkingLogInput: document.getElementById('thinkingLogInput'),
+    stopTaskButton: document.getElementById('stopTaskButton'),
+    completeTaskButton: document.getElementById('completeTaskButton')
   };
 }
 
 // =====================================================
-// 初期化
+// ユーティリティ
 // =====================================================
-function init() {
-  dom = getDom();
-  loadSettings();
-  bindUI();
-  renderDbSelect();
+function formatTime(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return `${h}:${m}:${sec}`;
 }
 
-document.addEventListener('DOMContentLoaded', init);
-
-// =====================================================
-// UI バインド
-// =====================================================
-function bindUI() {
-  // タブ切替
-  dom.tabExisting.onclick = () => switchTab('existing');
-  dom.tabNew.onclick = () => switchTab('new');
-
-  // 再読込
-  dom.reloadBtn.onclick = loadNotionTasks;
-
-  // 新規作成
-  dom.createBtn.onclick = handleCreateTask;
-}
-
-function switchTab(type) {
-  if (type === 'existing') {
-    dom.tabExisting.classList.add('active');
-    dom.tabNew.classList.remove('active');
-    dom.existingSection.classList.remove('hidden');
-    dom.newSection.classList.add('hidden');
-  } else {
-    dom.tabNew.classList.add('active');
-    dom.tabExisting.classList.remove('active');
-    dom.newSection.classList.remove('hidden');
-    dom.existingSection.classList.add('hidden');
-  }
+function notify(msg) {
+  console.log('🔔', msg);
 }
 
 // =====================================================
-// Settings
+// LocalStorage
 // =====================================================
 function loadSettings() {
-  state.settings.notionToken = localStorage.getItem('notionToken') || '';
-  state.settings.togglToken = localStorage.getItem('togglApiToken') || '';
-  state.settings.togglWorkspaceId = localStorage.getItem('togglWorkspaceId') || '';
+  settings.notionToken = localStorage.getItem('notionToken') || '';
+  settings.humanUserId = localStorage.getItem('humanUserId') || '';
+  settings.togglApiToken = localStorage.getItem('togglApiToken') || '';
+  settings.togglWorkspaceId = localStorage.getItem('togglWorkspaceId') || '';
+  settings.notionDatabases = JSON.parse(localStorage.getItem('notionDatabases') || '[]');
 
-  try {
-    state.settings.notionDatabases =
-      JSON.parse(localStorage.getItem('notionDatabases') || '[]');
-  } catch {
-    state.settings.notionDatabases = [];
+  const rt = localStorage.getItem('runningTask');
+  if (rt) {
+    const d = JSON.parse(rt);
+    settings.currentRunningTask = d.task;
+    settings.startTime = d.startTime;
   }
 }
 
-// =====================================================
-// Notion DB セレクト
-// =====================================================
-function renderDbSelect() {
-  dom.dbSelect.innerHTML = '';
-  state.settings.notionDatabases.forEach(db => {
-    const opt = document.createElement('option');
-    opt.value = db.id;
-    opt.textContent = db.name;
-    dom.dbSelect.appendChild(opt);
-  });
+function saveSettings() {
+  localStorage.setItem('notionToken', settings.notionToken);
+  localStorage.setItem('humanUserId', settings.humanUserId);
+  localStorage.setItem('togglApiToken', settings.togglApiToken);
+  localStorage.setItem('togglWorkspaceId', settings.togglWorkspaceId);
+  localStorage.setItem('notionDatabases', JSON.stringify(settings.notionDatabases));
+
+  if (settings.currentRunningTask) {
+    localStorage.setItem('runningTask', JSON.stringify({
+      task: settings.currentRunningTask,
+      startTime: settings.startTime
+    }));
+  } else {
+    localStorage.removeItem('runningTask');
+  }
 }
 
 // =====================================================
 // Proxy API
 // =====================================================
-async function externalApi({ targetUrl, method = 'GET', tokenKey, tokenValue, body }) {
+async function externalApi(targetUrl, method, tokenKey, tokenValue, body) {
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -136,132 +128,254 @@ async function externalApi({ targetUrl, method = 'GET', tokenKey, tokenValue, bo
       body
     })
   });
-
   if (!res.ok) {
     const t = await res.text();
     throw new Error(t);
   }
-
-  return res.json();
+  return res.status === 204 ? null : res.json();
 }
 
-// =====================================================
-// Notion Tasks 読み込み
-// =====================================================
-async function loadNotionTasks() {
-  dom.taskList.innerHTML = '読み込み中...';
+const notionApi = (endpoint, method='GET', body=null) =>
+  externalApi(`https://api.notion.com/v1${endpoint}`, method,
+    'notionToken', settings.notionToken, body);
 
-  const dbId = dom.dbSelect.value;
-  if (!dbId) {
-    dom.taskList.innerHTML = 'DB未選択';
-    return;
+const togglApi = (url, method='GET', body=null) =>
+  externalApi(url, method, 'togglApiToken', settings.togglApiToken, body);
+
+// =====================================================
+// Notion
+// =====================================================
+async function fetchDatabaseList() {
+  settings.databases = [];
+  for (const db of settings.notionDatabases) {
+    const r = await notionApi(`/databases/${db.id}`);
+    settings.databases.push({ id: r.id, name: db.name });
   }
+  dom.taskDbFilter.innerHTML =
+    settings.databases.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+}
 
-  const data = await externalApi({
-    targetUrl: `${NOTION_API_BASE}/databases/${dbId}/query`,
-    method: 'POST',
-    tokenKey: 'notionToken',
-    tokenValue: state.settings.notionToken,
-    body: {
-      filter: {
-        property: 'ステータス',
-        status: { in: STATUS_TARGET }
-      }
+async function getDbProps(dbId) {
+  if (dbPropertiesCache[dbId]) return dbPropertiesCache[dbId];
+  const r = await notionApi(`/databases/${dbId}`);
+  const p = r.properties;
+  const m = {};
+  for (const k in p) {
+    if (p[k].type === 'title') m.title = k;
+    if (p[k].type === 'status') m.status = k;
+    if (p[k].type === 'select') m.category = { name:k, options:p[k].select.options };
+    if (p[k].type === 'multi_select') m.department = { name:k, options:p[k].multi_select.options };
+    if (p[k].type === 'rich_text') m.log = k;
+    if (p[k].type === 'number') m.duration = k;
+  }
+  dbPropertiesCache[dbId] = m;
+  return m;
+}
+
+async function loadTasks() {
+  const dbId = dom.taskDbFilter.value;
+  const props = await getDbProps(dbId);
+
+  const body = {
+    filter: {
+      or: [
+        { property: props.status, status: { equals: '未着手' } },
+        { property: props.status, status: { equals: '進行中' } }
+      ]
     }
-  });
+  };
 
-  renderTaskList(data.results);
+  const res = await notionApi(`/databases/${dbId}/query`, 'POST', body);
+  renderTaskList(res.results, dbId, props);
 }
 
-function renderTaskList(tasks) {
-  dom.taskList.innerHTML = '';
+function renderTaskList(tasks, dbId, props) {
+  const ul = document.createElement('ul');
+  ul.className = 'task-list';
 
-  if (!tasks.length) {
-    dom.taskList.textContent = '対象タスクなし';
-    return;
-  }
-
-  tasks.forEach(task => {
+  tasks.forEach(t => {
     const title =
-      task.properties?.名前?.title?.[0]?.plain_text || 'untitled';
+      t.properties[props.title].title.map(x=>x.plain_text).join('') || '無題';
 
-    const row = document.createElement('div');
-    row.className = 'task-row';
-
-    const label = document.createElement('span');
-    label.textContent = title;
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${title}</span>`;
 
     const btn = document.createElement('button');
-    btn.textContent = '開始';
-    btn.className = 'btn primary';
-    btn.onclick = () => startExistingTask(task, title);
+    btn.textContent = '▶ 開始';
+    btn.className = 'btn green';
+    btn.onclick = () => startTask({
+      id: t.id,
+      dbId,
+      title,
+      category: t.properties[props.category?.name]?.select?.name,
+      departments: t.properties[props.department?.name]?.multi_select?.map(x=>x.name) || []
+    });
 
-    row.appendChild(label);
-    row.appendChild(btn);
-    dom.taskList.appendChild(row);
+    li.appendChild(btn);
+    ul.appendChild(li);
   });
-}
 
-// =====================================================
-// 新規タスク
-// =====================================================
-function getSelectedCategory() {
-  return document.querySelector('input[name="category"]:checked')?.value || '';
-}
-
-function getSelectedDepartments() {
-  return [...document.querySelectorAll('.dept:checked')].map(el => el.value);
-}
-
-async function handleCreateTask() {
-  const title = dom.newTitle.value.trim();
-  const category = getSelectedCategory();
-  const departments = getSelectedDepartments();
-
-  if (!title) {
-    alert('タスク名は必須です');
-    return;
-  }
-  if (!category) {
-    alert('カテゴリは必須です');
-    return;
-  }
-
-  const description = buildDescription(title, category, departments);
-  await startToggl(description);
+  dom.taskListContainer.innerHTML = '';
+  dom.taskListContainer.appendChild(ul);
 }
 
 // =====================================================
 // Toggl
 // =====================================================
-function buildDescription(title, category, departments) {
-  const tags = [
-    ...departments.map(d => `【${d}】`),
-    `【${category}】`
-  ].join('');
-  return `${tags}${title}`;
+async function startToggl(desc, tags) {
+  return togglApi(`${TOGGL_BASE}/time_entries`, 'POST', {
+    workspace_id: Number(settings.togglWorkspaceId),
+    description: desc,
+    start: new Date().toISOString(),
+    duration: -1,
+    tags
+  });
 }
 
-async function startToggl(description) {
-  await externalApi({
-    targetUrl: `${TOGGL_V9_BASE}/time_entries`,
-    method: 'POST',
-    tokenKey: 'togglApiToken',
-    tokenValue: state.settings.togglToken,
-    body: {
-      description,
-      workspace_id: Number(state.settings.togglWorkspaceId),
-      start: new Date().toISOString(),
-      duration: -1,
-      created_with: 'Notion Toggl Timer'
+async function stopToggl(id) {
+  return togglApi(
+    `${TOGGL_BASE}/workspaces/${settings.togglWorkspaceId}/time_entries/${id}/stop`,
+    'PATCH'
+  );
+}
+
+// =====================================================
+// Task Control
+// =====================================================
+async function startTask(task) {
+  const desc =
+    task.departments.map(d=>`【${d}】`).join('') +
+    (task.category ? `【${task.category}】` : '') +
+    task.title;
+
+  const toggl = await startToggl(desc, [...task.departments, task.category].filter(Boolean));
+  task.togglId = toggl.id;
+
+  settings.currentRunningTask = task;
+  settings.startTime = Date.now();
+  saveSettings();
+  updateRunning(true);
+}
+
+async function stopTask(isComplete) {
+  const task = settings.currentRunningTask;
+  await stopToggl(task.togglId);
+
+  const props = await getDbProps(task.dbId);
+  const page = await notionApi(`/pages/${task.id}`);
+
+  const minutes = Math.round((Date.now()-settings.startTime)/60000);
+  const cur = page.properties[props.duration]?.number || 0;
+
+  const log = dom.thinkingLogInput.value.trim();
+  const ts = new Date().toLocaleString();
+  const newLog = log
+    ? `${page.properties[props.log]?.rich_text?.[0]?.plain_text || ''}\n\n[${ts}]\n${log}`
+    : undefined;
+
+  await notionApi(`/pages/${task.id}`, 'PATCH', {
+    properties: {
+      ...(props.duration ? { [props.duration]: { number: cur + minutes } } : {}),
+      ...(props.log && newLog ? { [props.log]: { rich_text:[{text:{content:newLog}}]} } : {}),
+      ...(props.status ? { [props.status]: { status:{ name:isComplete?'完了':'保留'} } } : {})
     }
   });
 
-  alert('打刻開始');
+  settings.currentRunningTask = null;
+  settings.startTime = null;
+  dom.thinkingLogInput.value = '';
+  saveSettings();
+  updateRunning(false);
+  loadTasks();
 }
 
-async function startExistingTask(task, title) {
-  // ここでカテゴリ / 部門を Notion から読む想定
-  const description = title;
-  await startToggl(description);
+function updateRunning(on) {
+  dom.runningTaskContainer.classList.toggle('hidden', !on);
+  dom.mainView.classList.toggle('hidden', on);
+  if (on) {
+    dom.runningTaskTitle.textContent = settings.currentRunningTask.title;
+    settings.timerInterval = setInterval(()=>{
+      dom.runningTimer.textContent = formatTime(Date.now()-settings.startTime);
+    },1000);
+  } else {
+    clearInterval(settings.timerInterval);
+    dom.runningTimer.textContent = '00:00:00';
+  }
 }
+
+// =====================================================
+// Init
+// =====================================================
+function init() {
+  dom = getDom();
+  loadSettings();
+
+  dom.toggleSettings.onclick = () => {
+    dom.mainView.classList.add('hidden');
+    dom.settingsView.classList.remove('hidden');
+  };
+  dom.cancelConfig.onclick = () => {
+    dom.settingsView.classList.add('hidden');
+    dom.mainView.classList.remove('hidden');
+  };
+  dom.saveConfig.onclick = () => {
+    settings.notionToken = dom.confNotionToken.value.trim();
+    settings.humanUserId = dom.confNotionUserId.value.trim();
+    settings.togglApiToken = dom.confTogglToken.value.trim();
+    settings.togglWorkspaceId = dom.confTogglWid.value.trim();
+    saveSettings();
+    dom.settingsView.classList.add('hidden');
+    dom.mainView.classList.remove('hidden');
+    fetchDatabaseList().then(loadTasks);
+  };
+
+  dom.startExistingTask.onclick = () => {
+    dom.startExistingTask.classList.add('active');
+    dom.startNewTask.classList.remove('active');
+    dom.existingTaskTab.classList.remove('hidden');
+    dom.newTaskTab.classList.add('hidden');
+  };
+
+  dom.startNewTask.onclick = async () => {
+    dom.startNewTask.classList.add('active');
+    dom.startExistingTask.classList.remove('active');
+    dom.newTaskTab.classList.remove('hidden');
+    dom.existingTaskTab.classList.add('hidden');
+
+    const props = await getDbProps(dom.taskDbFilter.value);
+    dom.newCatContainer.innerHTML = props.category
+      ? props.category.options.map(o=>`<label><input type="radio" name="cat" value="${o.name}">${o.name}</label>`).join('')
+      : '';
+    dom.newDeptContainer.innerHTML = props.department
+      ? props.department.options.map(o=>`<label><input type="checkbox" value="${o.name}">${o.name}</label>`).join('')
+      : '';
+  };
+
+  dom.startNewTaskButton.onclick = () => {
+    const title = dom.newTaskTitle.value.trim();
+    if (!title) return alert('タスク名必須');
+
+    const cat = document.querySelector('input[name=cat]:checked')?.value;
+    const depts = [...dom.newDeptContainer.querySelectorAll('input:checked')].map(x=>x.value);
+
+    startTask({
+      title,
+      dbId: dom.taskDbFilter.value,
+      category: cat,
+      departments: depts
+    });
+  };
+
+  dom.stopTaskButton.onclick = ()=>stopTask(false);
+  dom.completeTaskButton.onclick = ()=>stopTask(true);
+  dom.reloadTasks.onclick = loadTasks;
+
+  if (settings.notionToken && settings.notionDatabases.length) {
+    fetchDatabaseList().then(loadTasks);
+    if (settings.currentRunningTask) updateRunning(true);
+  } else {
+    dom.toggleSettings.click();
+  }
+}
+
+init();
