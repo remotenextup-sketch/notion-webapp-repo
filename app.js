@@ -57,191 +57,278 @@ function getDom() {
 
 // ================= Storage =================
 function loadSettings() {
-  Object.assign(settings, JSON.parse(localStorage.getItem('settings') || '{}'));
+  try {
+    const saved = localStorage.getItem('settings');
+    if (saved) {
+      Object.assign(settings, JSON.parse(saved));
+    }
+  } catch (e) {
+    console.error('設定読み込みエラー:', e);
+  }
 }
 
 function saveSettings() {
-  localStorage.setItem('settings', JSON.stringify({
-    notionToken: settings.notionToken,
-    notionDatabases: settings.notionDatabases,
-    humanUserId: settings.humanUserId,
-    togglApiToken: settings.togglApiToken,
-    togglWorkspaceId: settings.togglWorkspaceId,
-    currentRunningTask: settings.currentRunningTask,
-    startTime: settings.startTime
-  }));
+  try {
+    localStorage.setItem('settings', JSON.stringify({
+      notionToken: settings.notionToken,
+      notionDatabases: settings.notionDatabases,
+      humanUserId: settings.humanUserId,
+      togglApiToken: settings.togglApiToken,
+      togglWorkspaceId: settings.togglWorkspaceId,
+      currentRunningTask: settings.currentRunningTask,
+      startTime: settings.startTime
+    }));
+  } catch (e) {
+    console.error('設定保存エラー:', e);
+  }
 }
-
 
 // ================= API =================
-async function externalApi(targetUrl, method, auth, body) {
-  const res = await fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      targetUrl,
-      method,
-      tokenKey: auth.key,
-      tokenValue: auth.value,
-      notionVersion: auth.notionVersion,
-      body
-    })
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.status === 204 ? null : res.json();
+async function externalApi(targetUrl, method = 'GET', auth, body = null) {
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        targetUrl,
+        method,
+        tokenKey: auth.key,
+        tokenValue: auth.value,
+        notionVersion: auth.notionVersion || '',
+        body
+      })
+    });
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+    return res.status === 204 ? null : await res.json();
+  } catch (e) {
+    console.error('APIエラー:', e);
+    throw e;
+  }
 }
 
-const notionApi = (ep, m, b) =>
-  externalApi(`https://api.notion.com/v1${ep}`, m, {
+const notionApi = (endpoint, method, body) =>
+  externalApi(`https://api.notion.com/v1${endpoint}`, method, {
     key: 'notionToken',
     value: settings.notionToken,
     notionVersion: '2022-06-28'
-  }, b);
+  }, body);
 
-const togglApi = (url, m, b) =>
-  externalApi(url, m, {
+const togglApi = (url, method, body) =>
+  externalApi(url, method, {
     key: 'togglApiToken',
     value: settings.togglApiToken
-  }, b);
+  }, body);
 
 // ================= Tasks =================
 async function loadTasks() {
   if (!settings.notionToken) {
     console.warn('Notion token 未設定のためタスク読込を中断');
+    dom.taskListContainer.innerHTML = '<li>Notionトークンを設定してください</li>';
     return;
   }
-  {
-  const dbId = dom.taskDbFilter.value;
-  dom.taskListContainer.innerHTML = '読み込み中...';
 
-  const res = await notionApi(`/databases/${dbId}/query`, 'POST', {
-    filter: {
-      or: STATUS_ACTIVE.map(s => ({
-        property: 'ステータス',
-        status: { equals: s }
-      }))
+  try {
+    const dbId = dom.taskDbFilter.value;
+    if (!dbId) {
+      dom.taskListContainer.innerHTML = '<li>データベースを選択してください</li>';
+      return;
     }
-  });
 
-  dom.taskListContainer.innerHTML = '';
-  res.results.forEach(p => {
-    const title = p.properties['名前'].title[0]?.plain_text || '無題';
-    const li = document.createElement('li');
-    li.style.display = 'flex';
-    li.style.justifyContent = 'space-between';
+    dom.taskListContainer.innerHTML = '読み込み中...';
 
-    const span = document.createElement('span');
-    span.textContent = title;
-
-    const btn = document.createElement('button');
-    btn.textContent = '▶ 開始';
-    btn.onclick = () => startTask({
-      id: p.id,
-      title,
-      dbId,
-      properties: p.properties
+    const res = await notionApi(`/databases/${dbId}/query`, 'POST', {
+      filter: {
+        or: STATUS_ACTIVE.map(s => ({
+          property: 'ステータス',
+          status: { equals: s }
+        }))
+      }
     });
 
-    li.append(span, btn);
-    dom.taskListContainer.appendChild(li);
-  });
+    dom.taskListContainer.innerHTML = '';
+    if (!res.results || res.results.length === 0) {
+      dom.taskListContainer.innerHTML = '<li>該当タスクがありません</li>';
+      return;
+    }
+
+    res.results.forEach(p => {
+      const title = p.properties['名前']?.title?.[0]?.plain_text || '無題';
+      const li = document.createElement('li');
+      li.style.cssText = 'display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee;';
+
+      const span = document.createElement('span');
+      span.textContent = title;
+      span.style.flex = '1';
+
+      const btn = document.createElement('button');
+      btn.textContent = '▶ 開始';
+      btn.style.cssText = 'padding: 4px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;';
+      btn.onclick = () => startTask({
+        id: p.id,
+        title,
+        dbId,
+        properties: p.properties
+      });
+
+      li.append(span, btn);
+      dom.taskListContainer.appendChild(li);
+    });
+  } catch (e) {
+    console.error('タスク読み込みエラー:', e);
+    dom.taskListContainer.innerHTML = `<li style="color: red;">エラー: ${e.message}</li>`;
+  }
 }
 
 // ================= Start / Stop =================
 async function startTask(task) {
-  const cat = task.properties['カテゴリ']?.select?.name;
-  const depts = task.properties['部門']?.multi_select?.map(d => d.name) || [];
+  try {
+    const cat = task.properties['カテゴリ']?.select?.name || '未分類';
+    const depts = task.properties['部門']?.multi_select?.map(d => d.name) || [];
 
-  const desc = `${depts.map(d => `【${d}】`).join('')}【${cat}】${task.title}`;
+    const desc = `${depts.map(d => `【${d}】`).join('')}【${cat}】${task.title}`;
 
-  const entry = await togglApi(`${TOGGL_V9_BASE_URL}/time_entries`, 'POST', {
-    workspace_id: Number(settings.togglWorkspaceId),
-    description: desc,
-    created_with: 'Notion Toggl Timer',
-    start: new Date().toISOString(),
-    duration: -1
-  });
+    const entry = await togglApi(`${TOGGL_V9_BASE_URL}/time_entries`, 'POST', {
+      workspace_id: Number(settings.togglWorkspaceId),
+      description: desc,
+      created_with: 'Notion Toggl Timer',
+      start: new Date().toISOString(),
+      duration: -1
+    });
 
-  settings.currentRunningTask = { ...task, togglEntryId: entry.id };
-  settings.startTime = Date.now();
-  saveSettings();
-  updateRunningUI(true);
+    settings.currentRunningTask = { ...task, togglEntryId: entry.id };
+    settings.startTime = Date.now();
+    saveSettings();
+    updateRunningUI(true);
+  } catch (e) {
+    console.error('タスク開始エラー:', e);
+    alert(`タスク開始エラー: ${e.message}`);
+  }
 }
 
 async function stopTask(isComplete) {
-  const t = settings.currentRunningTask;
-  await togglApi(
-    `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}/stop`,
-    'PATCH'
-  );
+  if (!settings.currentRunningTask) return;
 
-  const log = dom.thinkingLogInput.value.trim();
-  if (log) {
-    const now = new Date().toLocaleString();
-    await notionApi(`/pages/${t.id}`, 'PATCH', {
-      properties: {
-        思考ログ: {
-          rich_text: [{
-            text: { content: `\n[${now}]\n${log}` }
-          }]
+  try {
+    const t = settings.currentRunningTask;
+    
+    // Toggl停止
+    await togglApi(
+      `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}`,
+      'PATCH',
+      { stop: true }
+    );
+
+    // 思考ログ保存
+    const log = dom.thinkingLogInput.value.trim();
+    if (log) {
+      const now = new Date().toLocaleString('ja-JP');
+      await notionApi(`/pages/${t.id}`, 'PATCH', {
+        properties: {
+          思考ログ: {
+            rich_text: [{
+              text: { content: `\n[${now}]\n${log}` }
+            }]
+          }
         }
-      }
-    });
-  }
+      });
+    }
 
-  settings.currentRunningTask = null;
-  settings.startTime = null;
-  saveSettings();
-  updateRunningUI(false);
-  loadTasks();
+    // 設定クリア
+    settings.currentRunningTask = null;
+    settings.startTime = null;
+    saveSettings();
+    updateRunningUI(false);
+    loadTasks();
+  } catch (e) {
+    console.error('タスク停止エラー:', e);
+    alert(`タスク停止エラー: ${e.message}`);
+  }
 }
 
 // ================= UI =================
 function updateRunningUI(running) {
-  dom.runningTaskContainer.classList.toggle('hidden', !running);
-  dom.mainView.classList.toggle('hidden', running);
+  if (dom.mainView) dom.mainView.classList.toggle('hidden', running);
+  if (dom.settingsView) dom.settingsView.classList.add('hidden');
+  if (dom.runningTaskContainer) dom.runningTaskContainer.classList.toggle('hidden', !running);
 
-  if (running) {
+  if (running && settings.currentRunningTask) {
     dom.runningTaskTitle.textContent = settings.currentRunningTask.title;
+    
+    // 既存タイマー停止
+    if (settings.timerInterval) {
+      clearInterval(settings.timerInterval);
+    }
+    
+    // 新しいタイマー開始
     settings.timerInterval = setInterval(() => {
+      if (!settings.startTime) return;
       const sec = Math.floor((Date.now() - settings.startTime) / 1000);
-      dom.runningTimer.textContent =
-        new Date(sec * 1000).toISOString().substr(11, 8);
+      if (dom.runningTimer) {
+        dom.runningTimer.textContent = new Date(sec * 1000).toISOString().substr(11, 8);
+      }
     }, 1000);
   } else {
-    clearInterval(settings.timerInterval);
-    dom.runningTimer.textContent = '00:00:00';
-    dom.thinkingLogInput.value = '';
+    if (settings.timerInterval) {
+      clearInterval(settings.timerInterval);
+      settings.timerInterval = null;
+    }
+    if (dom.runningTimer) dom.runningTimer.textContent = '00:00:00';
+    if (dom.thinkingLogInput) dom.thinkingLogInput.value = '';
   }
 }
 
 // ================= Init =================
 function init() {
-  dom = getDom();
-  loadSettings();
+  try {
+    dom = getDom();
+    loadSettings();
 
-  dom.toggleSettings.onclick = () => {
-    dom.settingsView.classList.remove('hidden');
-    dom.mainView.classList.add('hidden');
-  };
-  dom.cancelConfig.onclick = () => {
-    dom.settingsView.classList.add('hidden');
-    dom.mainView.classList.remove('hidden');
-  };
-  dom.saveConfig.onclick = () => {
-    settings.notionToken = dom.confNotionToken.value;
-    settings.humanUserId = dom.confNotionUserId.value;
-    settings.togglApiToken = dom.confTogglToken.value;
-    settings.togglWorkspaceId = dom.confTogglWid.value;
-    saveSettings();
-    location.reload();
-  };
+    // イベントハンドラ設定
+    if (dom.toggleSettings) {
+      dom.toggleSettings.onclick = () => {
+        if (dom.settingsView) dom.settingsView.classList.remove('hidden');
+        if (dom.mainView) dom.mainView.classList.add('hidden');
+      };
+    }
 
-  dom.reloadTasks.onclick = loadTasks;
-  dom.stopTaskButton.onclick = () => stopTask(false);
-  dom.completeTaskButton.onclick = () => stopTask(true);
+    if (dom.cancelConfig) {
+      dom.cancelConfig.onclick = () => {
+        if (dom.settingsView) dom.settingsView.classList.add('hidden');
+        if (dom.mainView) dom.mainView.classList.remove('hidden');
+      };
+    }
 
-  if (settings.currentRunningTask) updateRunningUI(true);
+    if (dom.saveConfig) {
+      dom.saveConfig.onclick = () => {
+        if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value;
+        if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value;
+        if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value;
+        if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
+        saveSettings();
+        location.reload();
+      };
+    }
+
+    if (dom.reloadTasks) dom.reloadTasks.onclick = loadTasks;
+    if (dom.stopTaskButton) dom.stopTaskButton.onclick = () => stopTask(false);
+    if (dom.completeTaskButton) dom.completeTaskButton.onclick = () => stopTask(true);
+
+    // 実行中タスクがあればUI更新
+    if (settings.currentRunningTask && settings.startTime) {
+      updateRunningUI(true);
+    } else {
+      loadTasks();
+    }
+  } catch (e) {
+    console.error('初期化エラー:', e);
+  }
 }
 
-init();
+// ページ読み込み完了後に初期化
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
