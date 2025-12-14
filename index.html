@@ -13,28 +13,55 @@
             background-color: #f7f7f7;
             color: #333;
             line-height: 1.6;
-            /* ★ 修正: ベースフォントを大きくし、スマホ対応（16px） */
             font-size: 16px; 
+            /* ★ 追加: bodyに中央寄せのスタイルは適用しない */
         }
+        
+        /* ★ 新規追加: コンテンツ全体を制限し、中央に配置するコンテナ */
+        #appContainer {
+            max-width: 600px; /* PCでの最大幅を600pxに設定 */
+            margin: 0 auto; /* 中央寄せ */
+            padding: 0;
+            background-color: #fff; /* コンテンツエリアの背景を白に */
+            border-radius: 8px; /* 角を丸く */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05); /* 影を追加 */
+        }
+        
+        /* ★ 修正: bodyのpaddingはappContainer外になるため、appHeaderとコンテンツにpaddingを追加 */
+        #appHeader, #settingsView, #mainView, #runningTaskContainer {
+            padding: 0 16px; 
+        }
+        
+        /* ★ 修正: Tabは幅いっぱいを使うため、パディングを調整 */
+        .tab {
+            margin: 16px 0 0;
+            padding: 0 16px;
+        }
+        /* ★ 修正: Tabコンテンツのパディング */
+        #existingTaskTab, #newTaskTab {
+            padding: 0 16px 16px;
+        }
+
         .hidden { display: none; }
         
-        /* ★ 修正: ヘッダーコンテナのスタイル */
+        /* ヘッダーコンテナのスタイル */
         #appHeader {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 16px;
             border-bottom: 2px solid #eee;
-            padding-bottom: 8px;
+            padding-top: 16px; /* ヘッダー上部の余白を追加 */
         }
         
-        /* ★ 修正: H1のサイズをスマホでも見やすいサイズに調整 */
+        /* H1のサイズを調整 */
         h1 { 
             color: #007bff; 
             margin: 0;
             font-size: 1.6em; 
         }
 
+        /* 以下、その他のスタイルは変更なし */
         h2 { color: #333; margin-top: 20px; }
         h3 { color: #333; font-size: 1.1em; margin-top: 20px; }
         
@@ -113,6 +140,9 @@
         
         /* 実行中タスク */
         #runningTaskContainer {
+            padding-bottom: 20px; /* 下部パディングを調整 */
+        }
+        #runningTaskContainer .inner {
             padding: 20px;
             background: #fff;
             border: 1px solid #ffc107;
@@ -190,7 +220,6 @@
         }
         
         /* 設定画面内のチェックボックス調整 */
-        /* ★ 変更: confEnableInactiveNotification も追加 */
         #confEnableOngoingNotification, #confEnableInactiveNotification {
             width: auto !important; 
         }
@@ -199,6 +228,8 @@
 </head>
 
 <body>
+
+<div id="appContainer">
 
 <div id="appHeader">
     <h1>Notion × Toggl Timer</h1>
@@ -249,14 +280,14 @@
         <div style="clear: both;"></div>
     </div>
 
-    <div class="tab">
+    <div class="tab" style="padding: 0;"> 
         <button id="startExistingTask" class="active">既存タスク</button>
         <button id="startNewTask">新規タスク</button>
     </div>
 
     <div id="existingTaskTab">
         <ul id="taskListContainer">
-            <li>タスクを読み込んでいます...</li>
+            <li>Notionトークンを設定してください</li>
         </ul>
     </div>
 
@@ -281,16 +312,20 @@
 </div>
 
 <div id="runningTaskContainer" class="hidden">
-    <h3 id="runningTaskTitle">実行中のタスク</h3>
-    <div id="runningTimer">00:00:00</div>
+    <div class="inner">
+        <h3 id="runningTaskTitle">実行中のタスク</h3>
+        <div id="runningTimer">00:00:00</div>
 
-    <label>思考ログ</label>
-    <textarea id="thinkingLogInput" placeholder="タスク終了時に入力した内容がNotionの思考ログに追加されます"></textarea>
+        <label>思考ログ</label>
+        <textarea id="thinkingLogInput" placeholder="タスク終了時に入力した内容がNotionの思考ログに追加されます"></textarea>
 
-    <br>
-    <button id="stopTaskButton" class="btn btn-gray" style="margin-right: 10px;">一時停止</button>
-    <button id="completeTaskButton" class="btn btn-green">完了</button>
+        <br>
+        <button id="stopTaskButton" class="btn btn-gray" style="margin-right: 10px;">一時停止</button>
+        <button id="completeTaskButton" class="btn btn-green">完了</button>
+    </div>
 </div>
+
+</div> 
 
 <div id="notificationContainer">
     タスクを停止/完了し、Notionに反映しました。
