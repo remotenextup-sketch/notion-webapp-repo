@@ -21,7 +21,12 @@ const settings = {
     startTime: null,
     timerInterval: null,
     notificationInterval: null,
-    enableOngoingNotification: true // 初期値をtrueに設定
+    enableOngoingNotification: true, 
+    
+    // ★ 新規追加
+    enableInactiveNotification: true, // 未計測通知のON/OFF
+    lastStopTime: null, // 最後にタスクが停止した時刻 (Unix time)
+    inactiveCheckInterval: null // 未計測チェック用のインターバルID
 };
 
 let dom = {};
@@ -44,6 +49,7 @@ function getDom() {
         confTogglWid: document.getElementById('confTogglWid'),
         
         confEnableOngoingNotification: document.getElementById('confEnableOngoingNotification'), 
+        confEnableInactiveNotification: document.getElementById('confEnableInactiveNotification'), // ★ 新規DOM
 
         taskDbFilter: document.getElementById('taskDbFilter'),
         reloadTasks: document.getElementById('reloadTasks'),
@@ -75,6 +81,14 @@ function loadSettings() {
         const saved = localStorage.getItem('settings');
         if (saved) {
             Object.assign(settings, JSON.parse(saved));
+            
+            // ★ 新規設定のデフォルト値保証
+            if (typeof settings.enableInactiveNotification !== 'boolean') {
+                settings.enableInactiveNotification = true;
+            }
+            if (typeof settings.lastStopTime !== 'number') {
+                settings.lastStopTime = null;
+            }
         }
     } catch (e) {
         console.error('設定読み込みエラー:', e);
@@ -91,7 +105,9 @@ function saveSettings() {
             togglWorkspaceId: settings.togglWorkspaceId,
             currentRunningTask: settings.currentRunningTask,
             startTime: settings.startTime,
-            enableOngoingNotification: settings.enableOngoingNotification 
+            enableOngoingNotification: settings.enableOngoingNotification,
+            enableInactiveNotification: settings.enableInactiveNotification, // ★ 保存
+            lastStopTime: settings.lastStopTime // ★ 保存
         }));
     } catch (e) {
         console.error('設定保存エラー:', e);
@@ -111,6 +127,7 @@ function renderSettings() {
     if (dom.confTogglWid) dom.confTogglWid.value = settings.togglWorkspaceId;
     
     if (dom.confEnableOngoingNotification) dom.confEnableOngoingNotification.checked = settings.enableOngoingNotification;
+    if (dom.confEnableInactiveNotification) dom.confEnableInactiveNotification.checked = settings.enableInactiveNotification; // ★ 反映
 
     renderDbConfig();
     renderTaskDbFilter();
@@ -281,7 +298,7 @@ function requestNotificationPermission() {
 }
 
 /**
- * 実行中のタスクが長時間継続していることを通知します。
+ * 実行中のタスクが長時間継続していることを通知します。（既存）
  */
 function notifyOngoingTask() {
     if (settings.enableOngoingNotification && Notification.permission === 'granted' && settings.currentRunningTask) {
@@ -293,6 +310,42 @@ function notifyOngoingTask() {
         });
     }
 }
+
+/**
+ * タイマーが30分以上停止していることを通知します。（新規）
+ */
+function notifyInactiveTimer() {
+    if (Notification.permission === 'granted') {
+        new Notification('🚨 タイマー停止中 (30分経過)', {
+            body: `30分以上タスクが開始されていません。次のタスクを開始しましょう。`,
+            icon: 'favicon.ico', 
+            silent: false 
+        });
+    }
+    // アプリ内通知も表示
+    showNotification('🚨 タイマー停止中 (30分経過)', 5000);
+}
+
+/**
+ * 未計測時間をチェックし、通知が必要なら実行します。（新規）
+ */
+function checkInactiveTime() {
+    if (!settings.enableInactiveNotification) return;
+
+    // lastStopTimeが設定されており、かつ30分以上経過しているかチェック
+    const THRESHOLD = NOTIFICATION_INTERVAL_MS;
+    if (settings.lastStopTime && (Date.now() - settings.lastStopTime) >= THRESHOLD) {
+        notifyInactiveTimer();
+        
+        // 通知を出したら、スパム防止のためチェック間隔をクリア
+        if (settings.inactiveCheckInterval) {
+            clearInterval(settings.inactiveCheckInterval);
+            settings.inactiveCheckInterval = null;
+        }
+        // 注意: 次にタスクを開始/停止した際にチェックが再開されます
+    }
+}
+
 
 // ================= Tasks & Timer =================
 
@@ -424,6 +477,7 @@ async function startTask(task) {
 
         settings.currentRunningTask = { ...task, togglEntryId: entry.id };
         settings.startTime = Date.now();
+        settings.lastStopTime = null; // ★ タスク開始時は停止時刻をクリア
         saveSettings();
         updateRunningUI(true);
     } catch (e) {
@@ -507,7 +561,7 @@ async function executeStopAndLog(task, log, isComplete) {
 
         const notionPatches = {};
         
-        // 2. 思考ログ保存 
+        // 2. 思考ログ保存 (省略)
         if (log) {
             const currentPage = await notionApi(`/pages/${task.id}`, 'GET');
             const existingLogProp = currentPage.properties['思考ログ']?.rich_text;
@@ -546,7 +600,6 @@ async function executeStopAndLog(task, log, isComplete) {
             await notionApi(`/pages/${task.id}`, 'PATCH', { properties: notionPatches });
             showNotification('Notionにログとステータスを反映し、タスクを完了しました。', 2500);
         } else {
-             // ログやステータス変更がなくても、Togglが停止したら完了を通知
              showNotification('タスクを一時停止しました。', 2500);
         }
 
@@ -557,8 +610,14 @@ async function executeStopAndLog(task, log, isComplete) {
         // 処理完了後の後始末 
         settings.currentRunningTask = null;
         settings.startTime = null;
+        settings.lastStopTime = Date.now(); // ★ 最後に停止した時刻を記録
         saveSettings();
         isStopping = false;
+        
+        // ★ 停止直後に未計測チェックを実行（即座に30分超えのケースに対応）
+        if (settings.enableInactiveNotification) {
+             checkInactiveTime(); 
+        }
     }
 }
 
@@ -573,7 +632,7 @@ function stopTask(isComplete) {
     const log = dom.thinkingLogInput.value.trim();
     const action = isComplete ? '完了' : '一時停止';
 
-    // 1. フロントエンドを即座に更新
+    // 1. フロントエンドを即座に更新 (Inactiveチェック開始ロジックも含む)
     updateRunningUI(false);
     
     // 2. ユーザーへ「処理中」を伝える通知を先に表示
@@ -621,6 +680,8 @@ function updateRunningUI(running) {
 
         if (settings.timerInterval) clearInterval(settings.timerInterval);
         if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
+        if (settings.inactiveCheckInterval) clearInterval(settings.inactiveCheckInterval); // ★ タイマー開始時は未計測チェックもクリア
+        settings.inactiveCheckInterval = null;
 
         // 経過時間タイマー
         settings.timerInterval = setInterval(() => {
@@ -648,6 +709,17 @@ function updateRunningUI(running) {
         
         settings.timerInterval = null;
         settings.notificationInterval = null;
+        
+        // ★ New: 未計測チェックの開始/停止
+        if (settings.enableInactiveNotification) {
+            if (!settings.inactiveCheckInterval) {
+                // 1分ごとにチェック
+                settings.inactiveCheckInterval = setInterval(checkInactiveTime, 60000); 
+            }
+        } else {
+             if (settings.inactiveCheckInterval) clearInterval(settings.inactiveCheckInterval);
+             settings.inactiveCheckInterval = null;
+        }
         
         if (dom.runningTimer) dom.runningTimer.textContent = '00:00:00';
         if (dom.thinkingLogInput) dom.thinkingLogInput.value = '';
@@ -698,6 +770,7 @@ function init() {
                 if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
                 
                 if (dom.confEnableOngoingNotification) settings.enableOngoingNotification = dom.confEnableOngoingNotification.checked;
+                if (dom.confEnableInactiveNotification) settings.enableInactiveNotification = dom.confEnableInactiveNotification.checked; // ★ 保存
 
                 const dbItems = dom.dbConfigContainer.querySelectorAll('.db-config-item');
                 settings.notionDatabases = Array.from(dbItems).map(item => ({
@@ -732,6 +805,9 @@ function init() {
             renderTaskDbFilter();
             renderNewTaskForm();
             switchTab('existingTaskTab');
+            
+            // アプリ起動時に未計測チェックを開始
+            updateRunningUI(false); 
         }
     } catch (e) {
         console.error('初期化エラー:', e);
