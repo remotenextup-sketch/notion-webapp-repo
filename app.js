@@ -1,4 +1,4 @@
-const NOTION_TOGGL_PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy'; // ★ 変更なし
+const PROXY_URL = 'https://company-notion-toggl-api.vercel.app/api/proxy';
 const TOGGL_V9_BASE_URL = 'https://api.track.toggl.com/api/v9';
 
 const STATUS_ACTIVE = ['未着手', '進行中'];
@@ -22,9 +22,11 @@ const settings = {
     timerInterval: null,
     notificationInterval: null,
     enableOngoingNotification: true, 
-    enableInactiveNotification: true,
-    lastStopTime: null, 
-    inactiveCheckInterval: null
+    
+    // ★ 新規追加
+    enableInactiveNotification: true, // 未計測通知のON/OFF
+    lastStopTime: null, // 最後にタスクが停止した時刻 (Unix time)
+    inactiveCheckInterval: null // 未計測チェック用のインターバルID
 };
 
 let dom = {};
@@ -41,13 +43,13 @@ function getDom() {
         addDbConfig: document.getElementById('addDbConfig'),
         dbConfigContainer: document.getElementById('dbConfigContainer'),
 
-        // confNotionToken: document.getElementById('confNotionToken'), // ★ 削除
+        // confNotionToken: document.getElementById('confNotionToken'), // ★ 削除: HTMLから削除済み
         confNotionUserId: document.getElementById('confNotionUserId'),
         confTogglToken: document.getElementById('confTogglToken'),
         confTogglWid: document.getElementById('confTogglWid'),
         
         confEnableOngoingNotification: document.getElementById('confEnableOngoingNotification'), 
-        confEnableInactiveNotification: document.getElementById('confEnableInactiveNotification'), 
+        confEnableInactiveNotification: document.getElementById('confEnableInactiveNotification'),
 
         taskDbFilter: document.getElementById('taskDbFilter'),
         reloadTasks: document.getElementById('reloadTasks'),
@@ -78,12 +80,14 @@ function loadSettings() {
     try {
         const saved = localStorage.getItem('settings');
         if (saved) {
-            // notionTokenはここで無視される
+            // notionTokenは保存データに含まれていても無視される
             Object.assign(settings, JSON.parse(saved));
             
+            // ★ 新規設定のデフォルト値保証
             if (typeof settings.enableInactiveNotification !== 'boolean') {
                 settings.enableInactiveNotification = true;
             }
+            // lastStopTimeはnullまたはnumber
             if (typeof settings.lastStopTime !== 'number' && settings.lastStopTime !== null) {
                 settings.lastStopTime = null;
             }
@@ -104,8 +108,8 @@ function saveSettings() {
             currentRunningTask: settings.currentRunningTask,
             startTime: settings.startTime,
             enableOngoingNotification: settings.enableOngoingNotification,
-            enableInactiveNotification: settings.enableInactiveNotification, 
-            lastStopTime: settings.lastStopTime 
+            enableInactiveNotification: settings.enableInactiveNotification, // ★ 保存
+            lastStopTime: settings.lastStopTime // ★ 保存
         }));
     } catch (e) {
         console.error('設定保存エラー:', e);
@@ -125,7 +129,7 @@ function renderSettings() {
     if (dom.confTogglWid) dom.confTogglWid.value = settings.togglWorkspaceId;
     
     if (dom.confEnableOngoingNotification) dom.confEnableOngoingNotification.checked = settings.enableOngoingNotification;
-    if (dom.confEnableInactiveNotification) dom.confEnableInactiveNotification.checked = settings.enableInactiveNotification; 
+    if (dom.confEnableInactiveNotification) dom.confEnableInactiveNotification.checked = settings.enableInactiveNotification;
 
     renderDbConfig();
     renderTaskDbFilter();
@@ -139,7 +143,6 @@ function renderDbConfig() {
 
     dom.dbConfigContainer.innerHTML = '';
 
-    // ... (削除・更新ロジックは変更なし)
     settings.notionDatabases.forEach((db, index) => {
         const div = document.createElement('div');
         div.className = 'db-config-item';
@@ -238,15 +241,14 @@ function switchTab(targetId) {
 // ================= API =================
 async function externalApi(targetUrl, method = 'GET', auth, body = null) {
     try {
-        // ★ NOTION_TOGGL_PROXY_URLにリクエストを送信
-        const res = await fetch(NOTION_TOGGL_PROXY_URL, {
+        const res = await fetch(PROXY_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 targetUrl,
                 method,
                 tokenKey: auth.key,
-                tokenValue: auth.value, // Notionの場合は空文字列
+                tokenValue: auth.value,
                 notionVersion: auth.notionVersion || '',
                 body
             })
@@ -267,7 +269,6 @@ async function externalApi(targetUrl, method = 'GET', auth, body = null) {
     }
 }
 
-// ★ 修正: Notion APIはトークンを送信せず、空文字列を送信
 const notionApi = (endpoint, method, body) =>
     externalApi(`https://api.notion.com/v1${endpoint}`, method, {
         key: 'notionToken',
@@ -280,25 +281,102 @@ const togglApi = (url, method, body) =>
         key: 'togglApiToken',
         value: settings.togglApiToken
     }, body);
-// ... (Notifications, Tasks & Timer, executeStopAndLog などの関数は変更なし)
 
-// ... (省略された関数は元のコードのまま)
+// ================= Notifications =================
+
+/**
+ * ブラウザのデスクトップ通知を要求し、許可されたら設定します。
+ */
+function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.warn('このブラウザはデスクトップ通知をサポートしていません。');
+        return;
+    }
+    if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+            console.log(`通知権限: ${permission}`);
+        });
+    }
+}
+
+/**
+ * 実行中のタスクが長時間継続していることを通知します。（既存）
+ */
+function notifyOngoingTask() {
+    if (settings.enableOngoingNotification && Notification.permission === 'granted' && settings.currentRunningTask) {
+        const title = settings.currentRunningTask.title;
+        new Notification('⏰ 長時間タスク継続中', {
+            body: `「${title}」が30分以上続いています。ログの記入やタスクの区切りを確認しましょう。`,
+            icon: 'favicon.ico', 
+            silent: false 
+        });
+    }
+}
+
+/**
+ * タイマーが30分以上停止していることを通知します。（新規）
+ */
+function notifyInactiveTimer() {
+    if (Notification.permission === 'granted') {
+        new Notification('🚨 タイマー停止中 (30分経過)', {
+            body: `30分以上タスクが開始されていません。次のタスクを開始しましょう。`,
+            icon: 'favicon.ico', 
+            silent: false 
+        });
+    }
+    // アプリ内通知も表示
+    showNotification('🚨 タイマー停止中 (30分経過)', 5000);
+}
+
+/**
+ * 未計測時間をチェックし、通知が必要なら実行します。（新規）
+ */
+function checkInactiveTime() {
+    if (!settings.enableInactiveNotification || settings.currentRunningTask) return;
+
+    // lastStopTimeが設定されており、かつ30分以上経過しているかチェック
+    const THRESHOLD = NOTIFICATION_INTERVAL_MS;
+    if (settings.lastStopTime && (Date.now() - settings.lastStopTime) >= THRESHOLD) {
+        notifyInactiveTimer();
+        
+        // 通知を出したら、スパム防止のためチェック間隔をクリア
+        if (settings.inactiveCheckInterval) {
+            clearInterval(settings.inactiveCheckInterval);
+            settings.inactiveCheckInterval = null;
+        }
+        // 注意: 次にタスクを開始/停止した際にチェックが再開されます
+    }
+}
+
+
+// ================= Tasks & Timer =================
+
+/**
+ * Notionのページプロパティに担当者情報（人プロパティ）を追加する
+ */
+function assignHumanProperty() {
+    if (settings.humanUserId) {
+        return {
+            [ASSIGNEE_PROPERTY_NAME]: {
+                people: [{ id: settings.humanUserId }]
+            }
+        };
+    }
+    return {};
+}
+
+
 async function loadTasks() {
-    // if (!settings.notionToken) { // ★ 削除: クライアント側のトークンチェックを削除
-    //     console.warn('Notion token 未設定のためタスク読込を中断');
-    //     dom.taskListContainer.innerHTML = '<li>Notionトークンを設定してください</li>';
-    //     return;
-    // }
+    // ★ セキュリティ修正: クライアント側のNotion Tokenチェックを削除し、代わりにDB IDの存在を確認
+    const dbId = dom.taskDbFilter.value;
+    if (!dbId || settings.notionDatabases.length === 0) {
+        dom.taskListContainer.innerHTML = '<li>設定からDBを追加し、選択してください</li>';
+        return;
+    }
 
     try {
-        const dbId = dom.taskDbFilter.value;
-        if (!dbId) {
-            dom.taskListContainer.innerHTML = '<li>データベースを選択してください</li>';
-            return;
-        }
-
         dom.taskListContainer.innerHTML = '読み込み中...';
-        // ... (notionApiコールはそのまま)
+
         const res = await notionApi(`/databases/${dbId}/query`, 'POST', {
             filter: {
                 or: STATUS_ACTIVE.map(s => ({
@@ -312,7 +390,6 @@ async function loadTasks() {
             }]
         });
 
-        // ... (リストレンダリング処理はそのまま)
         dom.taskListContainer.innerHTML = '';
         if (!res.results || res.results.length === 0) {
             dom.taskListContainer.innerHTML = '<li>該当タスクがありません</li>';
@@ -347,8 +424,305 @@ async function loadTasks() {
     }
 }
 
+/**
+ * Togglに時間エントリを作成し、タイマーを開始します。
+ */
+async function startTask(task) {
+    if (!settings.togglApiToken || !settings.togglWorkspaceId) {
+        alert('Toggl APIトークンまたはWorkspace IDが未設定です。設定を確認してください。');
+        return;
+    }
 
-// ... (その他の関数は変更なし)
+    try {
+        let desc = task.title;
+        if (task.properties) {
+            const cat = task.properties['カテゴリ']?.select?.name || '未分類';
+            const depts = task.properties['部門']?.multi_select?.map(d => d.name) || [];
+            const deptTags = depts.map(d => `【${d}】`).join('');
+            const catTag = `【${cat}】`;
+            desc = `${deptTags}${catTag}${task.title}`;
+        }
+        
+        const patches = {};
+        
+        // 1. 担当者チェック
+        if (settings.humanUserId && 
+            (!task.properties[ASSIGNEE_PROPERTY_NAME] || 
+             !task.properties[ASSIGNEE_PROPERTY_NAME].people ||
+             !task.properties[ASSIGNEE_PROPERTY_NAME].people.some(p => p.id === settings.humanUserId))
+        ) {
+            Object.assign(patches, assignHumanProperty());
+        }
+
+        // 2. ステータスが未着手なら、進行中に変更する
+        if (task.properties['ステータス']?.status?.name === '未着手') {
+             patches['ステータス'] = { status: { name: '進行中' } };
+        }
+        
+        if (Object.keys(patches).length > 0) {
+              await notionApi(`/pages/${task.id}`, 'PATCH', { properties: patches });
+        }
+
+
+        const entry = await togglApi(`${TOGGL_V9_BASE_URL}/time_entries`, 'POST', {
+            workspace_id: Number(settings.togglWorkspaceId),
+            description: desc,
+            created_with: 'Notion Toggl Timer',
+            start: new Date().toISOString(),
+            duration: -1 
+        });
+
+        settings.currentRunningTask = { ...task, togglEntryId: entry.id };
+        settings.startTime = Date.now();
+        settings.lastStopTime = null; // ★ タスク開始時は停止時刻をクリア
+        saveSettings();
+        updateRunningUI(true);
+    } catch (e) {
+        console.error('タスク開始エラー:', e);
+        alert(`タスク開始エラー: ${e.message}`);
+    }
+}
+
+/**
+ * 新規タスクをNotionに作成し、タイマーを開始します。
+ */
+async function startNewTask() {
+    const title = dom.newTaskTitle.value.trim();
+    if (!title) {
+        alert('タスク名は必須です。');
+        return;
+    }
+    const dbId = dom.taskDbFilter.value;
+    if (!dbId) {
+        alert('データベースを選択してください。');
+        return;
+    }
+    const selectedCategory = Array.from(dom.newCategoryContainer.querySelectorAll('input[name="newCategory"]:checked'))
+        .map(radio => radio.value)[0] || CATEGORIES[0];
+    const selectedDepartments = Array.from(dom.newDepartmentContainer.querySelectorAll('input[name="newDepartment"]:checked'))
+        .map(cb => cb.value);
+
+    try {
+        const notionProperties = {
+            'タスク名': { title: [{ text: { content: title } }] },
+            'ステータス': { status: { name: '進行中' } },
+            'カテゴリ': { select: { name: selectedCategory } },
+            '部門': { multi_select: selectedDepartments.map(dept => ({ name: dept })) },
+            ...assignHumanProperty() 
+        };
+
+        const newPage = await notionApi(`/pages`, 'POST', {
+            parent: { database_id: dbId },
+            properties: notionProperties
+        });
+
+        await startTask({
+            id: newPage.id,
+            title: title,
+            dbId: dbId,
+            properties: newPage.properties
+        });
+
+        dom.newTaskTitle.value = '';
+        Array.from(dom.newDepartmentContainer.querySelectorAll('input[name="newDepartment"]:checked')).forEach(cb => { cb.checked = false; });
+        Array.from(dom.newCategoryContainer.querySelectorAll('input[name="newCategory"]')).find(radio => radio.value === CATEGORIES[0]).checked = true;
+
+    } catch (e) {
+        console.error('新規タスク作成＆開始エラー:', e);
+        alert(`新規タスク作成＆開始エラー: ${e.message}`);
+    }
+}
+
+/**
+ * 停止処理（API実行）をバックグラウンドで行う非同期関数。
+ */
+async function executeStopAndLog(task, log, isComplete) {
+    if (isStopping) return;
+    isStopping = true;
+    
+    try {
+        // 1. Toggl停止 
+        try {
+            await togglApi(
+                `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${task.togglEntryId}/stop`,
+                'PATCH'
+            );
+        } catch (e) {
+            if (e.message && e.message.includes("Time entry already stopped")) {
+                console.warn('Toggl警告: タイムエントリは既に停止済みでした。');
+            } else {
+                showNotification(`エラー: ${e.message} (Toggl API)`, 5000);
+                throw e;
+            }
+        }
+
+        const notionPatches = {};
+        
+        // 2. 思考ログ保存 (省略)
+        if (log) {
+            const currentPage = await notionApi(`/pages/${task.id}`, 'GET');
+            const existingLogProp = currentPage.properties['思考ログ']?.rich_text;
+            
+            let existingText = '';
+            if (existingLogProp && existingLogProp.length > 0) {
+                existingText = existingLogProp.map(rt => rt.plain_text).join('');
+                if (existingText.length > 0 && !existingText.endsWith('\n')) {
+                    existingText += '\n';
+                }
+            }
+            
+            const now = new Date().toLocaleString('ja-JP', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            }).replace(/\//g, '/');
+
+            const newLogEntry = `\n[${now}]\n${log}`;
+            const updatedLogContent = existingText + newLogEntry;
+
+            notionPatches['思考ログ'] = {
+                rich_text: [{
+                    text: { content: updatedLogContent }
+                }]
+            };
+        }
+
+        // 3. ステータス変更
+        if (isComplete) {
+            notionPatches['ステータス'] = { status: { name: '完了' } };
+        }
+
+        // 4. Notionページ更新
+        if (Object.keys(notionPatches).length > 0) {
+            await notionApi(`/pages/${task.id}`, 'PATCH', { properties: notionPatches });
+            showNotification('Notionにログとステータスを反映し、タスクを完了しました。', 2500);
+        } else {
+             showNotification('タスクを一時停止しました。', 2500);
+        }
+
+    } catch (e) {
+        console.error('バックグラウンド停止処理エラー:', e);
+        showNotification(`エラー: タスク停止・ログ反映に失敗しました。詳細をコンソールで確認してください。`, 5000);
+    } finally {
+        // 処理完了後の後始末 
+        settings.currentRunningTask = null;
+        settings.startTime = null;
+        settings.lastStopTime = Date.now(); // ★ 最後に停止した時刻を記録
+        saveSettings();
+        isStopping = false;
+        
+        // ★ 停止直後に未計測チェックを実行（即座に30分超えのケースに対応）
+        if (settings.enableInactiveNotification) {
+             checkInactiveTime(); 
+        }
+    }
+}
+
+
+/**
+ * 実行中のタスクを停止します。
+ */
+function stopTask(isComplete) {
+    if (!settings.currentRunningTask || isStopping) return;
+
+    const t = settings.currentRunningTask;
+    const log = dom.thinkingLogInput.value.trim();
+    const action = isComplete ? '完了' : '一時停止';
+
+    // 1. フロントエンドを即座に更新 (Inactiveチェック開始ロジックも含む)
+    updateRunningUI(false);
+    
+    // 2. ユーザーへ「処理中」を伝える通知を先に表示
+    showNotification(`タスクを${action}しました。Notion/Togglに反映中...`, 3000);
+    
+    // 3. バックグラウンドでAPI処理を実行
+    setTimeout(() => {
+        executeStopAndLog(t, log, isComplete);
+    }, 50);
+}
+
+// ================= UI (Others) =================
+
+/**
+ * 数秒間表示される非ブロック型通知を表示します。
+ */
+function showNotification(message, duration = 3000) {
+    if (!dom.notificationContainer) return;
+    
+    dom.notificationContainer.textContent = message;
+    dom.notificationContainer.style.display = 'block';
+    
+    setTimeout(() => {
+        dom.notificationContainer.style.opacity = 1;
+    }, 10); 
+
+    setTimeout(() => {
+        dom.notificationContainer.style.opacity = 0;
+        setTimeout(() => {
+            dom.notificationContainer.style.display = 'none';
+        }, 300);
+    }, duration);
+}
+
+/**
+ * 実行中UIの表示/非表示を切り替えます。
+ */
+function updateRunningUI(running) {
+    if (dom.mainView) dom.mainView.classList.toggle('hidden', running);
+    if (dom.settingsView) dom.settingsView.classList.add('hidden');
+    if (dom.runningTaskContainer) dom.runningTaskContainer.classList.toggle('hidden', !running);
+
+    if (running && settings.currentRunningTask) {
+        dom.runningTaskTitle.textContent = settings.currentRunningTask.title;
+
+        if (settings.timerInterval) clearInterval(settings.timerInterval);
+        if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
+        if (settings.inactiveCheckInterval) clearInterval(settings.inactiveCheckInterval); // ★ タイマー開始時は未計測チェックもクリア
+        settings.inactiveCheckInterval = null;
+
+        // 経過時間タイマー
+        settings.timerInterval = setInterval(() => {
+            if (!settings.startTime) return;
+            const sec = Math.floor((Date.now() - settings.startTime) / 1000);
+            if (dom.runningTimer) {
+                const hours = Math.floor(sec / 3600);
+                const minutes = Math.floor((sec % 3600) / 60);
+                const seconds = sec % 60;
+                dom.runningTimer.textContent = [hours, minutes, seconds]
+                    .map(v => v.toString().padStart(2, '0'))
+                    .join(':');
+            }
+        }, 1000);
+        
+        // 継続通知タイマー開始の制御
+        if (settings.enableOngoingNotification) {
+            settings.notificationInterval = setInterval(notifyOngoingTask, NOTIFICATION_INTERVAL_MS);
+        }
+
+    } else {
+        // 停止後の処理
+        if (settings.timerInterval) clearInterval(settings.timerInterval);
+        if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
+        
+        settings.timerInterval = null;
+        settings.notificationInterval = null;
+        
+        // ★ New: 未計測チェックの開始/停止
+        if (settings.enableInactiveNotification) {
+            if (!settings.inactiveCheckInterval) {
+                // 1分ごとにチェック
+                settings.inactiveCheckInterval = setInterval(checkInactiveTime, 60000); 
+            }
+        } else {
+             if (settings.inactiveCheckInterval) clearInterval(settings.inactiveCheckInterval);
+             settings.inactiveCheckInterval = null;
+        }
+        
+        if (dom.runningTimer) dom.runningTimer.textContent = '00:00:00';
+        if (dom.thinkingLogInput) dom.thinkingLogInput.value = '';
+        loadTasks();
+    }
+}
 
 
 // ================= Init =================
@@ -387,7 +761,7 @@ function init() {
 
         if (dom.saveConfig) {
             dom.saveConfig.onclick = () => {
-                // if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value; // ★ 削除
+                // if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value; // ★ 削除: Notion Tokenの保存処理を削除
                 if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value.trim(); 
                 if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value;
                 if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
@@ -429,6 +803,7 @@ function init() {
             renderNewTaskForm();
             switchTab('existingTaskTab');
             
+            // アプリ起動時に未計測チェックを開始 (updateRunningUI(false) 内で実行)
             updateRunningUI(false); 
         }
     } catch (e) {
