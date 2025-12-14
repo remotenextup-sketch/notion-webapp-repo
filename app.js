@@ -13,7 +13,7 @@ const CATEGORIES = ['作業', '思考', '教育'];
 const settings = {
     notionToken: '',
     notionDatabases: [], // { id: string, name: string }[] を保持
-    humanUserId: '',
+    humanUserId: '', // ★ 設定に追加されたユーザーID
     togglApiToken: '',
     togglWorkspaceId: '',
     currentRunningTask: null,
@@ -22,7 +22,7 @@ const settings = {
 };
 
 let dom = {};
-let isStopping = false; // ★ 停止処理の実行フラグ
+let isStopping = false; // 停止処理の実行フラグ
 
 // ================= DOM =================
 function getDom() {
@@ -60,7 +60,7 @@ function getDom() {
         thinkingLogInput: document.getElementById('thinkingLogInput'),
         stopTaskButton: document.getElementById('stopTaskButton'),
         completeTaskButton: document.getElementById('completeTaskButton'),
-        notificationContainer: document.getElementById('notificationContainer') 
+        notificationContainer: document.getElementById('notificationContainer')
     };
 }
 
@@ -204,7 +204,23 @@ async function loadTasks() {
 // ================= Start / Stop =================
 
 /**
+ * Notionのページプロパティに担当者情報（人プロパティ）を追加する
+ */
+function assignHumanProperty() {
+    if (settings.humanUserId) {
+        // Notionデータベースに「担当者」という名前の人(Person)プロパティが存在することを想定
+        return {
+            '担当者': {
+                people: [{ id: settings.humanUserId }]
+            }
+        };
+    }
+    return {};
+}
+
+/**
  * Togglに時間エントリを作成し、タイマーを開始します。
+ * 既存タスクに「担当者」情報がない場合、このタイミングで追加します。
  */
 async function startTask(task) {
     if (!settings.togglApiToken || !settings.togglWorkspaceId) {
@@ -224,6 +240,19 @@ async function startTask(task) {
             const catTag = `【${cat}】`;
             desc = `${deptTags}${catTag}${task.title}`;
         }
+        
+        // ★ 担当者情報が存在しない場合、Notionページを更新して担当者を割り当てる
+        if (settings.humanUserId && !task.properties['担当者']?.people?.some(p => p.id === settings.humanUserId)) {
+            const patches = assignHumanProperty();
+            // ステータスが未着手なら、進行中に変更する
+            if (task.properties['ステータス']?.status?.name === '未着手') {
+                 patches['ステータス'] = { status: { name: '進行中' } };
+            }
+            if (Object.keys(patches).length > 0) {
+                 await notionApi(`/pages/${task.id}`, 'PATCH', { properties: patches });
+            }
+        }
+
 
         const entry = await togglApi(`${TOGGL_V9_BASE_URL}/time_entries`, 'POST', {
             workspace_id: Number(settings.togglWorkspaceId),
@@ -270,7 +299,8 @@ async function startNewTask() {
             'タスク名': { title: [{ text: { content: title } }] },
             'ステータス': { status: { name: '進行中' } },
             'カテゴリ': { select: { name: selectedCategory } },
-            '部門': { multi_select: selectedDepartments.map(dept => ({ name: dept })) }
+            '部門': { multi_select: selectedDepartments.map(dept => ({ name: dept })) },
+            ...assignHumanProperty() // ★ 担当者情報をプロパティに追加
         };
 
         // Notionページ作成
@@ -316,7 +346,6 @@ async function executeStopAndLog(task, log, isComplete) {
             if (e.message && e.message.includes("Time entry already stopped")) {
                 console.warn('Toggl警告: タイムエントリは既に停止済みでした。');
             } else {
-                // 予期せぬエラーは通知
                 showNotification(`エラー: ${e.message} (Toggl API)`, 5000);
                 throw e;
             }
@@ -364,7 +393,7 @@ async function executeStopAndLog(task, log, isComplete) {
         // 4. Notionページ更新 (ログとステータス)
         if (Object.keys(notionPatches).length > 0) {
             await notionApi(`/pages/${task.id}`, 'PATCH', { properties: notionPatches });
-            showNotification('Notionにログとステータスを反映しました。', 2000); // Notion反映完了通知
+            showNotification('Notionにログとステータスを反映しました。', 2000);
         }
 
     } catch (e) {
@@ -398,10 +427,9 @@ function stopTask(isComplete) {
     showNotification(`タスクを${action}しました。Notion/Togglに反映中...`, 3000);
     
     // 3. バックグラウンドでAPI処理を実行
-    // ※ UI更新後に実行するため、わずかに遅延させる
     setTimeout(() => {
         executeStopAndLog(t, log, isComplete);
-    }, 50); // 50msの遅延
+    }, 50);
 
 }
 
@@ -620,7 +648,7 @@ function init() {
         if (dom.saveConfig) {
             dom.saveConfig.onclick = () => {
                 if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value;
-                if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value;
+                if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value.trim(); // ★ トリムを追加
                 if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value;
                 if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
 
