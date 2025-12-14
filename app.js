@@ -174,7 +174,7 @@ async function loadTasks() {
         res.results.forEach(p => {
             const title = p.properties['タスク名']?.title?.[0]?.plain_text || '無題';
             const li = document.createElement('li');
-            li.style.cssText = 'display: flex; justify-content: space-between; align-items: center;'; // スタイル調整
+            li.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
             
             const span = document.createElement('span');
             span.textContent = title;
@@ -182,7 +182,7 @@ async function loadTasks() {
 
             const btn = document.createElement('button');
             btn.textContent = '▶ 開始';
-            btn.className = 'btn btn-blue'; // クラス名調整
+            btn.className = 'btn btn-blue';
             btn.onclick = () => startTask({
                 id: p.id,
                 title,
@@ -308,11 +308,20 @@ async function stopTask(isComplete) {
         const notionPatches = {};
 
         // 1. Toggl停止
-        // ★ エラー修正箇所: PUT -> PATCH に変更 ★
-        await togglApi(
-            `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}/stop`,
-            'PATCH' // ★ 修正済み ★
-        );
+        try {
+            await togglApi(
+                `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}/stop`,
+                'PATCH'
+            );
+        } catch (e) {
+            // エラーハンドリング: "Time entry already stopped" の場合は無視して続行 (409 Conflict対応)
+            if (e.message && e.message.includes("Time entry already stopped")) {
+                console.warn('Toggl警告: タイムエントリは既に停止済みでした。クライアントの状態を修正します。');
+            } else {
+                // 予期せぬエラーは再スローし、タスク全体の停止を中断
+                throw e;
+            }
+        }
 
         // 2. 思考ログ保存
         if (log) {
@@ -412,7 +421,7 @@ function renderDbConfig() {
     settings.notionDatabases.forEach((db, index) => {
         const div = document.createElement('div');
         div.className = 'db-config-item';
-        div.style.cssText = 'border: 1px solid #ced4da; padding: 10px; margin-bottom: 8px; border-radius: 4px; background: #fff;'; // スタイル調整
+        div.style.cssText = 'border: 1px solid #ced4da; padding: 10px; margin-bottom: 8px; border-radius: 4px; background: #fff;';
         div.dataset.index = index;
 
         div.innerHTML = `
