@@ -4,29 +4,152 @@
     <meta charset="UTF-8" />
     <title>Notion × Toggl Timer</title>
     <style>
-        body { font-family: sans-serif; padding: 16px; }
+        /* 共通スタイル */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 16px;
+            background-color: #f7f7f7; /* 背景色を少しグレーに */
+            color: #333;
+            line-height: 1.6;
+        }
         .hidden { display: none; }
-        .btn { padding: 6px 12px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; transition: background-color 0.2s; }
-        .btn:hover { opacity: 0.8; }
-        .btn-green { background: #4caf50; color: #fff; border: none; }
-        .btn-gray { background: #ccc; color: #333; }
-        .btn-blue { background: #007bff; color: #fff; border: none; }
-        .tab { display: flex; margin: 12px 0; border-bottom: 2px solid #eee; }
-        .tab button { flex: 1; padding: 10px; border: none; background: #f4f4f4; cursor: pointer; border-radius: 4px 4px 0 0; margin-right: 2px; }
-        .tab button:last-child { margin-right: 0; }
-        .tab .active { background: #007bff; color: #fff; }
-        ul { list-style: none; padding: 0; }
-        li { margin-bottom: 8px; }
-        label { display: block; margin-top: 12px; font-weight: bold; }
-        input[type="text"], textarea, select { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        textarea { height: 100px; }
-        #taskListContainer button.btn-green { background: #007bff; padding: 4px 12px; }
-        #runningTaskContainer #runningTimer { font-size: 2em; font-weight: bold; margin: 10px 0; color: #d32f2f; }
         
-        /* 新規タスクフォームのスタイル */
-        .fieldset-container { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
-        .fieldset-container legend { padding: 0 5px; font-weight: bold; }
-        .category-options label { margin-right: 15px; font-weight: normal; display: inline-block; margin-top: 0;}
+        h1 { color: #007bff; border-bottom: 2px solid #eee; padding-bottom: 8px; margin-bottom: 16px; }
+        h2 { color: #333; margin-top: 20px; }
+        
+        /* ボタン */
+        .btn {
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 6px;
+            border: none;
+            transition: all 0.2s ease-in-out;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .btn:hover {
+            opacity: 0.9;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transform: translateY(-1px);
+        }
+        .btn-green { background: #28a745; color: #fff; } /* 完了/開始 */
+        .btn-blue { background: #007bff; color: #fff; } /* メインアクション */
+        .btn-gray { background: #e9ecef; color: #333; border: 1px solid #ced4da; } /* 通常/キャンセル */
+
+        /* フォーム要素 */
+        label { display: block; margin-top: 12px; font-weight: 600; font-size: 0.9em; color: #555; }
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 4px;
+            box-sizing: border-box;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background-color: #fff;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, textarea:focus, select:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 0.1rem rgba(0, 123, 255, 0.25);
+        }
+        textarea { height: 100px; resize: vertical; }
+
+        /* タブ */
+        .tab { display: flex; margin: 16px 0 0; }
+        .tab button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: #e9ecef;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            margin-right: 2px;
+            font-size: 1.0em;
+        }
+        .tab .active {
+            background: #007bff;
+            color: #fff;
+            font-weight: bold;
+            box-shadow: none;
+            border-bottom: 2px solid #007bff;
+            margin-bottom: -2px; /* 下線と被らないように調整 */
+        }
+        .tab button:not(.active):hover { background: #dee2e6; }
+
+        /* タスクリスト */
+        #taskListContainer { list-style: none; padding: 0; border: 1px solid #ced4da; border-radius: 4px; background: #fff; }
+        #taskListContainer li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        #taskListContainer li:last-child { border-bottom: none; }
+        #taskListContainer li span { font-weight: 500; }
+        #taskListContainer button.btn-blue { padding: 6px 15px; font-weight: normal; }
+        
+        /* 実行中タスク */
+        #runningTaskContainer {
+            padding: 20px;
+            background: #fff;
+            border: 1px solid #ffc107; /* 警告色に近いボーダー */
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            text-align: center;
+        }
+        #runningTaskContainer h3 { color: #333; font-size: 1.2em; margin-bottom: 5px; }
+        #runningTaskContainer #runningTimer {
+            font-size: 3em;
+            font-weight: 900;
+            margin: 10px 0 20px;
+            color: #dc3545; /* 実行中であることを強調 */
+            font-variant-numeric: tabular-nums; /* 数字の幅を揃える */
+        }
+        
+        /* 新規タスクフォーム (fieldset) */
+        .fieldset-container {
+            border: 1px solid #ced4da;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            background-color: #fcfcfc;
+        }
+        .fieldset-container legend {
+            padding: 0 10px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        /* ラジオボタン/チェックボックスのレイアウト */
+        #newCategoryContainer {
+            display: flex;
+            gap: 20px;
+            margin-top: 8px;
+        }
+        #newDepartmentContainer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 0; /* 行間の調整 */
+        }
+        #newDepartmentContainer label {
+            display: block;
+            width: 48%; /* 2列表示 */
+            margin-right: 2%;
+            font-weight: normal;
+            margin-top: 0;
+        }
+        
+        /* 設定画面内のDB設定アイテムのスタイルを調整 */
+        .db-config-item {
+            border: 1px solid #ced4da; 
+            padding: 10px; 
+            margin-bottom: 8px; 
+            border-radius: 4px; 
+            background: #fff;
+        }
+
     </style>
 </head>
 
@@ -63,8 +186,8 @@
 <div id="mainView">
 
     <div style="margin-bottom: 10px;">
-        <select id="taskDbFilter" style="width: calc(100% - 70px);"></select>
-        <button id="reloadTasks" class="btn btn-gray" style="float: right;">再読込</button>
+        <select id="taskDbFilter" style="width: calc(100% - 85px); float: left;"></select>
+        <button id="reloadTasks" class="btn btn-gray" style="float: right; width: 80px; padding: 10px;">再読込</button>
         <div style="clear: both;"></div>
     </div>
 
@@ -80,7 +203,7 @@
     </div>
 
     <div id="newTaskTab" class="hidden">
-        <label>タスク名（必須）</label>
+        <label style="margin-top: 0;">タスク名（必須）</label>
         <input id="newTaskTitle" type="text" placeholder="タスク名を入力..." style="margin-bottom: 10px;" />
 
         <fieldset class="fieldset-container">
@@ -91,7 +214,7 @@
 
         <fieldset class="fieldset-container">
             <legend>部門 (複数選択)</legend>
-            <div id="newDepartmentContainer" style="display: flex; flex-wrap: wrap; gap: 5px 0;">
+            <div id="newDepartmentContainer">
                 </div>
         </fieldset>
 
