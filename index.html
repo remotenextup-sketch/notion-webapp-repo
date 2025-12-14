@@ -3,35 +3,40 @@
 <head>
     <meta charset="UTF-8" />
     <title>Notion × Toggl Timer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    
     <style>
         /* 共通スタイル */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             padding: 16px;
-            background-color: #f7f7f7; /* 背景色を少しグレーに */
+            background-color: #f7f7f7;
             color: #333;
             line-height: 1.6;
+            /* ★ 修正: ベースフォントを大きくし、スマホ対応（16px） */
+            font-size: 16px; 
         }
         .hidden { display: none; }
         
         /* ★ 修正: ヘッダーコンテナのスタイル */
         #appHeader {
             display: flex;
-            justify-content: space-between; /* タイトルとボタンを両端に配置 */
+            justify-content: space-between;
             align-items: center;
             margin-bottom: 16px;
-            border-bottom: 2px solid #eee; /* H1にあった下線をヘッダー全体に移動 */
+            border-bottom: 2px solid #eee;
             padding-bottom: 8px;
         }
         
+        /* ★ 修正: H1のサイズをスマホでも見やすいサイズに調整 */
         h1 { 
             color: #007bff; 
-            margin: 0; /* ヘッダー内のH1のデフォルトマージンをリセット */
-            font-size: 1.5em; 
+            margin: 0;
+            font-size: 1.6em; 
         }
 
         h2 { color: #333; margin-top: 20px; }
-        h3 { color: #333; font-size: 1.1em; margin-top: 20px; } /* 通知設定用に追加 */
+        h3 { color: #333; font-size: 1.1em; margin-top: 20px; }
         
         /* ボタン */
         .btn {
@@ -48,9 +53,9 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
             transform: translateY(-1px);
         }
-        .btn-green { background: #28a745; color: #fff; } /* 完了/開始 */
-        .btn-blue { background: #007bff; color: #fff; } /* メインアクション */
-        .btn-gray { background: #e9ecef; color: #333; border: 1px solid #ced4da; } /* 通常/キャンセル */
+        .btn-green { background: #28a745; color: #fff; }
+        .btn-blue { background: #007bff; color: #fff; }
+        .btn-gray { background: #e9ecef; color: #333; border: 1px solid #ced4da; }
 
         /* フォーム要素 */
         label { display: block; margin-top: 12px; font-weight: 600; font-size: 0.9em; color: #555; }
@@ -89,7 +94,7 @@
             font-weight: bold;
             box-shadow: none;
             border-bottom: 2px solid #007bff;
-            margin-bottom: -2px; /* 下線と被らないように調整 */
+            margin-bottom: -2px;
         }
         .tab button:not(.active):hover { background: #dee2e6; }
 
@@ -110,7 +115,7 @@
         #runningTaskContainer {
             padding: 20px;
             background: #fff;
-            border: 1px solid #ffc107; /* 警告色に近いボーダー */
+            border: 1px solid #ffc107;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             text-align: center;
@@ -120,8 +125,8 @@
             font-size: 3em;
             font-weight: 900;
             margin: 10px 0 20px;
-            color: #dc3545; /* 実行中であることを強調 */
-            font-variant-numeric: tabular-nums; /* 数字の幅を揃える */
+            color: #dc3545;
+            font-variant-numeric: tabular-nums;
         }
         
         /* 新規タスクフォーム (fieldset) */
@@ -147,11 +152,11 @@
         #newDepartmentContainer {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px 0; /* 行間の調整 */
+            gap: 8px 0;
         }
         #newDepartmentContainer label {
             display: block;
-            width: 48%; /* 2列表示 */
+            width: 48%;
             margin-right: 2%;
             font-weight: normal;
             margin-top: 0;
@@ -172,21 +177,25 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: #333; /* ダークグレー */
+            background: #333;
             color: white;
             padding: 15px 30px;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
             z-index: 1000;
             font-weight: bold;
-            display: none; /* 初期状態は非表示 */
+            display: none;
             opacity: 0;
-            transition: opacity 0.3s ease; /* フェードイン・アウト用のトランジション */
+            transition: opacity 0.3s ease;
+            
+            /* スマホで横幅を調整 */
+            max-width: 90%; 
+            white-space: nowrap;
         }
         
         /* 設定画面内のチェックボックス調整 */
-        #confEnableOngoingNotification {
-            width: auto !important; /* width: 100%を上書き */
+        #confEnableOngoingNotification, #confEnableInactiveNotification {
+            width: auto !important; 
         }
 
     </style>
@@ -224,6 +233,10 @@
     <label style="display: flex; align-items: center; margin-top: 12px;">
         <input type="checkbox" id="confEnableOngoingNotification" style="margin-right: 10px; margin-top: 0;"> 
         タスク継続確認通知（30分ごと）を有効にする
+    </label>
+    <label style="display: flex; align-items: center; margin-top: 12px;">
+        <input type="checkbox" id="confEnableInactiveNotification" style="margin-right: 10px; margin-top: 0;"> 
+        未計測時通知（タイマー停止後30分で通知）を有効にする
     </label>
     
     <br><br>
