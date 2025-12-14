@@ -58,7 +58,8 @@ function getDom() {
         runningTimer: document.getElementById('runningTimer'),
         thinkingLogInput: document.getElementById('thinkingLogInput'),
         stopTaskButton: document.getElementById('stopTaskButton'),
-        completeTaskButton: document.getElementById('completeTaskButton')
+        completeTaskButton: document.getElementById('completeTaskButton'),
+        notificationContainer: document.getElementById('notificationContainer') // ★ 追加: 通知コンテナのDOM取得
     };
 }
 
@@ -323,14 +324,39 @@ async function stopTask(isComplete) {
             }
         }
 
-        // 2. 思考ログ保存
+        // 2. 思考ログ保存 (★ 修正: 累計追記ロジックに変更)
         if (log) {
-            const now = new Date().toLocaleString('ja-JP');
-            const logContent = `\n[${now}]\n${log}`;
+            // Notionから最新のページ情報を取得
+            const currentPage = await notionApi(`/pages/${t.id}`, 'GET');
+            const existingLogProp = currentPage.properties['思考ログ']?.rich_text;
+            
+            let existingText = '';
+            if (existingLogProp && existingLogProp.length > 0) {
+                // 既存の rich_text 配列からプレーンテキストを結合
+                existingText = existingLogProp.map(rt => rt.plain_text).join('');
+                // 最初のログでない場合、改行で区切られていることを保証
+                if (existingText.length > 0 && !existingText.endsWith('\n')) {
+                    existingText += '\n';
+                }
+            }
+            
+            // タイムスタンプ生成 (例: [2025/12/14 12:16:11])
+            const now = new Date().toLocaleString('ja-JP', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            }).replace(/\//g, '/'); // 意図的に日付区切りを保持
+
+            const newLogEntry = `\n[${now}]\n${log}`;
+            const updatedLogContent = existingText + newLogEntry;
 
             notionPatches['思考ログ'] = {
                 rich_text: [{
-                    text: { content: logContent }
+                    text: { content: updatedLogContent }
                 }]
             };
         }
@@ -351,6 +377,10 @@ async function stopTask(isComplete) {
         saveSettings();
         updateRunningUI(false);
         loadTasks(); // 完了・停止後にタスクリストを再読込
+
+        // 6. 通知表示 (★ 追加)
+        const action = isComplete ? '完了' : '一時停止';
+        showNotification(`タスクを${action}し、Notionに反映しました。`, 3000);
     } catch (e) {
         console.error('タスク停止エラー:', e);
         alert(`タスク停止エラー: ${e.message}`);
@@ -358,6 +388,29 @@ async function stopTask(isComplete) {
 }
 
 // ================= UI =================
+
+/**
+ * 数秒間表示される非ブロック型通知を表示します。
+ */
+function showNotification(message, duration = 3000) {
+    if (!dom.notificationContainer) return;
+
+    dom.notificationContainer.textContent = message;
+    dom.notificationContainer.style.display = 'block';
+    
+    // フェードイン
+    setTimeout(() => {
+        dom.notificationContainer.style.opacity = 1;
+    }, 10); 
+
+    // フェードアウト
+    setTimeout(() => {
+        dom.notificationContainer.style.opacity = 0;
+        setTimeout(() => {
+            dom.notificationContainer.style.display = 'none';
+        }, 300); // フェードアウト時間に合わせて非表示
+    }, duration);
+}
 
 /**
  * 実行中UIの表示/非表示を切り替えます。
