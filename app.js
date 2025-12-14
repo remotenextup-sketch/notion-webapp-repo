@@ -101,7 +101,14 @@ async function externalApi(targetUrl, method = 'GET', auth, body = null) {
       })
     });
     if (!res.ok) {
-      throw new Error(await res.text());
+      // APIエラーが発生した場合、レスポンスボディをエラーメッセージとして取得
+      const errorText = await res.text();
+      try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.message || errorText);
+      } catch {
+          throw new Error(errorText);
+      }
     }
     return res.status === 204 ? null : await res.json();
   } catch (e) {
@@ -149,7 +156,7 @@ async function loadTasks() {
       },
       // 名前プロパティでソート
       sorts: [{
-        property: '名前',
+        property: 'タスク名', // ★ 修正: '名前' -> 'タスク名' ★
         direction: 'ascending'
       }]
     });
@@ -161,7 +168,7 @@ async function loadTasks() {
     }
 
     res.results.forEach(p => {
-      const title = p.properties['名前']?.title?.[0]?.plain_text || '無題';
+      const title = p.properties['タスク名']?.title?.[0]?.plain_text || '無題'; // ★ 修正: '名前' -> 'タスク名' ★
       const li = document.createElement('li');
       li.style.cssText = 'display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee;';
 
@@ -248,21 +255,17 @@ async function startNewTask() {
   }
 
   try {
-    // 選択されたカテゴリ・部門の取得 (実装が必要に応じて...)
-    // 今回は一旦シンプルに、新規作成時にステータスを「進行中」にするのみとします。
-
     // Notionページ作成
     const newPage = await notionApi(`/pages`, 'POST', {
       parent: { database_id: dbId },
       properties: {
-        '名前': { title: [{ text: { content: title } }] },
+        'タスク名': { title: [{ text: { content: title } }] }, // ★ 修正: '名前' -> 'タスク名' ★
         'ステータス': { status: { name: '進行中' } } // 初期ステータスを進行中に設定
         // 他のプロパティ (カテゴリ, 部門など) は、別途ロジックが必要
       }
     });
 
     // 作成したタスクでタイマー開始
-    // 新規タスクの場合 properties は null になるため、description はシンプルにタスクタイトルのみとする
     await startTask({
       id: newPage.id,
       title: title,
@@ -294,21 +297,12 @@ async function stopTask(isComplete) {
       `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}/stop`,
       'PUT'
     );
-    // Toggl API V9 の stop endpoint は PATCH ではなく PUT です (Toggl公式ドキュメントに基づく修正)
-
+    
     // 2. 思考ログ保存
     if (log) {
       const now = new Date().toLocaleString('ja-JP');
       const logContent = `\n[${now}]\n${log}`;
       
-      // Notionのrich_textプロパティは上書きではなく追記をしたい場合、現在の値を読み込む必要があるが、
-      // 簡易的に今回は新しい内容を追記する形で記述（Notion APIの仕様上、既存の内容に**追加**する操作は複雑なため、
-      // 既存の rich_text の末尾に追記する形式で PATCH を実行します。
-      // ただし、毎回全内容を上書きしないよう、プロパティをオブジェクトでラップする構造を維持します。)
-      
-      // Notion APIは rich_text を PATCH すると既存の内容が上書きされるため、今回はログの追記ではなく、
-      // 既存の rich_text に新しいログを追加する処理を省略し、**新規にログが入力された場合のみ** PATCH を行い、
-      // **既存の内容に追記されるもの**とします。（Notion APIの追記ロジックはProxy側で実装されている可能性も考慮）
       notionPatches['思考ログ'] = {
         rich_text: [{
           text: { content: logContent }
@@ -323,6 +317,9 @@ async function stopTask(isComplete) {
 
     // 4. Notionページ更新 (ログとステータス)
     if (Object.keys(notionPatches).length > 0) {
+      // ログ追記のPATCHは、既存の内容を上書きするリスクがあるため、
+      // 実際にはAPI側（PROXY_URL）で既存ログの取得と追記ロジックが必要です。
+      // ここでは、一旦、前回の修正バージョンと同じPATCHリクエスト構造を維持します。
       await notionApi(`/pages/${t.id}`, 'PATCH', { properties: notionPatches });
     }
 
@@ -410,20 +407,26 @@ function renderDbConfig() {
     div.style.cssText = 'border: 1px solid #ccc; padding: 10px; margin-bottom: 8px;';
     div.dataset.index = index;
 
+    // input要素に直接クラスやスタイルを適用し、インデックスを使用しないDOM操作で値を保持させる
     div.innerHTML = `
       <label>DB名:</label>
-      <input type="text" class="db-name" value="${db.name || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="タスクデータベース名">
+      <input type="text" class="db-name-input" value="${db.name || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="タスクデータベース名">
       <label>DB ID:</label>
-      <input type="text" class="db-id" value="${db.id || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="36桁のID">
-      <button class="remove-db btn btn-gray" style="float: right;">削除</button>
+      <input type="text" class="db-id-input" value="${db.id || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="36桁のID">
+      <button class="remove-db btn btn-gray" data-index="${index}" style="float: right;">削除</button>
       <div style="clear: both;"></div>
     `;
 
-    // 削除ボタンのイベントを設定
+    // 削除ボタンのイベントを設定 (インデックスではなく data-index を使用)
     div.querySelector('.remove-db').onclick = (e) => {
       e.preventDefault();
-      settings.notionDatabases.splice(index, 1);
-      renderSettings(); // 再レンダリング
+      // ボタンの data-index から元の配列のインデックスを取得して削除
+      const indexToRemove = parseInt(e.target.dataset.index);
+      if (!isNaN(indexToRemove)) {
+          settings.notionDatabases.splice(indexToRemove, 1);
+          // DOMを現在の配列の状態に合わせて再レンダリング
+          renderDbConfig(); 
+      }
     };
 
     dom.dbConfigContainer.appendChild(div);
@@ -464,12 +467,12 @@ function switchTab(targetId) {
     const isExisting = targetId === 'existingTaskTab';
     
     // タブボタンのアクティブ状態を切り替え
-    dom.startExistingTask.classList.toggle('active', isExisting);
-    dom.startNewTask.classList.toggle('active', !isExisting);
+    if(dom.startExistingTask) dom.startExistingTask.classList.toggle('active', isExisting);
+    if(dom.startNewTask) dom.startNewTask.classList.toggle('active', !isExisting);
 
     // タブコンテンツの表示/非表示を切り替え
-    dom.existingTaskTab.classList.toggle('hidden', !isExisting);
-    dom.newTaskTab.classList.toggle('hidden', isExisting);
+    if(dom.existingTaskTab) dom.existingTaskTab.classList.toggle('hidden', !isExisting);
+    if(dom.newTaskTab) dom.newTaskTab.classList.toggle('hidden', isExisting);
     
     // 既存タスクタブに切り替えたらタスクリストを再読込
     if (isExisting) {
@@ -522,8 +525,8 @@ function init() {
         // 2. データベース設定のDOMから値を集めて更新
         const dbItems = dom.dbConfigContainer.querySelectorAll('.db-config-item');
         settings.notionDatabases = Array.from(dbItems).map(item => ({
-          name: item.querySelector('.db-name').value.trim(),
-          id: item.querySelector('.db-id').value.trim()
+          name: item.querySelector('.db-name-input').value.trim(),
+          id: item.querySelector('.db-id-input').value.trim()
         })).filter(db => db.id); // IDが空のものは保存しない
 
         saveSettings();
@@ -553,7 +556,8 @@ function init() {
     } else {
       // 最初にタスクリストのDBフィルターに値をロードしてから、タスクをロード
       renderTaskDbFilter();
-      loadTasks();
+      // 初期状態では既存タスクタブを表示
+      switchTab('existingTaskTab'); 
     }
   } catch (e) {
     console.error('初期化エラー:', e);
