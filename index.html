@@ -2,167 +2,91 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Notion × Toggl Timer</title>
-
   <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      margin: 0;
-      background: #f4f4f4;
-    }
-
-    .app-container {
-      max-width: 900px;
-      margin: 0 auto;
-      background: #fff;
-      min-height: 100vh;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-
-    h1 {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 0;
-      border-bottom: 2px solid #ddd;
-      padding-bottom: 10px;
-    }
-
-    .hidden { display: none !important; }
-
-    .input-field {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 8px;
-      box-sizing: border-box;
-    }
-
-    .btn {
-      padding: 8px 14px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: bold;
-      margin-right: 6px;
-    }
-    .primary { background: #007bff; color: #fff; }
-    .secondary { background: #6c757d; color: #fff; }
-    .green { background: #28a745; color: #fff; }
-    .danger { background: #dc3545; color: #fff; }
-
-    .tab-container {
-      display: flex;
-      margin: 15px 0;
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 10px;
-      cursor: pointer;
-      background: #eee;
-      border: 1px solid #ccc;
-    }
-    .tab-btn.active {
-      background: #007bff;
-      color: #fff;
-    }
-
-    .task-list {
-      list-style: none;
-      padding: 0;
-    }
-    .task-list li {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid #eee;
-    }
-
-    #runningTaskContainer {
-      background: #ffe08a;
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-
-    #runningTimer {
-      font-size: 1.8em;
-      font-weight: bold;
-    }
+    body { font-family: sans-serif; padding: 16px; }
+    .hidden { display: none; }
+    .btn { padding: 6px 12px; cursor: pointer; }
+    .btn-green { background: #4caf50; color: #fff; }
+    .btn-gray { background: #ccc; }
+    .tab { display: flex; margin: 12px 0; }
+    .tab button { flex: 1; padding: 10px; }
+    .tab .active { background: #2979ff; color: #fff; }
+    ul { list-style: none; padding: 0; }
+    li { margin-bottom: 8px; }
+    label { display: block; margin-top: 8px; }
   </style>
 </head>
 
 <body>
-<div class="app-container">
 
-  <h1>
-    Notion × Toggl Timer
-    <button id="toggleSettings" class="btn secondary">設定</button>
-  </h1>
+<h1>Notion × Toggl Timer</h1>
+<button id="toggleSettings" class="btn btn-gray">設定</button>
 
-  <!-- ================= RUNNING ================= -->
-  <section id="runningTaskContainer" class="hidden">
-    <div>実行中タスク</div>
-    <h2 id="runningTaskTitle"></h2>
-    <div id="runningTimer">00:00:00</div>
+<!-- ================= 設定 ================= -->
+<div id="settingsView" class="hidden">
+  <h2>設定</h2>
 
-    <textarea id="thinkingLogInput" class="input-field" rows="3"
-      placeholder="思考ログ（自動で時系列追記）"></textarea>
+  <label>Notion API Token</label>
+  <input id="confNotionToken" />
 
-    <button id="stopTaskButton" class="btn secondary">停止</button>
-    <button id="completeTaskButton" class="btn danger">完了</button>
-  </section>
+  <label>Notion User ID（任意）</label>
+  <input id="confNotionUserId" />
 
-  <!-- ================= MAIN ================= -->
-  <div id="mainView">
+  <label>Notion データベース</label>
+  <div id="dbConfigContainer"></div>
+  <button id="addDbConfig" class="btn btn-gray">DB追加</button>
 
-    <div style="display:flex; gap:8px;">
-      <select id="taskDbFilter" class="input-field"></select>
-      <button id="reloadTasks" class="btn secondary">再読込</button>
-    </div>
+  <label>Toggl API Token</label>
+  <input id="confTogglToken" />
 
-    <div class="tab-container">
-      <button id="startExistingTask" class="tab-btn active" data-target="existing">既存タスク</button>
-      <button id="startNewTask" class="tab-btn" data-target="new">新規タスク</button>
-    </div>
+  <label>Toggl Workspace ID</label>
+  <input id="confTogglWid" />
 
-    <!-- 既存 -->
-    <div id="existingTaskTab">
-      <div id="taskListContainer"></div>
-    </div>
+  <br><br>
+  <button id="saveConfig" class="btn btn-green">保存</button>
+  <button id="cancelConfig" class="btn btn-gray">閉じる</button>
+</div>
 
-    <!-- 新規 -->
-    <div id="newTaskTab" class="hidden">
-      <input id="newTaskTitle" class="input-field" placeholder="タスク名（必須）" />
+<!-- ================= メイン ================= -->
+<div id="mainView">
 
-      <div id="newCatContainer"></div>
-      <div id="newDeptContainer"></div>
+  <select id="taskDbFilter"></select>
+  <button id="reloadTasks" class="btn btn-gray">再読込</button>
 
-      <button id="startNewTaskButton" class="btn green">開始</button>
-    </div>
-
+  <div class="tab">
+    <button id="startExistingTask" class="active" data-target="existing">既存タスク</button>
+    <button id="startNewTask" data-target="new">新規タスク</button>
   </div>
 
-  <!-- ================= SETTINGS ================= -->
-  <div id="settingsView" class="hidden">
-    <h2>設定</h2>
-
-    <input id="confNotionToken" class="input-field" placeholder="Notion API Token" />
-    <input id="confNotionUserId" class="input-field" placeholder="Notion User ID（任意）" />
-
-    <div id="dbConfigContainer"></div>
-    <button id="addDbConfig" class="btn secondary">DB追加</button>
-
-    <input id="confTogglToken" class="input-field" placeholder="Toggl API Token" />
-    <input id="confTogglWid" class="input-field" placeholder="Toggl Workspace ID" />
-
-    <button id="saveConfig" class="btn primary">保存</button>
-    <button id="cancelConfig" class="btn secondary">閉じる</button>
+  <!-- 既存 -->
+  <div id="existingTaskTab">
+    <div id="taskListContainer"></div>
   </div>
 
+  <!-- 新規 -->
+  <div id="newTaskTab" class="hidden">
+    <label>タスク名（必須）</label>
+    <input id="newTaskTitle" />
+
+    <div id="newCatContainer"></div>
+    <div id="newDeptContainer"></div>
+
+    <button id="startNewTaskButton" class="btn btn-green">開始</button>
+  </div>
+</div>
+
+<!-- ================= 実行中 ================= -->
+<div id="runningTaskContainer" class="hidden">
+  <h3 id="runningTaskTitle"></h3>
+  <div id="runningTimer">00:00:00</div>
+
+  <label>思考ログ</label>
+  <textarea id="thinkingLogInput"></textarea>
+
+  <br>
+  <button id="stopTaskButton" class="btn btn-gray">停止</button>
+  <button id="completeTaskButton" class="btn btn-green">完了</button>
 </div>
 
 <script src="app.js"></script>
