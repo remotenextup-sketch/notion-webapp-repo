@@ -61,8 +61,17 @@ function loadSettings() {
 }
 
 function saveSettings() {
-  localStorage.setItem('settings', JSON.stringify(settings));
+  localStorage.setItem('settings', JSON.stringify({
+    notionToken: settings.notionToken,
+    notionDatabases: settings.notionDatabases,
+    humanUserId: settings.humanUserId,
+    togglApiToken: settings.togglApiToken,
+    togglWorkspaceId: settings.togglWorkspaceId,
+    currentRunningTask: settings.currentRunningTask,
+    startTime: settings.startTime
+  }));
 }
+
 
 // ================= API =================
 async function externalApi(targetUrl, method, auth, body) {
@@ -97,6 +106,11 @@ const togglApi = (url, m, b) =>
 
 // ================= Tasks =================
 async function loadTasks() {
+  if (!settings.notionToken) {
+    console.warn('Notion token 未設定のためタスク読込を中断');
+    return;
+  }
+  {
   const dbId = dom.taskDbFilter.value;
   dom.taskListContainer.innerHTML = '読み込み中...';
 
