@@ -150,6 +150,24 @@
             background: #fff;
         }
 
+        /* 完了通知ダイアログのスタイル ★ 新規追加 ★ */
+        #notificationContainer {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333; /* ダークグレー */
+            color: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            font-weight: bold;
+            display: none; /* 初期状態は非表示 */
+            opacity: 0;
+            transition: opacity 0.3s ease; /* フェードイン・アウト用のトランジション */
+        }
+
     </style>
 </head>
 
@@ -232,6 +250,10 @@
     <br>
     <button id="stopTaskButton" class="btn btn-gray" style="margin-right: 10px;">一時停止</button>
     <button id="completeTaskButton" class="btn btn-green">完了</button>
+</div>
+
+<div id="notificationContainer">
+    タスクを停止/完了し、Notionに反映しました。
 </div>
 
 <script src="app.js"></script>
