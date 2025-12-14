@@ -49,8 +49,8 @@ function getDom() {
         newTaskTab: document.getElementById('newTaskTab'),
 
         newTaskTitle: document.getElementById('newTaskTitle'),
-        newCategoryContainer: document.getElementById('newCategoryContainer'), // 追加
-        newDepartmentContainer: document.getElementById('newDepartmentContainer'), // 追加
+        newCategoryContainer: document.getElementById('newCategoryContainer'),
+        newDepartmentContainer: document.getElementById('newDepartmentContainer'),
         startNewTaskButton: document.getElementById('startNewTaskButton'),
 
         runningTaskContainer: document.getElementById('runningTaskContainer'),
@@ -160,7 +160,7 @@ async function loadTasks() {
             },
             // タスク名プロパティでソート
             sorts: [{
-                property: 'タスク名', // ★ 修正: '名前' -> 'タスク名'
+                property: 'タスク名',
                 direction: 'ascending'
             }]
         });
@@ -172,18 +172,17 @@ async function loadTasks() {
         }
 
         res.results.forEach(p => {
-            const title = p.properties['タスク名']?.title?.[0]?.plain_text || '無題'; // ★ 修正: '名前' -> 'タスク名'
+            const title = p.properties['タスク名']?.title?.[0]?.plain_text || '無題';
             const li = document.createElement('li');
-            li.style.cssText = 'display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee;';
-
+            li.style.cssText = 'display: flex; justify-content: space-between; align-items: center;'; // スタイル調整
+            
             const span = document.createElement('span');
             span.textContent = title;
             span.style.flex = '1';
 
             const btn = document.createElement('button');
             btn.textContent = '▶ 開始';
-            btn.className = 'btn-green';
-            btn.style.cssText = 'padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer;';
+            btn.className = 'btn btn-blue'; // クラス名調整
             btn.onclick = () => startTask({
                 id: p.id,
                 title,
@@ -214,7 +213,6 @@ async function startTask(task) {
     try {
         // カテゴリと部門のプロパティからTogglの説明を構成
         let desc = task.title;
-        // propertiesがある場合（既存タスク/新規作成直後のタスク）のみプロパティからタグを生成
         if (task.properties) {
             const cat = task.properties['カテゴリ']?.select?.name || '未分類';
             const depts = task.properties['部門']?.multi_select?.map(d => d.name) || [];
@@ -258,7 +256,6 @@ async function startNewTask() {
         return;
     }
 
-    // ★ 修正: 選択されたカテゴリと部門を取得 ★
     const selectedCategory = Array.from(dom.newCategoryContainer.querySelectorAll('input[name="newCategory"]:checked'))
         .map(radio => radio.value)[0] || CATEGORIES[0];
 
@@ -268,10 +265,10 @@ async function startNewTask() {
     try {
         // Notionページ作成のプロパティ構成
         const notionProperties = {
-            'タスク名': { title: [{ text: { content: title } }] }, // ★ 修正: '名前' -> 'タスク名'
+            'タスク名': { title: [{ text: { content: title } }] },
             'ステータス': { status: { name: '進行中' } },
-            'カテゴリ': { select: { name: selectedCategory } }, // カテゴリ (セレクト)
-            '部門': { multi_select: selectedDepartments.map(dept => ({ name: dept })) } // 部門 (マルチセレクト)
+            'カテゴリ': { select: { name: selectedCategory } },
+            '部門': { multi_select: selectedDepartments.map(dept => ({ name: dept })) }
         };
 
         // Notionページ作成
@@ -285,7 +282,7 @@ async function startNewTask() {
             id: newPage.id,
             title: title,
             dbId: dbId,
-            properties: newPage.properties // 新規作成されたページからプロパティを取得
+            properties: newPage.properties
         });
 
         // フォームをクリア
@@ -311,9 +308,10 @@ async function stopTask(isComplete) {
         const notionPatches = {};
 
         // 1. Toggl停止
+        // ★ エラー修正箇所: PUT -> PATCH に変更 ★
         await togglApi(
             `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${t.togglEntryId}/stop`,
-            'PUT'
+            'PATCH' // ★ 修正済み ★
         );
 
         // 2. 思考ログ保存
@@ -414,14 +412,14 @@ function renderDbConfig() {
     settings.notionDatabases.forEach((db, index) => {
         const div = document.createElement('div');
         div.className = 'db-config-item';
-        div.style.cssText = 'border: 1px solid #ccc; padding: 10px; margin-bottom: 8px;';
+        div.style.cssText = 'border: 1px solid #ced4da; padding: 10px; margin-bottom: 8px; border-radius: 4px; background: #fff;'; // スタイル調整
         div.dataset.index = index;
 
         div.innerHTML = `
-            <label>DB名:</label>
-            <input type="text" class="db-name-input" value="${db.name || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="タスクデータベース名">
+            <label style="margin-top: 0;">DB名:</label>
+            <input type="text" class="db-name-input" value="${db.name || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;">
             <label>DB ID:</label>
-            <input type="text" class="db-id-input" value="${db.id || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" placeholder="36桁のID">
+            <input type="text" class="db-id-input" value="${db.id || ''}" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;">
             <button class="remove-db btn btn-gray" data-index="${index}" style="float: right;">削除</button>
             <div style="clear: both;"></div>
         `;
@@ -470,22 +468,22 @@ function renderTaskDbFilter() {
 function renderNewTaskForm() {
     if (dom.newCategoryContainer) {
         dom.newCategoryContainer.innerHTML = CATEGORIES.map((cat, index) => `
-            <label>
-                <input type="radio" name="newCategory" value="${cat}" ${index === 0 ? 'checked' : ''}> ${cat}
+            <label style="display: inline-flex; align-items: center; margin-top: 0; font-weight: normal;">
+                <input type="radio" name="newCategory" value="${cat}" ${index === 0 ? 'checked' : ''} style="width: auto; margin-right: 5px;"> ${cat}
             </label>
         `).join('');
     }
 
     if (dom.newDepartmentContainer) {
-        // 部門のチェックボックスを2列に分けて表示するためのスタイルを適用
+        // 部門のチェックボックスを2列に分けて表示
         const departmentHtml = DEPARTMENTS.map(dept => `
-            <label style="display: block; width: 45%; margin-right: 5%;">
-                <input type="checkbox" name="newDepartment" value="${dept}"> ${dept}
+            <label style="display: inline-flex; align-items: center; width: 48%; margin-right: 2%; font-weight: normal; margin-top: 0;">
+                <input type="checkbox" name="newDepartment" value="${dept}" style="width: auto; margin-right: 5px;"> ${dept}
             </label>
         `).join('');
         
         dom.newDepartmentContainer.innerHTML = departmentHtml;
-        dom.newDepartmentContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 5px 0;';
+        dom.newDepartmentContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px 0;';
     }
 }
 
@@ -576,7 +574,7 @@ function init() {
             updateRunningUI(true);
         } else {
             renderTaskDbFilter();
-            renderNewTaskForm(); // 新規フォームの選択肢をレンダリング
+            renderNewTaskForm();
             switchTab('existingTaskTab');
         }
     } catch (e) {
