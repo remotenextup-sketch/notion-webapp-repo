@@ -7,7 +7,7 @@ const NOTIFICATION_INTERVAL_MS = 30 * 60 * 1000; // 30分
 
 const DEPARTMENTS = [
     'CS', 'デザイン', '人事', '広告', '採用', '改善', '物流', '秘書',
-    '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo', 'ルーティン' // ★ ルーティンを追加
+    '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo', 'ルーティン' 
 ];
 const CATEGORIES = ['作業', '思考', '教育'];
 
@@ -24,11 +24,11 @@ const settings = {
     enableOngoingNotification: true, 
     
     // ★ 新規追加
-    enableInactiveNotification: true, // 未計測通知のON/OFF
-    lastStopTime: null, // 最後にタスクが停止した時刻 (Unix time)
-    inactiveCheckInterval: null, // 未計測チェック用のインターバルID
-    enableTickSound: false, // ★ 新規追加: カチカチ音ON/OFF
-    tickSound: null // ★ 新規追加: Audioオブジェクト
+    enableInactiveNotification: true, 
+    lastStopTime: null, 
+    inactiveCheckInterval: null, 
+    enableTickSound: false, 
+    tickSound: null 
 };
 
 let dom = {};
@@ -52,7 +52,7 @@ function getDom() {
         
         confEnableOngoingNotification: document.getElementById('confEnableOngoingNotification'), 
         confEnableInactiveNotification: document.getElementById('confEnableInactiveNotification'), 
-        confEnableTickSound: document.getElementById('confEnableTickSound'), // ★ 新規DOM
+        confEnableTickSound: document.getElementById('confEnableTickSound'), 
 
         taskDbFilter: document.getElementById('taskDbFilter'),
         reloadTasks: document.getElementById('reloadTasks'),
@@ -136,7 +136,7 @@ function renderSettings() {
     
     if (dom.confEnableOngoingNotification) dom.confEnableOngoingNotification.checked = settings.enableOngoingNotification;
     if (dom.confEnableInactiveNotification) dom.confEnableInactiveNotification.checked = settings.enableInactiveNotification; 
-    if (dom.confEnableTickSound) dom.confEnableTickSound.checked = settings.enableTickSound; // ★ 反映
+    if (dom.confEnableTickSound) dom.confEnableTickSound.checked = settings.enableTickSound; 
 
     renderDbConfig();
     renderTaskDbFilter();
@@ -753,7 +753,7 @@ function updateRunningUI(running) {
             settings.notificationInterval = setInterval(notifyOngoingTask, NOTIFICATION_INTERVAL_MS);
         }
         
-        // ★ カチカチ音再生
+        // カチカチ音再生
         playTickSound();
 
     } else {
@@ -768,7 +768,7 @@ function updateRunningUI(running) {
         settings.timerInterval = null;
         settings.notificationInterval = null;
         
-        // ★ カチカチ音停止
+        // カチカチ音停止
         stopTickSound();
         
         // New: 未計測チェックの開始/停止
@@ -797,6 +797,7 @@ function init() {
         renderSettings(); 
         
         // ★ 画面の初期表示制御: すべての画面を一旦非表示にする (厳格な制御)
+        // これにより、CSSがない状態でも画面が重なるリスクを最小化
         if (dom.mainView) dom.mainView.classList.add('hidden');
         if (dom.settingsView) dom.settingsView.classList.add('hidden');
         if (dom.runningTaskContainer) dom.runningTaskContainer.classList.add('hidden');
@@ -845,7 +846,7 @@ function init() {
                 
                 if (dom.confEnableOngoingNotification) settings.enableOngoingNotification = dom.confEnableOngoingNotification.checked;
                 if (dom.confEnableInactiveNotification) settings.enableInactiveNotification = dom.confEnableInactiveNotification.checked; 
-                if (dom.confEnableTickSound) settings.enableTickSound = dom.confEnableTickSound.checked; // ★ 保存
+                if (dom.confEnableTickSound) settings.enableTickSound = dom.confEnableTickSound.checked; 
 
                 const dbItems = dom.dbConfigContainer.querySelectorAll('.db-config-item');
                 settings.notionDatabases = Array.from(dbItems).map(item => ({
@@ -855,7 +856,7 @@ function init() {
 
                 saveSettings();
                 alert('設定を保存しました。');
-                // カチカチ音設定変更を反映するためリロード
+                // 設定変更を反映するためリロード
                 location.reload(); 
             };
         }
@@ -876,7 +877,6 @@ function init() {
         if (dom.startNewTaskButton) dom.startNewTaskButton.onclick = startNewTask;
 
         // アプリケーション起動時の最終UI設定
-        // initの最初で全て隠しているので、ここで正しい画面を表示させる
         if (settings.currentRunningTask && settings.startTime) {
             updateRunningUI(true); // 実行中画面を表示
         } else {
