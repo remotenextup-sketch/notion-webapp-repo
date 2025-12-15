@@ -7,11 +7,12 @@ const NOTIFICATION_INTERVAL_MS = 30 * 60 * 1000; // 30分
 
 const DEPARTMENTS = [
     'CS', 'デザイン', '人事', '広告', '採用', '改善', '物流', '秘書',
-    '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo','ルーティン'
+    '経営計画', '経理', '開発', 'AI', '楽天', 'Amazon', 'Yahoo', 'ルーティン' // ★ ルーティンを追加
 ];
 const CATEGORIES = ['作業', '思考', '教育'];
 
 const settings = {
+    notionToken: '',
     notionDatabases: [],
     humanUserId: '', 
     togglApiToken: '',
@@ -22,14 +23,12 @@ const settings = {
     notificationInterval: null,
     enableOngoingNotification: true, 
     
-    // ★ 新規追加 (前回修正分)
+    // ★ 新規追加
     enableInactiveNotification: true, // 未計測通知のON/OFF
     lastStopTime: null, // 最後にタスクが停止した時刻 (Unix time)
     inactiveCheckInterval: null, // 未計測チェック用のインターバルID
-
-    // 👇 【新規追加】カチカチ音関連
-    enableTickSound: false, // カチカチ音のON/OFF状態
-    tickSound: null // Audioオブジェクトを保持するプロパティ
+    enableTickSound: false, // ★ 新規追加: カチカチ音ON/OFF
+    tickSound: null // ★ 新規追加: Audioオブジェクト
 };
 
 let dom = {};
@@ -46,15 +45,14 @@ function getDom() {
         addDbConfig: document.getElementById('addDbConfig'),
         dbConfigContainer: document.getElementById('dbConfigContainer'),
 
+        confNotionToken: document.getElementById('confNotionToken'),
         confNotionUserId: document.getElementById('confNotionUserId'),
         confTogglToken: document.getElementById('confTogglToken'),
         confTogglWid: document.getElementById('confTogglWid'),
         
         confEnableOngoingNotification: document.getElementById('confEnableOngoingNotification'), 
-        confEnableInactiveNotification: document.getElementById('confEnableInactiveNotification'),
-
-        // 👇 【新規追加】カチカチ音のDOM要素
-        confEnableTickSound: document.getElementById('confEnableTickSound'), 
+        confEnableInactiveNotification: document.getElementById('confEnableInactiveNotification'), 
+        confEnableTickSound: document.getElementById('confEnableTickSound'), // ★ 新規DOM
 
         taskDbFilter: document.getElementById('taskDbFilter'),
         reloadTasks: document.getElementById('reloadTasks'),
@@ -87,14 +85,14 @@ function loadSettings() {
         if (saved) {
             Object.assign(settings, JSON.parse(saved));
             
+            // ★ 新規設定のデフォルト値保証
             if (typeof settings.enableInactiveNotification !== 'boolean') {
                 settings.enableInactiveNotification = true;
             }
-            // 👇 【修正】tick sound のデフォルト値保証
             if (typeof settings.enableTickSound !== 'boolean') {
-                settings.enableTickSound = false;
+                settings.enableTickSound = false; // デフォルトはOFF
             }
-            
+            // lastStopTimeはnullまたはnumber
             if (typeof settings.lastStopTime !== 'number' && settings.lastStopTime !== null) {
                 settings.lastStopTime = null;
             }
@@ -107,6 +105,7 @@ function loadSettings() {
 function saveSettings() {
     try {
         localStorage.setItem('settings', JSON.stringify({
+            notionToken: settings.notionToken,
             notionDatabases: settings.notionDatabases,
             humanUserId: settings.humanUserId,
             togglApiToken: settings.togglApiToken,
@@ -114,11 +113,9 @@ function saveSettings() {
             currentRunningTask: settings.currentRunningTask,
             startTime: settings.startTime,
             enableOngoingNotification: settings.enableOngoingNotification,
-            enableInactiveNotification: settings.enableInactiveNotification,
-            lastStopTime: settings.lastStopTime,
-            
-            // 👇 【修正】tick sound の保存
-            enableTickSound: settings.enableTickSound 
+            enableInactiveNotification: settings.enableInactiveNotification, 
+            enableTickSound: settings.enableTickSound, // ★ 保存
+            lastStopTime: settings.lastStopTime 
         }));
     } catch (e) {
         console.error('設定保存エラー:', e);
@@ -132,15 +129,14 @@ function saveSettings() {
  * 設定画面の各種値をDOMに反映させます。
  */
 function renderSettings() {
+    if (dom.confNotionToken) dom.confNotionToken.value = settings.notionToken;
     if (dom.confNotionUserId) dom.confNotionUserId.value = settings.humanUserId;
     if (dom.confTogglToken) dom.confTogglToken.value = settings.togglApiToken;
     if (dom.confTogglWid) dom.confTogglWid.value = settings.togglWorkspaceId;
     
     if (dom.confEnableOngoingNotification) dom.confEnableOngoingNotification.checked = settings.enableOngoingNotification;
-    if (dom.confEnableInactiveNotification) dom.confEnableInactiveNotification.checked = settings.enableInactiveNotification;
-
-    // 👇 【修正】tick sound の状態をDOMに反映
-    if (dom.confEnableTickSound) dom.confEnableTickSound.checked = settings.enableTickSound; 
+    if (dom.confEnableInactiveNotification) dom.confEnableInactiveNotification.checked = settings.enableInactiveNotification; 
+    if (dom.confEnableTickSound) dom.confEnableTickSound.checked = settings.enableTickSound; // ★ 反映
 
     renderDbConfig();
     renderTaskDbFilter();
@@ -227,7 +223,7 @@ function renderNewTaskForm() {
         `).join('');
         
         dom.newDepartmentContainer.innerHTML = departmentHtml;
-        dom.newDepartmentContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px 0;';
+        // CSSでflexレイアウトを制御するため、JS側でstyleは設定しない
     }
 }
 
@@ -283,7 +279,7 @@ async function externalApi(targetUrl, method = 'GET', auth, body = null) {
 const notionApi = (endpoint, method, body) =>
     externalApi(`https://api.notion.com/v1${endpoint}`, method, {
         key: 'notionToken',
-        value: '', // セキュリティ修正: クライアント側からトークンを送信しない
+        value: settings.notionToken,
         notionVersion: '2022-06-28'
     }, body);
 
@@ -311,7 +307,7 @@ function requestNotificationPermission() {
 }
 
 /**
- * 実行中のタスクが長時間継続していることを通知します。
+ * 実行中のタスクが長時間継続していることを通知します。（既存）
  */
 function notifyOngoingTask() {
     if (settings.enableOngoingNotification && Notification.permission === 'granted' && settings.currentRunningTask) {
@@ -325,7 +321,7 @@ function notifyOngoingTask() {
 }
 
 /**
- * タイマーが30分以上停止していることを通知します。
+ * タイマーが30分以上停止していることを通知します。（新規）
  */
 function notifyInactiveTimer() {
     if (Notification.permission === 'granted') {
@@ -335,46 +331,26 @@ function notifyInactiveTimer() {
             silent: false 
         });
     }
+    // アプリ内通知も表示
     showNotification('🚨 タイマー停止中 (30分経過)', 5000);
 }
 
 /**
- * 未計測時間をチェックし、通知が必要なら実行します。
+ * 未計測時間をチェックし、通知が必要なら実行します。（新規）
  */
 function checkInactiveTime() {
-    if (!settings.enableInactiveNotification || settings.currentRunningTask) return;
+    if (!settings.enableInactiveNotification) return;
 
+    // lastStopTimeが設定されており、かつ30分以上経過しているかチェック
     const THRESHOLD = NOTIFICATION_INTERVAL_MS;
     if (settings.lastStopTime && (Date.now() - settings.lastStopTime) >= THRESHOLD) {
         notifyInactiveTimer();
         
+        // 通知を出したら、スパム防止のためチェック間隔をクリア
         if (settings.inactiveCheckInterval) {
             clearInterval(settings.inactiveCheckInterval);
             settings.inactiveCheckInterval = null;
         }
-    }
-}
-
-// ================= Tick Sound =================
-
-/**
- * ティック音を鳴らす関数。
- */
-function tick() {
-    if (settings.enableTickSound) {
-        if (!settings.tickSound) {
-            // Audioオブジェクトを生成（音源ファイル名 'tick.mp3' を使用）
-            settings.tickSound = new Audio('tick.mp3'); 
-        }
-        
-        // 音声を再生し、すぐに時間をリセットして次の再生に備える
-        settings.tickSound.currentTime = 0; 
-        settings.tickSound.play().catch(e => {
-            // ユーザー操作なしで自動再生ブロックされた場合のエラーを無視
-            if (e.name !== "NotAllowedError") {
-                console.error("Tick sound play failed:", e);
-            }
-        });
     }
 }
 
@@ -397,13 +373,19 @@ function assignHumanProperty() {
 
 
 async function loadTasks() {
-    const dbId = dom.taskDbFilter.value;
-    if (!dbId || settings.notionDatabases.length === 0) {
-        dom.taskListContainer.innerHTML = '<li>設定からDBを追加し、選択してください</li>';
+    if (!settings.notionToken) {
+        console.warn('Notion token 未設定のためタスク読込を中断');
+        dom.taskListContainer.innerHTML = '<li>Notionトークンを設定してください</li>';
         return;
     }
 
     try {
+        const dbId = dom.taskDbFilter.value;
+        if (!dbId) {
+            dom.taskListContainer.innerHTML = '<li>データベースを選択してください</li>';
+            return;
+        }
+
         dom.taskListContainer.innerHTML = '読み込み中...';
 
         const res = await notionApi(`/databases/${dbId}/query`, 'POST', {
@@ -503,7 +485,7 @@ async function startTask(task) {
 
         settings.currentRunningTask = { ...task, togglEntryId: entry.id };
         settings.startTime = Date.now();
-        settings.lastStopTime = null; // タスク開始時は停止時刻をクリア
+        settings.lastStopTime = null; 
         saveSettings();
         updateRunningUI(true);
     } catch (e) {
@@ -587,25 +569,31 @@ async function executeStopAndLog(task, log, isComplete) {
 
         const notionPatches = {};
         
-        // 2. 思考ログ保存 (省略)
+        // 2. 思考ログ保存 
         if (log) {
+            // Notionのページを取得して既存のログを取得
             const currentPage = await notionApi(`/pages/${task.id}`, 'GET');
+            // '思考ログ'プロパティが存在し、かつrich_textプロパティがあるか確認
             const existingLogProp = currentPage.properties['思考ログ']?.rich_text;
             
             let existingText = '';
             if (existingLogProp && existingLogProp.length > 0) {
+                // 既存のログを結合
                 existingText = existingLogProp.map(rt => rt.plain_text).join('');
+                // 既存のテキストが改行で終わっていない場合は改行を追加
                 if (existingText.length > 0 && !existingText.endsWith('\n')) {
                     existingText += '\n';
                 }
             }
             
+            // 現在時刻をフォーマット
             const now = new Date().toLocaleString('ja-JP', {
                 year: 'numeric', month: '2-digit', day: '2-digit',
                 hour: '2-digit', minute: '2-digit', second: '2-digit',
                 hour12: false
             }).replace(/\//g, '/');
 
+            // 新しいログエントリを作成
             const newLogEntry = `\n[${now}]\n${log}`;
             const updatedLogContent = existingText + newLogEntry;
 
@@ -636,10 +624,11 @@ async function executeStopAndLog(task, log, isComplete) {
         // 処理完了後の後始末 
         settings.currentRunningTask = null;
         settings.startTime = null;
-        settings.lastStopTime = Date.now(); // 最後に停止した時刻を記録
+        settings.lastStopTime = Date.now(); 
         saveSettings();
         isStopping = false;
         
+        // 停止直後に未計測チェックを実行
         if (settings.enableInactiveNotification) {
              checkInactiveTime(); 
         }
@@ -669,6 +658,42 @@ function stopTask(isComplete) {
     }, 50);
 }
 
+// ================= Sound =================
+
+/**
+ * カチカチ音を再生します。（新規）
+ */
+function playTickSound() {
+    if (!settings.enableTickSound) return;
+
+    if (!settings.tickSound) {
+        // Audioオブジェクトがまだ作成されていなければ作成し、ループを設定
+        // NOTE: 'tick.mp3'を別途用意する必要があります
+        settings.tickSound = new Audio('tick.mp3'); 
+        settings.tickSound.loop = true;
+        settings.tickSound.volume = 0.5; // 音量を調整
+    }
+
+    // 既に再生中であれば何もしない
+    if (settings.tickSound.paused) {
+        settings.tickSound.play().catch(e => {
+            console.warn('カチカチ音の再生開始に失敗しました。ユーザー操作が必要です。', e);
+            // ユーザー操作が必要な場合 (多くのブラウザの自動再生ポリシー) は、
+            // 警告のみで処理を続行
+        });
+    }
+}
+
+/**
+ * カチカチ音を停止します。（新規）
+ */
+function stopTickSound() {
+    if (settings.tickSound) {
+        settings.tickSound.pause();
+        settings.tickSound.currentTime = 0; // 最初に戻す
+    }
+}
+
 // ================= UI (Others) =================
 
 /**
@@ -696,25 +721,22 @@ function showNotification(message, duration = 3000) {
  * 実行中UIの表示/非表示を切り替えます。
  */
 function updateRunningUI(running) {
-    if (dom.mainView) dom.mainView.classList.toggle('hidden', running);
-    if (dom.settingsView) dom.settingsView.classList.add('hidden');
-    if (dom.runningTaskContainer) dom.runningTaskContainer.classList.toggle('hidden', !running);
-
     if (running && settings.currentRunningTask) {
+        // 実行開始時の処理
+        dom.mainView.classList.add('hidden');
+        dom.settingsView.classList.add('hidden');
+        dom.runningTaskContainer.classList.remove('hidden');
+        
         dom.runningTaskTitle.textContent = settings.currentRunningTask.title;
 
         if (settings.timerInterval) clearInterval(settings.timerInterval);
         if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
-        if (settings.inactiveCheckInterval) clearInterval(settings.inactiveCheckInterval);
+        if (settings.inactiveCheckInterval) clearInterval(settings.inactiveCheckInterval); 
         settings.inactiveCheckInterval = null;
 
         // 経過時間タイマー
         settings.timerInterval = setInterval(() => {
             if (!settings.startTime) return;
-            
-            // 👇 【修正】1秒ごとにカチカチ音を鳴らす
-            tick(); 
-            
             const sec = Math.floor((Date.now() - settings.startTime) / 1000);
             if (dom.runningTimer) {
                 const hours = Math.floor(sec / 3600);
@@ -730,20 +752,29 @@ function updateRunningUI(running) {
         if (settings.enableOngoingNotification) {
             settings.notificationInterval = setInterval(notifyOngoingTask, NOTIFICATION_INTERVAL_MS);
         }
+        
+        // ★ カチカチ音再生
+        playTickSound();
 
     } else {
-        // 停止後の処理
+        // 停止後の処理 (または非実行時の初期化)
+        dom.mainView.classList.remove('hidden');
+        dom.settingsView.classList.add('hidden');
+        dom.runningTaskContainer.classList.add('hidden');
+        
         if (settings.timerInterval) clearInterval(settings.timerInterval);
         if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
         
         settings.timerInterval = null;
         settings.notificationInterval = null;
         
-        // TickSoundを停止する処理は不要（setIntervalがクリアされるため）
+        // ★ カチカチ音停止
+        stopTickSound();
         
         // New: 未計測チェックの開始/停止
         if (settings.enableInactiveNotification) {
             if (!settings.inactiveCheckInterval) {
+                // 1分ごとにチェック
                 settings.inactiveCheckInterval = setInterval(checkInactiveTime, 60000); 
             }
         } else {
@@ -765,6 +796,13 @@ function init() {
         loadSettings();
         renderSettings(); 
         
+        // ★ 画面の初期表示制御: 起動時は常にメインビューか実行中ビュー
+        if (dom.settingsView) dom.settingsView.classList.add('hidden');
+        // runningTaskがない場合はmainViewを表示、ある場合はrunningTaskContainerを表示
+        if (dom.runningTaskContainer) dom.runningTaskContainer.classList.toggle('hidden', !settings.currentRunningTask);
+        if (dom.mainView) dom.mainView.classList.toggle('hidden', !!settings.currentRunningTask);
+
+
         requestNotificationPermission();
 
         // イベントハンドラ設定
@@ -779,9 +817,16 @@ function init() {
 
         if (dom.cancelConfig) {
             dom.cancelConfig.onclick = () => {
+                // 設定を閉じるときは、実行中なら実行UI、そうでなければメインUIを表示する
                 if (dom.settingsView) dom.settingsView.classList.add('hidden');
-                if (dom.mainView) dom.mainView.classList.remove('hidden');
-                updateRunningUI(!!settings.currentRunningTask);
+                
+                if (settings.currentRunningTask) {
+                    if (dom.runningTaskContainer) dom.runningTaskContainer.classList.remove('hidden');
+                    if (dom.mainView) dom.mainView.classList.add('hidden');
+                } else {
+                    if (dom.mainView) dom.mainView.classList.remove('hidden');
+                    if (dom.runningTaskContainer) dom.runningTaskContainer.classList.add('hidden');
+                }
             };
         }
 
@@ -794,15 +839,14 @@ function init() {
 
         if (dom.saveConfig) {
             dom.saveConfig.onclick = () => {
+                if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value;
                 if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value.trim(); 
                 if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value;
                 if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
                 
                 if (dom.confEnableOngoingNotification) settings.enableOngoingNotification = dom.confEnableOngoingNotification.checked;
                 if (dom.confEnableInactiveNotification) settings.enableInactiveNotification = dom.confEnableInactiveNotification.checked; 
-                
-                // 👇 【修正】カチカチ音の設定を保存
-                if (dom.confEnableTickSound) settings.enableTickSound = dom.confEnableTickSound.checked; 
+                if (dom.confEnableTickSound) settings.enableTickSound = dom.confEnableTickSound.checked; // ★ 保存
 
                 const dbItems = dom.dbConfigContainer.querySelectorAll('.db-config-item');
                 settings.notionDatabases = Array.from(dbItems).map(item => ({
@@ -812,7 +856,8 @@ function init() {
 
                 saveSettings();
                 alert('設定を保存しました。');
-                location.reload();
+                // カチカチ音設定変更を反映するためリロード
+                location.reload(); 
             };
         }
 
@@ -831,17 +876,23 @@ function init() {
         // 新規タスク開始ボタンのイベント設定
         if (dom.startNewTaskButton) dom.startNewTaskButton.onclick = startNewTask;
 
+        // アプリケーション起動時の初期UI設定
         if (settings.currentRunningTask && settings.startTime) {
             updateRunningUI(true);
         } else {
+            // カチカチ音を停止 (念のため)
+            stopTickSound(); 
+            
             renderTaskDbFilter();
             renderNewTaskForm();
             switchTab('existingTaskTab');
             
+            // アプリ起動時に未計測チェックを開始 (updateRunningUI(false) 内で実行)
             updateRunningUI(false); 
         }
     } catch (e) {
         console.error('初期化エラー:', e);
+        // エラー発生時は強制的に設定画面を表示
         if (dom.mainView) dom.mainView.classList.add('hidden');
         if (dom.settingsView) dom.settingsView.classList.remove('hidden');
     }
