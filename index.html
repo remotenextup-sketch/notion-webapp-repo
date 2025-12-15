@@ -18,7 +18,7 @@
         
         /* コンテンツ全体を制限し、中央に配置するコンテナ */
         #appContainer {
-            max-width: 600px; /* PCでの最大幅を600pxに設定 */
+            max-width: 600px; /* PCでの最大幅を600pxに設定 (修正点) */
             margin: 0 auto; /* 中央寄せ */
             padding: 0;
             background-color: #fff; /* コンテンツエリアの背景を白に */
@@ -26,6 +26,7 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05); /* 影を追加 */
         }
         
+        /* 内部パディングを追加して、コンテンツが端に寄りすぎるのを防ぐ */
         #appHeader, #settingsView, #mainView, #runningTaskContainer {
             padding: 0 16px; 
         }
@@ -38,7 +39,7 @@
             padding: 0 16px 16px;
         }
 
-        .hidden { display: none; }
+        .hidden { display: none !important; } /* !important を追加して確実に非表示 (修正点) */
         
         /* ヘッダーコンテナのスタイル */
         #appHeader {
@@ -173,9 +174,16 @@
             gap: 20px;
             margin-top: 8px;
         }
+        /* 部門チェックボックスのコンテナのスタイル (修正点) */
+        #newDepartmentContainer {
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 8px 0; 
+            margin-top: 8px;
+        }
         #newDepartmentContainer label {
             display: block;
-            width: 48%;
+            width: 48%; /* 2列表示にする (修正点) */
             margin-right: 2%;
             font-weight: normal;
             margin-top: 0;
@@ -212,7 +220,7 @@
             white-space: nowrap;
         }
         
-        /* --- 通知設定の新しいスタイル（修正箇所） --- */
+        /* --- 通知設定の新しいスタイル（修正済み） --- */
         /* チェックボックスの幅と右マージンを調整 */
         #confEnableOngoingNotification, #confEnableInactiveNotification, #confEnableTickSound {
             width: auto !important;
@@ -234,7 +242,7 @@
             margin-top: 0; 
             font-weight: normal; 
             flex-grow: 1;
-            color: #333; /* 色を標準に戻す */
+            color: #333; 
         }
     </style>
 </head>
