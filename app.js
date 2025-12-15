@@ -12,7 +12,7 @@ const DEPARTMENTS = [
 const CATEGORIES = ['作業', '思考', '教育'];
 
 const settings = {
-    // notionToken: '', // ★ 削除
+    // notionToken: '', // 削除済み
     notionDatabases: [],
     humanUserId: '', 
     togglApiToken: '',
@@ -44,7 +44,7 @@ function getDom() {
         addDbConfig: document.getElementById('addDbConfig'),
         dbConfigContainer: document.getElementById('dbConfigContainer'),
 
-        // confNotionToken: document.getElementById('confNotionToken'), // ★ 削除
+        // confNotionToken: document.getElementById('confNotionToken'), // 削除済み
         confNotionUserId: document.getElementById('confNotionUserId'),
         confTogglToken: document.getElementById('confTogglToken'),
         confTogglWid: document.getElementById('confTogglWid'),
@@ -83,7 +83,7 @@ function loadSettings() {
         const saved = localStorage.getItem('settings');
         if (saved) {
             const loaded = JSON.parse(saved);
-            delete loaded.notionToken; // ★ 読み込み時に削除
+            delete loaded.notionToken; // 読み込み時に削除
             Object.assign(settings, loaded);
             
             // 新規設定のデフォルト値保証
@@ -129,7 +129,7 @@ function saveSettings() {
  * 設定画面の各種値をDOMに反映させます。
  */
 function renderSettings() {
-    // if (dom.confNotionToken) dom.confNotionToken.value = settings.notionToken; // ★ 削除
+    // if (dom.confNotionToken) dom.confNotionToken.value = settings.notionToken; // 削除済み
     if (dom.confNotionUserId) dom.confNotionUserId.value = settings.humanUserId;
     if (dom.confTogglToken) dom.confTogglToken.value = settings.togglApiToken;
     if (dom.confTogglWid) dom.confTogglWid.value = settings.togglWorkspaceId;
@@ -278,7 +278,7 @@ async function externalApi(targetUrl, method = 'GET', auth, body = null) {
 const notionApi = (endpoint, method, body) =>
     externalApi(`https://api.notion.com/v1${endpoint}`, method, {
         key: 'notionToken',
-        value: 'USE_SERVER_ENV', // ★ Vercelプロキシに「環境変数を使って」と伝える固定値
+        value: 'USE_SERVER_ENV', // Vercelプロキシに「環境変数を使って」と伝える固定値
         notionVersion: '2022-06-28'
     }, body);
 
@@ -287,6 +287,24 @@ const togglApi = (url, method, body) =>
         key: 'togglApiToken',
         value: settings.togglApiToken
     }, body);
+
+
+// ================= Favicon Control =================
+
+/**
+ * ファビコンのURLを設定します。
+ * @param {string} hrefPath - ファビコンファイルのパス
+ */
+function setFavicon(hrefPath) {
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    link.href = hrefPath;
+}
+
 
 // ================= Notifications =================
 
@@ -372,7 +390,7 @@ function assignHumanProperty() {
 
 
 async function loadTasks() {
-    // if (!settings.notionToken) { // ★ 削除: クライアント側でのチェックは不要
+    // if (!settings.notionToken) { // 削除済み
     //     console.warn('Notion token 未設定のためタスク読込を中断');
     //     dom.taskListContainer.innerHTML = '<li>Notionトークンを設定してください</li>';
     //     return;
@@ -722,6 +740,9 @@ function updateRunningUI(running) {
         if (dom.runningTaskContainer) dom.runningTaskContainer.classList.remove('hidden');
         
         if (dom.runningTaskTitle) dom.runningTaskTitle.textContent = settings.currentRunningTask.title;
+        
+        // ★ ファビコン: 実行中
+        setFavicon('favicon_running.ico'); 
 
         if (settings.timerInterval) clearInterval(settings.timerInterval);
         if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
@@ -756,6 +777,9 @@ function updateRunningUI(running) {
         if (dom.settingsView) dom.settingsView.classList.add('hidden');
         if (dom.runningTaskContainer) dom.runningTaskContainer.classList.add('hidden');
         
+        // ★ ファビコン: デフォルト
+        setFavicon('favicon.ico'); 
+
         if (settings.timerInterval) clearInterval(settings.timerInterval);
         if (settings.notificationInterval) clearInterval(settings.notificationInterval); 
         
@@ -832,7 +856,7 @@ function init() {
 
         if (dom.saveConfig) {
             dom.saveConfig.onclick = () => {
-                // if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value; // ★ 削除
+                // if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value; // 削除済み
                 if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value.trim(); 
                 if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value;
                 if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
@@ -871,7 +895,7 @@ function init() {
 
         // アプリケーション起動時の最終UI設定
         if (settings.currentRunningTask && settings.startTime) {
-            updateRunningUI(true); // 実行中画面を表示
+            updateRunningUI(true); // 実行中画面を表示 (内部でrunning faviconを設定)
         } else {
             // カチカチ音を停止 (念のため)
             stopTickSound(); 
@@ -880,7 +904,7 @@ function init() {
             renderNewTaskForm();
             switchTab('existingTaskTab');
             
-            // 非実行中画面を表示し、タスクを読み込む
+            // 非実行中画面を表示し、タスクを読み込む (内部でdefault faviconを設定)
             updateRunningUI(false); 
         }
     } catch (e) {
