@@ -212,23 +212,30 @@
             white-space: nowrap;
         }
         
-        /* 設定画面内のチェックボックス調整 */
-        #confEnableOngoingNotification, #confEnableInactiveNotification, #confEnableTickSound { /* confEnableTickSound を追加 */
-            width: auto !important; 
+        /* --- 通知設定の新しいスタイル（修正箇所） --- */
+        /* チェックボックスの幅と右マージンを調整 */
+        #confEnableOngoingNotification, #confEnableInactiveNotification, #confEnableTickSound {
+            width: auto !important;
+            margin-right: 10px; 
         }
-        
-        /* form-check スタイルを調整 (Flexboxでチェックボックスとラベルを整列) */
+        
+        /* .form-check: チェックボックスの行全体をFlexboxでレイアウト */
         .form-check {
             display: flex;
-            align-items: flex-start; /* チェックボックスを上端に合わせる */
+            align-items: flex-start; 
             margin-top: 12px;
+            padding: 8px 10px;
+            background: #fcfcfc;
+            border-radius: 4px;
+            border: 1px solid #eee;
         }
+        /* form-check内のラベル: 親のmargin-topをリセットし、テキストを整列 */
         .form-check-label {
-            margin-top: 0; /* ラベルの余白をリセット */
-            margin-left: 10px;
-            font-weight: normal; /* 太字を解除 */
+            margin-top: 0; 
+            font-weight: normal; 
+            flex-grow: 1;
+            color: #333; /* 色を標準に戻す */
         }
-
     </style>
 </head>
 
@@ -261,26 +268,27 @@
     <br>
     <h3>通知設定</h3>
     
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="confEnableOngoingNotification">
-        <label class="form-check-label" for="confEnableOngoingNotification">
-            長時間タスク継続時（30分ごと）に通知する
-        </label>
+    <div class="setting-group">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="confEnableOngoingNotification">
+            <label class="form-check-label" for="confEnableOngoingNotification">
+                長時間タスク継続時（30分ごと）に通知する
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="confEnableInactiveNotification">
+            <label class="form-check-label" for="confEnableInactiveNotification">
+                タイマー停止後30分経過時に通知する
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="confEnableTickSound">
+            <label class="form-check-label" for="confEnableTickSound">
+                タイマー実行中にカチカチ音を鳴らす
+            </label>
+        </div>
     </div>
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="confEnableInactiveNotification">
-        <label class="form-check-label" for="confEnableInactiveNotification">
-            タイマー停止後30分経過時に通知する
-        </label>
-    </div>
-    
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="confEnableTickSound">
-        <label class="form-check-label" for="confEnableTickSound">
-            タイマー実行中にカチカチ音を鳴らす
-        </label>
-    </div>
-        
+    
     <br><br>
     <button id="saveConfig" class="btn btn-green">保存</button>
     <button id="cancelConfig" class="btn btn-gray">閉じる</button>
@@ -336,6 +344,7 @@
         <br>
         <button id="stopTaskButton" class="btn btn-gray" style="margin-right: 10px;">一時停止</button>
         <button id="completeTaskButton" class="btn btn-green">完了</button>
+        
     </div>
 </div>
 
