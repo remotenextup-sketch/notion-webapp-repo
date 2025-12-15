@@ -12,7 +12,7 @@ const DEPARTMENTS = [
 const CATEGORIES = ['作業', '思考', '教育'];
 
 const settings = {
-    notionToken: '',
+    // notionToken: '', // ★ 削除
     notionDatabases: [],
     humanUserId: '', 
     togglApiToken: '',
@@ -23,7 +23,6 @@ const settings = {
     notificationInterval: null,
     enableOngoingNotification: true, 
     
-    // ★ 新規追加
     enableInactiveNotification: true, 
     lastStopTime: null, 
     inactiveCheckInterval: null, 
@@ -45,7 +44,7 @@ function getDom() {
         addDbConfig: document.getElementById('addDbConfig'),
         dbConfigContainer: document.getElementById('dbConfigContainer'),
 
-        confNotionToken: document.getElementById('confNotionToken'),
+        // confNotionToken: document.getElementById('confNotionToken'), // ★ 削除
         confNotionUserId: document.getElementById('confNotionUserId'),
         confTogglToken: document.getElementById('confTogglToken'),
         confTogglWid: document.getElementById('confTogglWid'),
@@ -83,16 +82,17 @@ function loadSettings() {
     try {
         const saved = localStorage.getItem('settings');
         if (saved) {
-            Object.assign(settings, JSON.parse(saved));
+            const loaded = JSON.parse(saved);
+            delete loaded.notionToken; // ★ 読み込み時に削除
+            Object.assign(settings, loaded);
             
-            // ★ 新規設定のデフォルト値保証
+            // 新規設定のデフォルト値保証
             if (typeof settings.enableInactiveNotification !== 'boolean') {
                 settings.enableInactiveNotification = true;
             }
             if (typeof settings.enableTickSound !== 'boolean') {
-                settings.enableTickSound = false; // デフォルトはOFF
+                settings.enableTickSound = false; 
             }
-            // lastStopTimeはnullまたはnumber
             if (typeof settings.lastStopTime !== 'number' && settings.lastStopTime !== null) {
                 settings.lastStopTime = null;
             }
@@ -105,7 +105,7 @@ function loadSettings() {
 function saveSettings() {
     try {
         localStorage.setItem('settings', JSON.stringify({
-            notionToken: settings.notionToken,
+            // notionTokenの保存は不要
             notionDatabases: settings.notionDatabases,
             humanUserId: settings.humanUserId,
             togglApiToken: settings.togglApiToken,
@@ -114,7 +114,7 @@ function saveSettings() {
             startTime: settings.startTime,
             enableOngoingNotification: settings.enableOngoingNotification,
             enableInactiveNotification: settings.enableInactiveNotification, 
-            enableTickSound: settings.enableTickSound, // ★ 保存
+            enableTickSound: settings.enableTickSound, 
             lastStopTime: settings.lastStopTime 
         }));
     } catch (e) {
@@ -129,7 +129,7 @@ function saveSettings() {
  * 設定画面の各種値をDOMに反映させます。
  */
 function renderSettings() {
-    if (dom.confNotionToken) dom.confNotionToken.value = settings.notionToken;
+    // if (dom.confNotionToken) dom.confNotionToken.value = settings.notionToken; // ★ 削除
     if (dom.confNotionUserId) dom.confNotionUserId.value = settings.humanUserId;
     if (dom.confTogglToken) dom.confTogglToken.value = settings.togglApiToken;
     if (dom.confTogglWid) dom.confTogglWid.value = settings.togglWorkspaceId;
@@ -223,7 +223,6 @@ function renderNewTaskForm() {
         `).join('');
         
         dom.newDepartmentContainer.innerHTML = departmentHtml;
-        // CSSでflexレイアウトを制御するため、JS側でstyleは設定しない
     }
 }
 
@@ -279,7 +278,7 @@ async function externalApi(targetUrl, method = 'GET', auth, body = null) {
 const notionApi = (endpoint, method, body) =>
     externalApi(`https://api.notion.com/v1${endpoint}`, method, {
         key: 'notionToken',
-        value: settings.notionToken,
+        value: 'USE_SERVER_ENV', // ★ Vercelプロキシに「環境変数を使って」と伝える固定値
         notionVersion: '2022-06-28'
     }, body);
 
@@ -373,11 +372,11 @@ function assignHumanProperty() {
 
 
 async function loadTasks() {
-    if (!settings.notionToken) {
-        console.warn('Notion token 未設定のためタスク読込を中断');
-        dom.taskListContainer.innerHTML = '<li>Notionトークンを設定してください</li>';
-        return;
-    }
+    // if (!settings.notionToken) { // ★ 削除: クライアント側でのチェックは不要
+    //     console.warn('Notion token 未設定のためタスク読込を中断');
+    //     dom.taskListContainer.innerHTML = '<li>Notionトークンを設定してください</li>';
+    //     return;
+    // }
 
     try {
         const dbId = dom.taskDbFilter.value;
@@ -667,19 +666,14 @@ function playTickSound() {
     if (!settings.enableTickSound) return;
 
     if (!settings.tickSound) {
-        // Audioオブジェクトがまだ作成されていなければ作成し、ループを設定
-        // NOTE: 'tick.mp3'を別途用意する必要があります
         settings.tickSound = new Audio('tick.mp3'); 
         settings.tickSound.loop = true;
-        settings.tickSound.volume = 0.5; // 音量を調整
+        settings.tickSound.volume = 0.5; 
     }
 
-    // 既に再生中であれば何もしない
     if (settings.tickSound.paused) {
         settings.tickSound.play().catch(e => {
             console.warn('カチカチ音の再生開始に失敗しました。ユーザー操作が必要です。', e);
-            // ユーザー操作が必要な場合 (多くのブラウザの自動再生ポリシー) は、
-            // 警告のみで処理を続行
         });
     }
 }
@@ -690,7 +684,7 @@ function playTickSound() {
 function stopTickSound() {
     if (settings.tickSound) {
         settings.tickSound.pause();
-        settings.tickSound.currentTime = 0; // 最初に戻す
+        settings.tickSound.currentTime = 0; 
     }
 }
 
@@ -796,8 +790,7 @@ function init() {
         loadSettings();
         renderSettings(); 
         
-        // ★ 画面の初期表示制御: すべての画面を一旦非表示にする (厳格な制御)
-        // これにより、CSSがない状態でも画面が重なるリスクを最小化
+        // 画面の初期表示制御: すべての画面を一旦非表示にする (厳格な制御)
         if (dom.mainView) dom.mainView.classList.add('hidden');
         if (dom.settingsView) dom.settingsView.classList.add('hidden');
         if (dom.runningTaskContainer) dom.runningTaskContainer.classList.add('hidden');
@@ -839,7 +832,7 @@ function init() {
 
         if (dom.saveConfig) {
             dom.saveConfig.onclick = () => {
-                if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value;
+                // if (dom.confNotionToken) settings.notionToken = dom.confNotionToken.value; // ★ 削除
                 if (dom.confNotionUserId) settings.humanUserId = dom.confNotionUserId.value.trim(); 
                 if (dom.confTogglToken) settings.togglApiToken = dom.confTogglToken.value;
                 if (dom.confTogglWid) settings.togglWorkspaceId = dom.confTogglWid.value;
@@ -856,7 +849,7 @@ function init() {
 
                 saveSettings();
                 alert('設定を保存しました。');
-                // 設定変更を反映するためリロード
+                // カチカチ音設定変更を反映するためリロード
                 location.reload(); 
             };
         }
