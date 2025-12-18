@@ -569,12 +569,15 @@ async function executeStopAndLog(task, log, isComplete) {
     isStopping = true;
     
     try {
-        // 1. Toggl停止 
+        // 1. Toggl停止 & 実績時間の取得
+        let durationSeconds = 0;
         try {
-            await togglApi(
+            const stopRes = await togglApi(
                 `${TOGGL_V9_BASE_URL}/workspaces/${settings.togglWorkspaceId}/time_entries/${task.togglEntryId}/stop`,
                 'PATCH'
             );
+            // Togglから返ってくるdurationは秒単位（正の値）
+            durationSeconds = stopRes.duration;
         } catch (e) {
             if (e.message && e.message.includes("Time entry already stopped")) {
                 console.warn('Toggl警告: タイムエントリは既に停止済みでした。');
@@ -586,42 +589,42 @@ async function executeStopAndLog(task, log, isComplete) {
 
         const notionPatches = {};
         
-        // 2. 思考ログ保存 
-        if (log) {
-            // Notionのページを取得して既存のログを取得
-            const currentPage = await notionApi(`/pages/${task.id}`, 'GET');
-            // '思考ログ'プロパティが存在し、かつrich_textプロパティがあるか確認
-            const existingLogProp = currentPage.properties['思考ログ']?.rich_text;
+        // 【追加】実績時間をNotionに反映（分単位に換算）
+        // Notionのプロパティ名が「累計時間(分)」の場合
+        if (durationSeconds > 0) {
+            const currentMinutes = Math.round(durationSeconds / 60);
             
+            // 既存の値を加算したい場合は、まず現在値を取得
+            const currentPage = await notionApi(`/pages/${task.id}`, 'GET');
+            const existingMinutes = currentPage.properties['累計時間(分)']?.number || 0;
+            
+            notionPatches['累計時間(分)'] = {
+                number: existingMinutes + currentMinutes
+            };
+        }
+
+        // 2. 思考ログ保存 (既存ロジック)
+        if (log) {
+            // ... (既存の思考ログ取得・結合処理はそのまま) ...
+            const currentPage = await notionApi(`/pages/${task.id}`, 'GET');
+            const existingLogProp = currentPage.properties['思考ログ']?.rich_text;
             let existingText = '';
             if (existingLogProp && existingLogProp.length > 0) {
-                // 既存のログを結合
                 existingText = existingLogProp.map(rt => rt.plain_text).join('');
-                // 既存のテキストが改行で終わっていない場合は改行を追加
-                if (existingText.length > 0 && !existingText.endsWith('\n')) {
-                    existingText += '\n';
-                }
+                if (existingText.length > 0 && !existingText.endsWith('\n')) existingText += '\n';
             }
-            
-            // 現在時刻をフォーマット
             const now = new Date().toLocaleString('ja-JP', {
                 year: 'numeric', month: '2-digit', day: '2-digit',
                 hour: '2-digit', minute: '2-digit', second: '2-digit',
                 hour12: false
             }).replace(/\//g, '/');
-
-            // 新しいログエントリを作成
             const newLogEntry = `\n[${now}]\n${log}`;
-            const updatedLogContent = existingText + newLogEntry;
-
             notionPatches['思考ログ'] = {
-                rich_text: [{
-                    text: { content: updatedLogContent }
-                }]
+                rich_text: [{ text: { content: existingText + newLogEntry } }]
             };
         }
 
-        // 3. ステータス変更
+        // 3. ステータス変更 (既存ロジック)
         if (isComplete) {
             notionPatches['ステータス'] = { status: { name: '完了' } };
         }
@@ -629,29 +632,22 @@ async function executeStopAndLog(task, log, isComplete) {
         // 4. Notionページ更新
         if (Object.keys(notionPatches).length > 0) {
             await notionApi(`/pages/${task.id}`, 'PATCH', { properties: notionPatches });
-            showNotification('Notionにログとステータスを反映し、タスクを完了しました。', 2500);
-        } else {
-             showNotification('タスクを一時停止しました。', 2500);
+            showNotification('実績時間とログをNotionに反映しました。', 2500);
         }
 
     } catch (e) {
-        console.error('バックグラウンド停止処理エラー:', e);
-        showNotification(`エラー: タスク停止・ログ反映に失敗しました。詳細をコンソールで確認してください。`, 5000);
+        console.error('停止処理エラー:', e);
+        showNotification(`エラー: 反映に失敗しました。`, 5000);
     } finally {
-        // 処理完了後の後始末 
+        // ... (後始末) ...
         settings.currentRunningTask = null;
         settings.startTime = null;
         settings.lastStopTime = Date.now(); 
         saveSettings();
         isStopping = false;
-        
-        // 停止直後に未計測チェックを実行
-        if (settings.enableInactiveNotification) {
-             checkInactiveTime(); 
-        }
+        updateRunningUI(false);
     }
 }
-
 
 /**
  * 実行中のタスクを停止します。
